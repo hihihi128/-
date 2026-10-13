@@ -160,7 +160,7 @@ const book = {
       keys: ['凯迪拉克', 'Cadillac'], order: 210,
     }),
     entry(17, '[F1M资料] 阿尔派车队（2026）', readCard(`${wb}/lore-alpine.md`), {
-      keys: ['阿尔派', 'Alpine', '布里亚托利', '布里亚托雷', 'Gasly', '加斯利', 'Colapinto', '科拉平托', '克拉平托'], order: 211,
+      keys: ['阿尔派', 'Alpine', '布里亚托利', 'Gasly', '加斯利', 'Colapinto', '科拉平托', '克拉平托'], order: 211,
     }),
     entry(18, '[F1M资料] 哈斯车队（2026）', readCard(`${wb}/lore-haas.md`), {
       keys: ['哈斯', 'Haas', '丰田', 'Toyota Gazoo Racing', '小松礼雄', 'Gene Haas', '吉恩·哈斯'], order: 212,
