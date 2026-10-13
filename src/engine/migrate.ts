@@ -31,6 +31,9 @@ function fillMissing(target: Record<string, unknown>, defaults: Record<string, u
 export function migrateState(state: GameState): GameState {
   if (!state?.rules || !state.teams) return state;
   if (state.ferrari === undefined) state.ferrari = null;
+  if (state.mclaren === undefined) state.mclaren = null;
+  if (state.mercedes === undefined) state.mercedes = null;
+  if (state.redBull === undefined) state.redBull = null;
   // Market rules are a closed map, unlike parts/tyres. Modern saves take the
   // puAllocation fast path below, so fill this before that return.
   state.rules.market ??= deepClone(DEFAULT_RULES.market);
@@ -51,6 +54,7 @@ export function migrateState(state: GameState): GameState {
       live.strategistSkill ??= state.teams[state.meta.playerTeamId]?.staff.strategist.skill ?? 50;
       live.redFlags ??= 0;
       live.redFlag ??= null;
+      live.specialIncidents ??= [];
       for (const car of Object.values(live.cars)) {
         const driver = state.drivers[car.driverId];
         car.trust ??= driver?.trust ?? 50;

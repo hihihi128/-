@@ -458,7 +458,7 @@ function normalizeTeam(ctx: Ctx, raw: unknown, index: number, rules: Rules): Tea
 }
 
 /** 目前支持的特殊机制 */
-export const SPECIAL_MECHANICS = ['ferrari'] as const;
+export const SPECIAL_MECHANICS = ['ferrari', 'mclaren', 'mercedes', 'red_bull'] as const;
 
 function normalizeSpecial(ctx: Ctx, raw: Record<string, unknown>, path: string): string {
   const v = ctx.str(raw, 'special', path).toLowerCase();

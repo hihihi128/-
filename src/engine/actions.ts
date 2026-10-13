@@ -16,6 +16,7 @@ import {
 } from './development';
 import { ferrariOnPriority } from './ferrari';
 import { teammateRelationship, willDisobeyStrategy } from './driverBehavior';
+import { dismissalReason, mercedesPolitics, retainGp, startMcLarenFix } from './teamSpecials';
 import { addNews, driverName } from './log';
 import { offerDriverContract, offerStaffContract, releasePerson } from './market';
 import { resolveAiMarket } from './market-ai';
@@ -138,8 +139,9 @@ const ALLOWED_AFTER_DISMISSAL = new Set(['CLEAR_NARRATION']);
 
 function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
   const tid = state.meta.playerTeamId;
-  if (state.ferrari?.dismissed && !ALLOWED_AFTER_DISMISSAL.has(action?.type)) {
-    return fail(`你已被解除法拉利过渡领队职务（${state.ferrari.dismissed}），本局结束。请在「存档」中读档或开始新游戏。`);
+  const dismissed = dismissalReason(state);
+  if (dismissed && !ALLOWED_AFTER_DISMISSAL.has(action?.type)) {
+    return fail(`你已被解除领队职务（${dismissed}），本局结束。请在「存档」中读档或开始新游戏。`);
   }
   switch (action.type) {
     case 'ADVANCE': {
@@ -259,6 +261,12 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
       state.teams[tid].nextSeasonFocus = v;
       return ok(`下赛季研发投入比例设为 ${v}%`);
     }
+    case 'START_MCLAREN_FIX':
+      return startMcLarenFix(state, action.route);
+    case 'MERCEDES_POLITICS':
+      return mercedesPolitics(state, action.strategy);
+    case 'RED_BULL_RETAIN_GP':
+      return retainGp(state);
     case 'SWAP_DRIVER':
       return swapDriver(state, tid, action.slot, action.driverId);
     case 'CLEAR_NARRATION':

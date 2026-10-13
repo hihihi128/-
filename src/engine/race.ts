@@ -11,6 +11,7 @@ import { driverName } from './log';
 import { activeEntries, carRatings, fittedSpec, raceSkill, trackScore } from './ratings';
 import { Rng } from './rng';
 import { raceEngineerFor, staffAbility } from './staff';
+import { redBullCrashMultiplier, specialFailureChance } from './teamSpecials';
 import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from './raceWeather';
 import { validOrders, validRaceChoice } from './raceDecisions';
 import {
@@ -693,8 +694,18 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
     rain: trajectory[0] ?? 0, wetness: startsWet ? 0.55 : 0, surface: startsWet ? 'wet' : 'dry',
     forecast: createForecast(trajectory, 0, staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), forecastRng),
     scLeft: 0, vscLeft: 0, safetyCars: 0, redFlags: 0, redFlag: null, fastestLap: null, events: [], lapChart, orderOutcomes: [], orderCooldown: {},
-    teamOrders: { ...w.teamOrders }, pendingDecision: null, damageLedger: [],
+    teamOrders: { ...w.teamOrders }, pendingDecision: null, damageLedger: [], specialIncidents: [],
   };
+  if (kind === 'race') {
+    for (const type of ['mclaren_pu', 'mercedes_pu'] as const) {
+      const teamId = type === 'mclaren_pu' ? 'mclaren' : 'mercedes';
+      const candidates = Object.values(cars).filter(car => car.teamId === teamId);
+      if (candidates.length && execution.chance(specialFailureChance(state, type))) {
+        const target = candidates[execution.int(0, candidates.length - 1)];
+        session.specialIncidents!.push({ type, driverId: target.driverId, lap: execution.int(2, Math.max(2, totalLaps - 2)), handled: false });
+      }
+    }
+  }
   for (const driverId of disobedient) liveEvent(session, 0, 'order', `${driverId} 拒绝执行赛前策略，决定按自己的节奏比赛`, [driverId], true);
   session.weatherRngState = weatherRng.state;
   session.forecastRngState = forecastRng.state;
@@ -858,8 +869,31 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
         const paceRisk = car.plan.paceMode === 'push' ? 1.4 : car.plan.paceMode === 'conserve' ? .8 : 1;
         const energyRisk = car.energyMode === 'deploy' && car.energy < 15 ? 1.35 : car.energyMode === 'deploy' ? 1.12 : 1;
         const pFail = raceFailProb(car.reliability) / session.totalLaps * paceRisk * energyRisk;
-        const pCrash = (.02 + (100 - car.consistency) / 100 * .06) * (1 + session.wetness) / session.totalLaps * paceRisk * energyRisk;
-        if (rng.chance(pFail)) {
+        const pCrash = (.02 + (100 - car.consistency) / 100 * .06) * (1 + session.wetness) / session.totalLaps * paceRisk * energyRisk * redBullCrashMultiplier(state, car.teamId);
+        const special = session.specialIncidents?.find(incident => !incident.handled && incident.driverId === car.driverId && incident.lap === lap);
+        if (special) {
+          special.handled = true;
+          if (special.type === 'mclaren_pu') {
+            const crashChance = clamp(.68 - car.consistency * .005 - car.racecraft * .002, .12, .55);
+            if (rng.chance(crashChance)) {
+              car.status = 'dnf';
+              car.reason = '动力单元异常放电后失控撞车';
+              const incidentId = `${session.id}:i${session.damageLedger.length + 1}`;
+              session.damageLedger.push({ id: `${incidentId}:damage`, incidentId, driverId: car.driverId, teamId: car.teamId, slot: car.slot, cause: 'single_car', severity: 'dnf', affectedPartTypes: ['front_wing'], repairedInRace: false });
+              incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 遭遇动力单元异常放电并失控撞车`, [car.driverId], true));
+            } else {
+              car.partial = Math.max(car.partial, 1.1);
+              incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 遭遇动力单元异常放电，但成功救车`, [car.driverId], true));
+            }
+          } else if (rng.chance(.45)) {
+            car.status = 'dnf';
+            car.reason = '动力单元可靠性故障';
+            incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因动力单元可靠性故障退赛`, [car.driverId], true));
+          } else {
+            car.partial = Math.max(car.partial, .9);
+            incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 的动力单元进入保护模式`, [car.driverId], true));
+          }
+        } else if (rng.chance(pFail)) {
           if (rng.chance(.35) && car.partial === 0) { car.partial = rng.range(.6, 1.2); incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 赛车出现动力问题`, [car.driverId], car.player)); }
           else { car.status = 'dnf'; car.reason = '机械故障'; incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因机械故障退赛`, [car.driverId], true)); }
         } else if (rng.chance(pCrash * (lap === 1 ? 4 : 1))) {
@@ -902,7 +936,9 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     const combatants = liveCars(session).filter(c => c.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime);
     for (let i = 1; i < combatants.length; i++) {
       const ahead = combatants[i - 1], behind = combatants[i];
-      if (behind.cumulativeTime - ahead.cumulativeTime > 1.2 || scActive || vscActive || session.redFlag?.active || !rng.chance(.006 * (1 + session.wetness))) continue;
+      const norrisTeammateFight = ahead.teamId === 'mclaren' && behind.teamId === 'mclaren' && (ahead.driverId === 'norris' || behind.driverId === 'norris');
+      const collisionChance = norrisTeammateFight ? .05 : .006 * (1 + session.wetness);
+      if (behind.cumulativeTime - ahead.cumulativeTime > 1.2 || scActive || vscActive || session.redFlag?.active || !rng.chance(collisionChance)) continue;
       const victim = rng.chance(.5) ? ahead : behind;
       const incidentId = `${session.id}:i${session.damageLedger.length + 1}`;
       const roll = rng.next();

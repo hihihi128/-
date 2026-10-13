@@ -24,6 +24,7 @@ import {
 } from './development';
 import { annualSalaries, capRemaining, costCapOf } from './finance';
 import { fanCamps, fanGap } from './ferrari';
+import { dismissalReason } from './teamSpecials';
 import { teammateRelationship } from './driverBehavior';
 import { describeLog } from './protocol';
 import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
@@ -290,6 +291,9 @@ export interface GameView {
   aiLog: Array<GameState['aiLog'][number] & { text: string }>;
   flags: GameState['flags'];
   ferrari: FerrariView | null;
+  mclaren: GameState['mclaren'];
+  mercedes: GameState['mercedes'];
+  redBull: (GameState['redBull'] & { verstappenPosition?: number }) | null;
   aduo: AduoView;
   lastSeason: GameState['lastSeason'];
   labels: typeof LABELS & {
@@ -527,7 +531,7 @@ export function buildView(state: GameState): GameView {
     gameId: state.gameId,
     meta: state.meta,
     season: { ...state.season, rounds: state.calendar.length, phaseLabel: LABELS.phase[phase] },
-    next: state.ferrari?.dismissed ? null : nextActionFor(state),
+    next: dismissalReason(state) ? null : nextActionFor(state),
     round:
       roundDef && track
         ? {
@@ -637,6 +641,12 @@ export function buildView(state: GameState): GameView {
     aiLog: [...state.aiLog].reverse().map(e => ({ ...e, text: describeLog(state, e) })),
     flags: state.flags,
     ferrari: ferrariView(state),
+    mclaren: state.mclaren ?? null,
+    mercedes: state.mercedes ?? null,
+    redBull: state.redBull ? {
+      ...state.redBull,
+      verstappenPosition: driverPos.get('verstappen') ?? 0,
+    } : null,
     aduo: aduoView(state),
     lastSeason: state.lastSeason,
     labels: {

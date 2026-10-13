@@ -85,7 +85,7 @@ describe('数据校验（2026 新字段）', () => {
   it('未知的特殊机制会被忽略并警告', () => {
     const src = placeholderSources();
     const teams = src[1].data as { teams: Array<Record<string, unknown>> };
-    teams.teams[0].special = 'mclaren';
+    teams.teams[0].special = 'unknown_team_mechanic';
     const res = normalizeDatabase(src);
     expect(res.canStart).toBe(true);
     expect(res.issues.some(i => i.level === 'warning' && i.path.endsWith('.special'))).toBe(true);

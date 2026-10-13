@@ -14,6 +14,13 @@ const REASON_MAX = 300;
 
 const selectedTeam = computed(() => report.value?.teams.find(t => t.id === teamId.value) ?? null);
 const isFerrari = computed(() => selectedTeam.value?.special === 'ferrari');
+const special = computed(() => selectedTeam.value?.special ?? '');
+const specialLabels: Record<string, string> = {
+  ferrari: '过渡领队',
+  mclaren: '临时领队',
+  mercedes: '接班人计划',
+  red_bull: '人手危机',
+};
 
 const errors = computed(() => report.value?.issues.filter(i => i.level === 'error') ?? []);
 const warnings = computed(() => report.value?.issues.filter(i => i.level === 'warning') ?? []);
@@ -95,7 +102,7 @@ onMounted(load);
             <span class="badge">目标 P{{ t.targetPosition }}</span>
           </div>
           <div class="tiny muted">{{ t.drivers.join(' / ') || '无正式车手' }}</div>
-          <div v-if="t.special === 'ferrari'" class="tiny"><span class="badge warn">特殊机制：过渡领队</span></div>
+          <div v-if="t.special" class="tiny"><span class="badge warn">特殊机制：{{ specialLabels[t.special] ?? t.special }}</span></div>
           <div v-if="t.description" class="tiny desc">{{ t.description }}</div>
         </button>
       </div>
@@ -113,6 +120,22 @@ onMounted(load);
       </ul>
     </div>
 
+    <div v-else-if="special === 'mclaren'" class="card notice special-team small stack-s">
+      <b>迈凯伦 · 临时领队</b>
+      <div>斯特拉因交通事故至少休养一年。扎克·布朗任命玩家临时执掌车队。</div>
+      <ul class="tiny"><li>软件适配完成前，每场正赛有 1/5 概率发生动力单元异常。</li><li>自主适配较慢；与梅赛德斯合作较快，但会共享车体资料并强化对手。</li><li>诺里斯与皮亚斯特里缠斗时，诺里斯约有 1/20 概率引发队友碰撞。</li></ul>
+    </div>
+    <div v-else-if="special === 'mercedes'" class="card notice special-team small stack-s">
+      <b>梅赛德斯 · Toto 的接班人计划</b>
+      <div>玩家以副领队身份接受 Toto Wolff 的考核。</div>
+      <ul class="tiny"><li>获得 ADUO 前，每场正赛有 1/7 概率发生动力单元故障。</li><li>政治压力过高会使 FIA 禁止 1:18 热态压缩比方案。</li><li>Toto 满意度过低会直接导致撤职。</li></ul>
+    </div>
+    <div v-else-if="special === 'red_bull'" class="card notice special-team small stack-s">
+      <b>红牛 · 人手危机</b>
+      <div>玩家协助梅基斯处理人才流失与 RB23 准备不足的问题。</div>
+      <ul class="tiny"><li>RB23 准备不足会显著提高车手失误概率。</li><li>GP 正与迈凯伦谈判，需要持续争取留任。</li><li>夏休时维斯塔潘必须位列车手榜前三，否则会触发解约条款。</li></ul>
+    </div>
+
     <div class="card stack-s">
       <label class="field">
         你为什么被选中？（可选）
@@ -120,7 +143,7 @@ onMounted(load);
           v-model="selectionReason"
           rows="3"
           :maxlength="REASON_MAX"
-          :placeholder="isFerrari ? '例如：在耐力赛车队带出过两位不和的明星车手，擅长和意大利媒体打交道……' : '例如：在青训体系里带出过多位冠军……留空也可以'"
+          :placeholder="special ? '例如：擅长危机管理、技术协调与车手关系……' : '例如：在青训体系里带出过多位冠军……留空也可以'"
         ></textarea>
       </label>
       <div class="tiny muted spread">
@@ -196,6 +219,13 @@ onMounted(load);
   border-left: 4px solid #dc0000;
 }
 .notice.ferrari ul {
+  margin: 0;
+  padding-left: 18px;
+}
+.notice.special-team {
+  border-left: 4px solid var(--team);
+}
+.notice.special-team ul {
   margin: 0;
   padding-left: 18px;
 }

@@ -52,6 +52,7 @@
 teams:
   # ── 梅赛德斯：季前最完整的赛车，动力单元公认最强；早期能量回收略逊于红牛 ──
   - id: mercedes
+    special: mercedes
     name: 梅赛德斯车队
     short: MER
     color: '#27f4d2'
@@ -86,6 +87,7 @@ teams:
 
   # ── 迈凯伦：2025 双冠王，底盘与轮胎管理顶级；客户版梅赛德斯动力 ──
   - id: mclaren
+    special: mclaren
     name: 迈凯伦车队
     short: MCL
     color: '#ff8000'
@@ -119,6 +121,7 @@ teams:
 
   # ── 红牛：首台自研红牛-福特动力单元，能量回收出色但可靠性未经验证 ──
   - id: red_bull
+    special: red_bull
     name: 红牛车队
     short: RBR
     color: '#3671c6'

@@ -18,6 +18,7 @@ import { deepClone, round1 } from './util';
 import { aeroAllowance } from './development';
 import { recordAduoBaseline } from './aduo';
 import { initFerrari } from './ferrari';
+import { initTeamSpecials } from './teamSpecials';
 import { ensureMarket, openMarket } from './market';
 import { resetPuUsage } from './powerunit';
 
@@ -196,6 +197,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
   const reasonLine = reason ? `外界普遍认为 ${name} 被选中的原因是：${reason}。` : '';
   const tail = `距离首站（${firstTrack}）还有 ${state.calendar[0]?.weeksGap ?? 0} 周。董事会对本赛季的目标是车队积分榜第 ${team.targetPosition} 名。`;
   initFerrari(state, team);
+  initTeamSpecials(state, team);
   let newsText: string;
   let title: string;
   let detail: string[];
@@ -211,6 +213,18 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
       `埃尔坎的要求只有两条：稳住意大利媒体（媒体支持率 ${fr.startMedia}，低于 ${fr.minMedia} 即撤职），并让${names}两边的粉丝都满意（粉丝意见差距超过 ${fr.maxFanGap} 即撤职）。`,
       tail,
     ];
+  } else if (state.mclaren) {
+    newsText = `安德烈亚·斯特拉因交通事故受伤后，扎克·布朗任命 ${name} 为迈凯伦临时领队。`;
+    title = '临危受命：迈凯伦临时领队';
+    detail = ['2026 年初，安德烈亚·斯特拉驾车时发生事故。他没有生命危险，但至少需要一年恢复。', `扎克·布朗因此招来 ${name} 临时执掌车队。`, reasonLine, 'MCL40 与梅赛德斯动力单元软件存在适配问题。解决前，每场比赛都有动力单元异常放电风险；同时必须控制诺里斯与皮亚斯特里的队内关系。', tail];
+  } else if (state.mercedes) {
+    newsText = `Toto Wolff 任命 ${name} 为梅赛德斯副领队，并将其列入接班人培养计划。`;
+    title = '接班人计划：梅赛德斯副领队';
+    detail = [`Toto Wolff 决定培养自己的接班人，${name} 以副领队身份加入梅赛德斯。`, reasonLine, 'W17 的动力单元软件匹配良好，但可靠性不足。车队必须向 FIA 争取 ADUO，同时在政治斗争中保住利用热胀冷缩实现的 1:18 压缩比。', tail];
+  } else if (state.redBull) {
+    newsText = `红牛任命 ${name} 辅助洛朗·梅基斯管理 2026 赛季。`;
+    title = '人手危机：协助梅基斯';
+    detail = ['红牛在 2025 年失去大量人才，赫尔穆特·马尔科也被解雇。由于管理与技术人手不足，车队招来玩家辅助梅基斯。', reasonLine, 'RB23 的准备因 2025 年全力争冠而严重不足。车手更容易失误，GP 正与迈凯伦谈判；夏休时若维斯塔潘不在积分榜前三，他将触发解约条款。', tail];
   } else {
     newsText = `${name} 正式出任 ${team.name} 领队，${state.season.year} 赛季季前准备开始。`;
     title = '就任领队';

@@ -216,6 +216,28 @@ export const DEFAULT_RULES: Rules = {
     resultFans: 1.5,
     graceRounds: 2,
   },
+  mclaren: {
+    failureChance: 0.2,
+    independentWeeks: 8,
+    cooperationWeeks: 5,
+    mercedesDevelopmentBuff: 3,
+  },
+  mercedes: {
+    failureChance: 1 / 7,
+    startTotoSatisfaction: 65,
+    dismissTotoSatisfaction: 20,
+    startPoliticalPressure: 35,
+    banPoliticalPressure: 100,
+    pressurePerRace: 8,
+    aduoProgressPerLobby: 34,
+  },
+  redBull: {
+    mistakeMultiplier: 1.65,
+    startGpRetention: 58,
+    gpLossPerRace: 12,
+    gpNegotiationGain: 25,
+    gpNegotiationCost: 1,
+  },
 };
 
 export const DEFAULT_PLAN: DriverPlan = {

@@ -217,6 +217,31 @@ export interface FerrariRules {
   graceRounds: number;
 }
 
+export interface McLarenRules {
+  failureChance: number;
+  independentWeeks: number;
+  cooperationWeeks: number;
+  mercedesDevelopmentBuff: number;
+}
+
+export interface MercedesRules {
+  failureChance: number;
+  startTotoSatisfaction: number;
+  dismissTotoSatisfaction: number;
+  startPoliticalPressure: number;
+  banPoliticalPressure: number;
+  pressurePerRace: number;
+  aduoProgressPerLobby: number;
+}
+
+export interface RedBullRules {
+  mistakeMultiplier: number;
+  startGpRetention: number;
+  gpLossPerRace: number;
+  gpNegotiationGain: number;
+  gpNegotiationCost: number;
+}
+
 export interface Rules {
   seasonYear: number;
   pointsRace: number[];
@@ -286,6 +311,9 @@ export interface Rules {
   puPenaltyNext: number;
   /** 法拉利特殊机制 */
   ferrari: FerrariRules;
+  mclaren: McLarenRules;
+  mercedes: MercedesRules;
+  redBull: RedBullRules;
   /** ADUO 动力单元追赶机制 */
   aduo: AduoRules;
 }
@@ -383,7 +411,7 @@ export interface TeamDef {
   /** 董事会预期的车队排名 */
   targetPosition: number;
   description: string;
-  /** 特殊机制标识（目前只有 ferrari），空字符串 = 无 */
+  /** 特殊机制标识，空字符串 = 无 */
   special: string;
 }
 
@@ -852,6 +880,7 @@ export interface LiveRaceState {
   teamOrders: TeamOrders;
   pendingDecision: RaceDecisionWindow | null;
   damageLedger: RaceDamageRecord[];
+  specialIncidents?: Array<{ type: 'mclaren_pu' | 'mercedes_pu'; driverId: string; lap: number; handled: boolean }>;
 }
 
 export interface WeekendState {
@@ -948,6 +977,34 @@ export interface FerrariState {
   log: Array<{ at: string; text: string }>;
 }
 
+export interface McLarenState {
+  softwareResolved: boolean;
+  route: 'independent' | 'mercedes' | null;
+  weeksLeft: number;
+  mercedesBuffApplied: boolean;
+  log: Array<{ at: string; text: string }>;
+}
+
+export interface MercedesState {
+  aduoApproved: boolean;
+  aduoProgress: number;
+  politicalPressure: number;
+  compressionRatio: '1:18' | '1:16';
+  totoSatisfaction: number;
+  dismissed: string | null;
+  lastActionRound: string | null;
+  log: Array<{ at: string; text: string }>;
+}
+
+export interface RedBullState {
+  gpRetention: number;
+  gpTransferred: boolean;
+  summerChecked: boolean;
+  verstappenExit: boolean;
+  lastActionRound: string | null;
+  log: Array<{ at: string; text: string }>;
+}
+
 export interface SeasonState {
   year: number;
   /** 第几个赛季（从 1 开始） */
@@ -988,6 +1045,9 @@ export interface GameState {
   aiLog: AiLogEntry[];
   /** 法拉利特殊机制（非法拉利开局或旧存档为 null / 缺省） */
   ferrari?: FerrariState | null;
+  mclaren?: McLarenState | null;
+  mercedes?: MercedesState | null;
+  redBull?: RedBullState | null;
   /** ADUO 评估记录（旧存档缺省） */
   aduo?: AduoState | null;
   lastSeason: { year: number; driverChampion: string | null; constructorChampion: string | null; playerPosition: number | null } | null;
@@ -1121,6 +1181,9 @@ export type Action =
   | { type: 'TRAIN_PIT_CREW' }
   | { type: 'TRAIN_DRIVER'; driverId: string; attr: DriverAttr }
   | { type: 'SET_NEXT_SEASON_FOCUS'; value: number }
+  | { type: 'START_MCLAREN_FIX'; route: 'independent' | 'mercedes' }
+  | { type: 'MERCEDES_POLITICS'; strategy: 'lobby_aduo' | 'defend' | 'compromise' }
+  | { type: 'RED_BULL_RETAIN_GP' }
   | { type: 'SWAP_DRIVER'; slot: number; driverId: string }
   | { type: 'CLEAR_NARRATION' };
 

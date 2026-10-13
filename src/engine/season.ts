@@ -9,6 +9,7 @@ import { addNarration, addNews, driverName, playerTeam, teamName } from './log';
 import { closeMarket, openMarket } from './market';
 import { emptyStandings } from './newgame';
 import { ferrariAfterRace, ferrariMediaDelta, ferrariOnAllocation, ferrariOnBench, ferrariOnOrder } from './ferrari';
+import { afterSpecialRace } from './teamSpecials';
 import { resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
@@ -442,6 +443,7 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
   if (winner?.pos === 1) addNews(state, sprint ? '冲刺赛' : '正赛', `${driverName(state, winner.driverId)} 赢得 ${track.name} ${sprint ? '冲刺赛' : '大奖赛'}。`);
   // 法拉利：媒体与粉丝的反应、撤职检查
   ferrariAfterRace(state, result);
+  if (!sprint) afterSpecialRace(state);
 }
 
 /** 事故导致的零件损毁与维修 */

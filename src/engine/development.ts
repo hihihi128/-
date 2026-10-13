@@ -13,6 +13,7 @@ import { AMBITIONS, LABELS, TRACK_DEMANDS } from './defaults';
 import { affordError, capRemaining, charge, income, payWeeklySalaries } from './finance';
 import { addNews, addNarration, driverName } from './log';
 import { recordPuFit } from './powerunit';
+import { advanceSpecialWeeks } from './teamSpecials';
 import { bestDisclosedPerf, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec } from './ratings';
 import type { Rng } from './rng';
 import type {
@@ -529,6 +530,7 @@ function completeProject(state: GameState, team: TeamState, p: Project, rng: Rng
 export function advanceWeeks(state: GameState, weeks: number, rng: Rng): void {
   for (let w = 0; w < weeks; w++) {
     state.season.week += 1;
+    advanceSpecialWeeks(state);
     for (const tid of state.teamOrder) {
       const team = state.teams[tid];
       if (!team.isPlayer) aiTeamWeek(state, team, rng);

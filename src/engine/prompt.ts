@@ -98,6 +98,21 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
         : `【法拉利·过渡领队考核】媒体支持率 ${team.mediaReputation.toFixed(0)}（低于 ${fr.minMedia} 撤职，低于 ${fr.warnMedia} 告急）· ${fans}（差距 ${fanGap(f).toFixed(0)}，超过 ${fr.maxFanGap} 撤职）。升级件分配、优先车手、车队指令和成绩都会影响两边粉丝；意大利媒体比别处苛刻。`,
     );
   }
+  if (state.mclaren) {
+    const m = state.mclaren;
+    L.push(`【迈凯伦·临时领队】斯特拉因交通事故至少休养一年，玩家受扎克·布朗邀请临时执掌车队。动力单元软件${m.softwareResolved ? '已经完成适配' : m.route ? `正在走${m.route === 'independent' ? '自主适配' : '与梅赛德斯合作'}路线（剩余 ${m.weeksLeft} 周）` : '尚未选择适配路线，每场正赛有 1/5 异常风险'}。诺里斯与皮亚斯特里缠斗时存在额外队友碰撞风险。`);
+  }
+  if (state.mercedes) {
+    const m = state.mercedes;
+    L.push(m.dismissed
+      ? `【梅赛德斯·已撤职】Toto Wolff 已终止玩家的接班人培养计划：${m.dismissed}。`
+      : `【梅赛德斯·接班人计划】Toto 满意度 ${m.totoSatisfaction.toFixed(0)}（低于 ${rules.mercedes.dismissTotoSatisfaction} 撤职）· 政治压力 ${m.politicalPressure.toFixed(0)}/${rules.mercedes.banPoliticalPressure} · 热态压缩比 ${m.compressionRatio} · ADUO ${m.aduoApproved ? '已批准' : `审批 ${m.aduoProgress}%（批准前每场正赛有 1/7 动力单元故障风险）`}。`);
+  }
+  if (state.redBull) {
+    const r = state.redBull;
+    const maxPos = sortedDrivers(state).indexOf('verstappen') + 1;
+    L.push(`【红牛·人手危机】RB23 准备不足使车手更容易失误。GP 留任意愿 ${r.gpRetention.toFixed(0)}${r.gpTransferred ? '，已决定转投迈凯伦' : ''}。夏休检查${r.summerChecked ? '已完成' : '尚未进行'}；维斯塔潘当前车手榜 P${maxPos}${r.verstappenExit ? '，解约条款已经触发并将转投梅赛德斯' : '，夏休时必须位列前三'}。`);
+  }
 
   // 赛车
   const ranking = teamPaceRanking(state, phase !== 'season_end' && track ? track : null, 'disclosed');

@@ -26,6 +26,7 @@ const view = computed(() => store.view);
 const team = computed(() => view.value?.player.team);
 const showNewGame = computed(() => store.connected && (!view.value || store.forceNewGame));
 const generating = computed(() => !!store.status?.generating);
+const dismissed = computed(() => view.value?.ferrari?.dismissed ?? view.value?.mercedes?.dismissed ?? null);
 
 watch(
   () => team.value?.color,
@@ -85,8 +86,8 @@ function selectMobileTab(tab: string) {
       </header>
       <div v-if="generating" class="notice warn small" style="margin: 0 12px 8px">AI 正在生成回复，生成结束前面板只读。</div>
       <div v-if="store.status?.fallback" class="notice warn small" style="margin: 0 12px 8px">当前楼层原本的存档版本已被清理，正在使用最早仍保留的版本。</div>
-      <div v-if="view.ferrari?.dismissed" class="notice bad small" style="margin: 0 12px 8px">
-        埃尔坎解除了你的法拉利过渡领队职务：{{ view.ferrari.dismissed }}。本局结束，请在「存档」中读档或重新开局。
+      <div v-if="dismissed" class="notice bad small" style="margin: 0 12px 8px">
+        你已被解除领队职务：{{ dismissed }}。本局结束，请在「存档」中读档或重新开局。
       </div>
       <div v-else-if="view.flags.fired" class="notice bad small" style="margin: 0 12px 8px">董事会已解除你的领队职务（剧情）。你仍可以继续游玩或在「存档」中读档。</div>
       <div class="broadcast-shell">
@@ -103,7 +104,7 @@ function selectMobileTab(tab: string) {
             </div>
             <Saves v-else-if="store.tab === 'saves'" />
             <!-- 被法拉利撤职后本局只读：禁用除存档页以外的所有操作控件 -->
-            <fieldset v-else class="readonly-lock" :disabled="!!view.ferrari?.dismissed">
+            <fieldset v-else class="readonly-lock" :disabled="!!dismissed">
               <Overview v-if="store.tab === 'overview'" />
               <Weekend v-else-if="store.tab === 'weekend'" />
               <Drivers v-else-if="store.tab === 'drivers'" />

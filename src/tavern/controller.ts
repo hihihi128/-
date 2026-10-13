@@ -443,7 +443,7 @@ export class F1Controller {
     const floor = Math.max(0, this.latestFloor());
     this.store.commit(state, { floor, kind: 'new', label: `新开局：${state.teams[state.meta.playerTeamId].name}`, parent: null });
     this.notify('new_game');
-    const role = state.ferrari ? '过渡领队' : '领队';
+    const role = state.ferrari ? '过渡领队' : state.mclaren ? '临时领队' : state.mercedes ? '副领队' : state.redBull ? '助理领队' : '领队';
     return { ok: true, message: `已开局：你现在是 ${state.teams[state.meta.playerTeamId].name} 的${role}` };
   }
 

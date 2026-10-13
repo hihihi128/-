@@ -118,4 +118,25 @@ rules:
   #   priorityFans: 6         # 指定优先车手：被选中一方 +6，另一方 -7.2
   #   orderFans: 5            # 车队指令让车：让车一方粉丝 -5，受益一方 +2
   #   resultFans: 1.5         # 正赛成绩（队内名次、领奖台、机械故障）对粉丝意见的影响单位
+
+  # ── 迈凯伦、梅赛德斯与红牛特殊机制 ──
+  # mclaren:
+  #   failureChance: 0.2       # 软件适配完成前，每场正赛触发动力单元异常的概率
+  #   independentWeeks: 8      # 自主适配周期
+  #   cooperationWeeks: 5      # 与梅赛德斯联合适配周期
+  #   mercedesDevelopmentBuff: 3 # 合作后梅赛德斯技术总监与气动主管能力增益
+  # mercedes:
+  #   failureChance: 0.142857  # 获得 ADUO 前，每场正赛动力单元故障概率
+  #   startTotoSatisfaction: 65
+  #   dismissTotoSatisfaction: 20
+  #   startPoliticalPressure: 35
+  #   banPoliticalPressure: 100
+  #   pressurePerRace: 8
+  #   aduoProgressPerLobby: 34
+  # redBull:
+  #   mistakeMultiplier: 1.65  # RB23 准备不足造成的车手失误概率倍率
+  #   startGpRetention: 58
+  #   gpLossPerRace: 12
+  #   gpNegotiationGain: 25
+  #   gpNegotiationCost: 1
   #   graceRounds: 2          # 首个赛季前几站是适应期：只警告、不撤职
