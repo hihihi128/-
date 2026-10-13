@@ -31,6 +31,7 @@ describe('2026 世界书资料', () => {
       }
       expect(content).toMatch(/<\/车队资料>\s*$/);
       expect(content).not.toMatch(prohibited);
+      expect(content).not.toMatch(/一号车手|二号车手/);
       expect(content).toContain('实时数据表明玩家执掌本队时生效');
       const raceDrivers = drivers.filter(driver => driver.role === 'race' && driver.team === team.id);
       expect(raceDrivers).toHaveLength(2);
@@ -53,5 +54,9 @@ describe('2026 世界书资料', () => {
       expect(content).toMatch(/<\/车手资料>\s*$/);
       expect(content).not.toMatch(prohibited);
     }
+    expect(readFileSync(resolve(ROOT, 'lore-driver-verstappen.md'), 'utf8')).toContain('仅在玩家执掌红牛时');
+    expect(readFileSync(resolve(ROOT, 'lore-driver-hamilton.md'), 'utf8')).toContain('仅在玩家执掌法拉利时');
+    expect(readFileSync(resolve(ROOT, 'lore-driver-leclerc.md'), 'utf8')).toContain('仅在玩家执掌法拉利时');
+    expect(readFileSync(resolve(ROOT, 'lore-driver-stroll.md'), 'utf8')).toContain('仅在玩家执掌阿斯顿·马丁时');
   });
 });

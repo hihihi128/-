@@ -146,7 +146,7 @@ const driverLore = [
   { id: 28, slug: 'lawson', name: '利亚姆·劳森', keys: ['利亚姆·劳森', '劳森', 'Liam Lawson', 'Lawson'] },
   { id: 29, slug: 'lindblad', name: '阿尔维德·林德布拉德', keys: ['阿尔维德·林德布拉德', '林德布拉德', 'Arvid Lindblad', 'Lindblad'] },
   { id: 30, slug: 'alonso', name: '费尔南多·阿隆索', keys: ['费尔南多·阿隆索', '阿隆索', 'Fernando Alonso', 'Alonso'] },
-  { id: 31, slug: 'stroll', name: '兰斯·斯特罗尔', keys: ['兰斯·斯特罗尔', '兰斯', 'Lance Stroll'] },
+  { id: 31, slug: 'stroll', name: '兰斯·斯特罗尔', keys: ['兰斯·斯特罗尔', '兰斯', 'Lance Stroll', 'Stroll'] },
   { id: 32, slug: 'ocon', name: '埃斯特班·奥孔', keys: ['埃斯特班·奥孔', '奥孔', 'Esteban Ocon', 'Ocon'] },
   { id: 33, slug: 'bearman', name: '奥利弗·贝尔曼', keys: ['奥利弗·贝尔曼', '贝尔曼', 'Oliver Bearman', 'Bearman'] },
   { id: 34, slug: 'hulkenberg', name: '尼科·霍肯伯格', keys: ['尼科·霍肯伯格', '霍肯伯格', 'Nico Hulkenberg', 'Nico Hülkenberg', 'Hulkenberg', 'Hülkenberg'] },
