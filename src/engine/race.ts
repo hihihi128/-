@@ -694,17 +694,19 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
     rain: trajectory[0] ?? 0, wetness: startsWet ? 0.55 : 0, surface: startsWet ? 'wet' : 'dry',
     forecast: createForecast(trajectory, 0, staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), forecastRng),
     scLeft: 0, vscLeft: 0, safetyCars: 0, redFlags: 0, redFlag: null, fastestLap: null, events: [], lapChart, orderOutcomes: [], orderCooldown: {},
-    teamOrders: { ...w.teamOrders }, pendingDecision: null, damageLedger: [], specialIncidents: [],
+    teamOrders: { ...w.teamOrders }, pendingDecision: null, damageLedger: [], specialIncidents: [], norrisTeammateRollDone: false,
   };
   if (kind === 'race') {
     for (const type of ['mclaren_pu', 'mercedes_pu'] as const) {
       const teamId = type === 'mclaren_pu' ? 'mclaren' : 'mercedes';
       const candidates = Object.values(cars).filter(car => car.teamId === teamId);
-      if (candidates.length && execution.chance(specialFailureChance(state, type))) {
+      const chance = specialFailureChance(state, type);
+      if (chance > 0 && candidates.length && execution.chance(chance)) {
         const target = candidates[execution.int(0, candidates.length - 1)];
         session.specialIncidents!.push({ type, driverId: target.driverId, lap: execution.int(2, Math.max(2, totalLaps - 2)), handled: false });
       }
     }
+    session.rngState = execution.state;
   }
   for (const driverId of disobedient) liveEvent(session, 0, 'order', `${driverId} 拒绝执行赛前策略，决定按自己的节奏比赛`, [driverId], true);
   session.weatherRngState = weatherRng.state;
@@ -870,7 +872,7 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
         const energyRisk = car.energyMode === 'deploy' && car.energy < 15 ? 1.35 : car.energyMode === 'deploy' ? 1.12 : 1;
         const pFail = raceFailProb(car.reliability) / session.totalLaps * paceRisk * energyRisk;
         const pCrash = (.02 + (100 - car.consistency) / 100 * .06) * (1 + session.wetness) / session.totalLaps * paceRisk * energyRisk * redBullCrashMultiplier(state, car.teamId);
-        const special = session.specialIncidents?.find(incident => !incident.handled && incident.driverId === car.driverId && incident.lap === lap);
+        const special = session.specialIncidents?.find(incident => !incident.handled && incident.driverId === car.driverId && incident.lap <= lap);
         if (special) {
           special.handled = true;
           if (special.type === 'mclaren_pu') {
@@ -936,8 +938,10 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     const combatants = liveCars(session).filter(c => c.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime);
     for (let i = 1; i < combatants.length; i++) {
       const ahead = combatants[i - 1], behind = combatants[i];
-      const norrisTeammateFight = ahead.teamId === 'mclaren' && behind.teamId === 'mclaren' && (ahead.driverId === 'norris' || behind.driverId === 'norris');
-      const collisionChance = norrisTeammateFight ? .05 : .006 * (1 + session.wetness);
+      const norrisTeammateFight = !!state.mclaren && ahead.teamId === 'mclaren' && behind.teamId === 'mclaren' && (ahead.driverId === 'norris' || behind.driverId === 'norris');
+      const norrisOpportunity = norrisTeammateFight && behind.cumulativeTime - ahead.cumulativeTime <= 1.2 && !scActive && !vscActive && !session.redFlag?.active && !session.norrisTeammateRollDone;
+      const collisionChance = norrisOpportunity ? .05 : .006 * (1 + session.wetness);
+      if (norrisOpportunity) session.norrisTeammateRollDone = true;
       if (behind.cumulativeTime - ahead.cumulativeTime > 1.2 || scActive || vscActive || session.redFlag?.active || !rng.chance(collisionChance)) continue;
       const victim = rng.chance(.5) ? ahead : behind;
       const incidentId = `${session.id}:i${session.damageLedger.length + 1}`;

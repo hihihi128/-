@@ -60,18 +60,18 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
     </div>
 
     <div v-if="mc" class="card stack-s special-card">
-      <div class="spread"><h3>迈凯伦 · 动力单元软件适配</h3><span class="badge" :class="mc.softwareResolved ? 'ok' : 'warn'">{{ mc.softwareResolved ? '已解决' : '故障风险 1/5' }}</span></div>
+      <div class="spread"><h3>迈凯伦 · 动力单元软件适配</h3><span class="badge" :class="mc.softwareResolved ? 'ok' : 'warn'">{{ mc.softwareResolved ? '已解决' : `故障风险 ${Math.round(v.specialRules.mclaren.failureChance * 100)}%` }}</span></div>
       <div v-if="mc.softwareResolved" class="notice ok small">适配完成。动力单元异常放电风险已经消失。</div>
-      <template v-else-if="mc.route"><Bar label="专项项目进度" :value="100 - mc.weeksLeft / (mc.route === 'independent' ? 8 : 5) * 100" color="#ff8700" :hint="`剩余 ${mc.weeksLeft} 周 · ${mc.route === 'independent' ? '自主适配' : '与梅赛德斯合作'}`" /></template>
-      <div v-else class="row"><button class="primary" :disabled="store.busy" @click="act({ type: 'START_MCLAREN_FIX', route: 'independent' })">自主适配（8周）</button><button :disabled="store.busy" @click="act({ type: 'START_MCLAREN_FIX', route: 'mercedes' })">与梅奔合作（5周）</button></div>
+      <template v-else-if="mc.route"><Bar label="专项项目进度" :value="100 - mc.weeksLeft / Math.max(1, mc.weeksTotal) * 100" color="#ff8700" :hint="`剩余 ${mc.weeksLeft} 周 · ${mc.route === 'independent' ? '自主适配' : '与梅赛德斯合作'}`" /></template>
+      <div v-else class="row"><button class="primary" :disabled="store.busy" @click="act({ type: 'START_MCLAREN_FIX', route: 'independent' })">自主适配（{{ v.specialRules.mclaren.independentWeeks }}周）</button><button :disabled="store.busy" @click="act({ type: 'START_MCLAREN_FIX', route: 'mercedes' })">与梅奔合作（{{ v.specialRules.mclaren.cooperationWeeks }}周）</button></div>
       <div class="tiny muted">合作路线会把车体资料交给梅赛德斯，并提高其技术研发能力。诺里斯与皮亚斯特里缠斗时存在额外碰撞风险。</div>
     </div>
 
     <div v-if="mb" class="card stack-s special-card">
       <div class="spread"><h3>梅赛德斯 · 接班人考核与政治斗争</h3><span v-if="mb.dismissed" class="badge bad">已撤职</span><span v-else class="badge">压缩比 {{ mb.compressionRatio }}</span></div>
-      <Bar label="Toto 满意度" :value="mb.totoSatisfaction" :mark="20" :color="mb.totoSatisfaction < 30 ? '#ff5a5a' : '#00a19c'" hint="低于 20 会被撤职" />
-      <Bar label="政治压力" :value="mb.politicalPressure" :max="120" :mark="100" :color="mb.politicalPressure >= 80 ? '#ff5a5a' : '#ffb347'" hint="达到 100 会失去 1:18 压缩比" />
-      <Bar label="ADUO 审批" :value="mb.aduoProgress" color="#6aa6ff" :hint="mb.aduoApproved ? '已获批准，动力单元故障风险消失' : '批准前每场正赛有 1/7 故障风险'" />
+      <Bar label="Toto 满意度" :value="mb.totoSatisfaction" :mark="v.specialRules.mercedes.dismissTotoSatisfaction" :color="mb.totoSatisfaction < 30 ? '#ff5a5a' : '#00a19c'" :hint="`低于 ${v.specialRules.mercedes.dismissTotoSatisfaction} 会被撤职`" />
+      <Bar label="政治压力" :value="mb.politicalPressure" :max="120" :mark="v.specialRules.mercedes.banPoliticalPressure" :color="mb.politicalPressure >= 80 ? '#ff5a5a' : '#ffb347'" :hint="`达到 ${v.specialRules.mercedes.banPoliticalPressure} 会失去 1:18 压缩比`" />
+      <Bar label="ADUO 审批" :value="mb.aduoProgress" color="#6aa6ff" :hint="mb.aduoApproved ? '已获批准，动力单元故障风险消失' : `批准前每场正赛有 ${Math.round(v.specialRules.mercedes.failureChance * 100)}% 故障风险`" />
       <div class="row"><button :disabled="store.busy || !!mb.dismissed" @click="act({ type: 'MERCEDES_POLITICS', strategy: 'lobby_aduo' })">游说 ADUO</button><button :disabled="store.busy || !!mb.dismissed" @click="act({ type: 'MERCEDES_POLITICS', strategy: 'defend' })">技术辩护</button><button :disabled="store.busy || !!mb.dismissed" @click="act({ type: 'MERCEDES_POLITICS', strategy: 'compromise' })">政治妥协</button></div>
       <div class="tiny muted">每站只能执行一次政治行动。每场正赛后，其他车队都会继续施压。</div>
     </div>
@@ -79,9 +79,9 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
     <div v-if="rb" class="card stack-s special-card">
       <div class="spread"><h3>红牛 · 人才与维斯塔潘危机</h3><span class="badge" :class="(rb.verstappenPosition ?? 99) <= 3 ? 'ok' : 'bad'">维斯塔潘 P{{ rb.verstappenPosition || '-' }}</span></div>
       <Bar label="GP 留任意愿" :value="rb.gpRetention" :color="rb.gpRetention < 25 ? '#ff5a5a' : '#3671c6'" :hint="rb.gpTransferred ? 'GP 已决定转投迈凯伦' : '每场正赛后都会下降'" />
-      <button :disabled="store.busy || rb.gpTransferred" @click="act({ type: 'RED_BULL_RETAIN_GP' })">提交 GP 留任方案（1M$）</button>
+      <button :disabled="store.busy || rb.gpTransferred" @click="act({ type: 'RED_BULL_RETAIN_GP' })">提交 GP 留任方案（{{ v.specialRules.redBull.gpNegotiationCost }}M$）</button>
       <div class="small" :class="rb.verstappenExit ? 'notice bad' : 'notice warn'">{{ rb.verstappenExit ? '维斯塔潘的解约条款已经触发，他将转投梅赛德斯。' : rb.summerChecked ? '夏休检查已通过。' : '夏休时维斯塔潘必须位列车手榜前三。' }}</div>
-      <div class="tiny muted">RB23 准备不足会使红牛车手的单车失误概率提高 65%。</div>
+      <div class="tiny muted">RB23 准备不足会使红牛车手的单车失误概率提高 {{ Math.round((v.specialRules.redBull.mistakeMultiplier - 1) * 100) }}%。</div>
     </div>
 
     <div class="grid g2">

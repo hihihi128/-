@@ -118,6 +118,7 @@ rules:
   #   priorityFans: 6         # 指定优先车手：被选中一方 +6，另一方 -7.2
   #   orderFans: 5            # 车队指令让车：让车一方粉丝 -5，受益一方 +2
   #   resultFans: 1.5         # 正赛成绩（队内名次、领奖台、机械故障）对粉丝意见的影响单位
+  #   graceRounds: 2          # 首个赛季前几站是适应期：只警告、不撤职
 
   # ── 迈凯伦、梅赛德斯与红牛特殊机制 ──
   # mclaren:
@@ -139,4 +140,3 @@ rules:
   #   gpLossPerRace: 12
   #   gpNegotiationGain: 25
   #   gpNegotiationCost: 1
-  #   graceRounds: 2          # 首个赛季前几站是适应期：只警告、不撤职

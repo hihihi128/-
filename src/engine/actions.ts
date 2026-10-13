@@ -262,8 +262,10 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
       return ok(`下赛季研发投入比例设为 ${v}%`);
     }
     case 'START_MCLAREN_FIX':
+      if (action.route !== 'independent' && action.route !== 'mercedes') return fail('未知的软件适配路线');
       return startMcLarenFix(state, action.route);
     case 'MERCEDES_POLITICS':
+      if (!['lobby_aduo', 'defend', 'compromise'].includes(action.strategy)) return fail('未知的政治行动');
       return mercedesPolitics(state, action.strategy);
     case 'RED_BULL_RETAIN_GP':
       return retainGp(state);

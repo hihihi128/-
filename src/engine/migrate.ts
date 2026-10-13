@@ -34,6 +34,7 @@ export function migrateState(state: GameState): GameState {
   if (state.mclaren === undefined) state.mclaren = null;
   if (state.mercedes === undefined) state.mercedes = null;
   if (state.redBull === undefined) state.redBull = null;
+  if (state.mclaren) state.mclaren.weeksTotal ??= state.mclaren.weeksLeft;
   // Market rules are a closed map, unlike parts/tyres. Modern saves take the
   // puAllocation fast path below, so fill this before that return.
   state.rules.market ??= deepClone(DEFAULT_RULES.market);
@@ -55,6 +56,7 @@ export function migrateState(state: GameState): GameState {
       live.redFlags ??= 0;
       live.redFlag ??= null;
       live.specialIncidents ??= [];
+      live.norrisTeammateRollDone ??= false;
       for (const car of Object.values(live.cars)) {
         const driver = state.drivers[car.driverId];
         car.trust ??= driver?.trust ?? 50;

@@ -135,6 +135,18 @@ const book = {
     }),
     entry(8, '[F1M资料] 刘易斯·汉密尔顿', readCard(`${wb}/lore-hamilton.md`), { keys: ['汉密尔顿', 'Hamilton', '刘易斯'], order: 202 }),
     entry(9, '[F1M资料] 夏尔·勒克莱尔', readCard(`${wb}/lore-leclerc.md`), { keys: ['勒克莱尔', 'Leclerc', '夏尔'], order: 203 }),
+    entry(10, '[F1M资料] 迈凯伦车队（2026）', readCard(`${wb}/lore-mclaren.md`), {
+      keys: ['迈凯伦', 'McLaren', '斯特拉', '扎克·布朗', '诺里斯', '皮亚斯特里', 'MCL40'],
+      order: 204,
+    }),
+    entry(11, '[F1M资料] 梅赛德斯车队（2026）', readCard(`${wb}/lore-mercedes.md`), {
+      keys: ['梅赛德斯', 'Mercedes', '梅奔', 'Toto Wolff', '托托', 'W17', '压缩比', 'ADUO'],
+      order: 205,
+    }),
+    entry(12, '[F1M资料] 红牛车队（2026）', readCard(`${wb}/lore-redbull.md`), {
+      keys: ['红牛', 'Red Bull', '梅基斯', '维斯塔潘', 'Verstappen', 'GP', 'RB23'],
+      order: 206,
+    }),
   ],
 };
 

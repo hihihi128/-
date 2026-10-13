@@ -123,6 +123,7 @@ export interface HudView {
   liveRace?: { lap: number; totalLaps: number; raceControl: 'sc' | 'vsc' | 'red_flag' | null; pendingDecision: boolean } | null;
   /** 法拉利过渡领队考核（只有法拉利存档有） */
   ferrari?: { media: number; minMedia: number; warnMedia: number; fans: Array<{ name: string; value: number }>; gap: number; maxFanGap: number; warnFanGap: number; dismissed: string | null };
+  dismissal?: string | null;
   changes: string[];
   narrated: string[];
   pending: number;
@@ -340,6 +341,7 @@ export class F1Controller {
             dismissed: v.ferrari.dismissed,
           }
         : undefined,
+      dismissal: v.mercedes?.dismissed ?? null,
       pending: s.narration.length,
       warning: resolved.fallback ? '该楼层原本的存档版本已被清理，显示的是最早仍保留的版本。' : undefined,
     };

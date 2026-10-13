@@ -107,6 +107,7 @@
         '<span class="badge" title="粉丝意见差距（超过 ' + f.maxFanGap + ' 撤职）">粉丝差 <span class="num ' + gTone + '">' + f.gap + '</span></span>' +
         '</div>';
     }
+    if (h.dismissal) html += '<div class="row line"><span class="badge warn">已被撤职：' + esc(h.dismissal) + '</span></div>';
     html += '<div class="row line">' + drv + '</div>';
     html += '<div class="row line">' + cars +
       (h.projects && h.projects.length ? '<span class="muted">研发：' + h.projects.map(function (p) { return esc(p.label) + ' ' + p.weeksLeft + '周'; }).join('，') + '</span>' : '') +

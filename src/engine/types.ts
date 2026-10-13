@@ -881,6 +881,7 @@ export interface LiveRaceState {
   pendingDecision: RaceDecisionWindow | null;
   damageLedger: RaceDamageRecord[];
   specialIncidents?: Array<{ type: 'mclaren_pu' | 'mercedes_pu'; driverId: string; lap: number; handled: boolean }>;
+  norrisTeammateRollDone?: boolean;
 }
 
 export interface WeekendState {
@@ -981,6 +982,7 @@ export interface McLarenState {
   softwareResolved: boolean;
   route: 'independent' | 'mercedes' | null;
   weeksLeft: number;
+  weeksTotal: number;
   mercedesBuffApplied: boolean;
   log: Array<{ at: string; text: string }>;
 }

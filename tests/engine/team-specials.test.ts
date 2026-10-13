@@ -4,6 +4,7 @@ import { createGame } from '../../src/engine/newgame';
 import { createRaceSession } from '../../src/engine/race';
 import { Rng } from '../../src/engine/rng';
 import { afterSpecialRace } from '../../src/engine/teamSpecials';
+import { migrateState } from '../../src/engine/migrate';
 import type { GameState } from '../../src/engine/types';
 import { buildView } from '../../src/engine/view';
 import { act, advanceUntil, cardSources, tryAct } from '../helpers';
@@ -60,6 +61,19 @@ describe('三支车队特殊机制', () => {
     state = act(state, { type: 'MERCEDES_POLITICS', strategy: 'lobby_aduo' });
     expect(state.mercedes).toMatchObject({ aduoApproved: true, aduoProgress: 100 });
     expect(tryAct(state, { type: 'MERCEDES_POLITICS', strategy: 'defend' }).ok).toBe(false);
+    expect(tryAct(state, { type: 'MERCEDES_POLITICS', strategy: 'invalid' } as never).ok).toBe(false);
+  });
+
+  it('梅赛德斯在压力过高时失去 1:18，并在 Toto 满意度过低时撤职', () => {
+    const state = teamGame('mercedes');
+    state.mercedes!.politicalPressure = state.rules.mercedes.banPoliticalPressure;
+    state.mercedes!.totoSatisfaction = 0;
+    const before = state.teams.mercedes.parts.power_unit.specs[0].perf;
+    afterSpecialRace(state);
+    expect(state.mercedes).toMatchObject({ compressionRatio: '1:16' });
+    expect(state.teams.mercedes.parts.power_unit.specs[0].perf).toBe(before - 2);
+    expect(state.mercedes!.dismissed).toContain('Toto');
+    expect(tryAct(state, { type: 'ADVANCE' }).ok).toBe(false);
   });
 
   it('红牛可投入资金争取 GP 留任，并在赛历中点检查维斯塔潘排名', () => {
@@ -74,5 +88,27 @@ describe('三支车队特殊机制', () => {
     state.season.roundIndex = Math.ceil(state.calendar.length / 2) - 1;
     afterSpecialRace(state);
     expect(state.redBull).toMatchObject({ summerChecked: true, verstappenExit: true });
+    expect(state.drivers.verstappen.teamId).toBe('mercedes');
+    expect(state.teams.mercedes.cars.some(car => car.driverId === 'verstappen')).toBe(true);
+  });
+
+  it('GP 离队时从红牛移动到迈凯伦，红牛提拔替代工程师', () => {
+    const state = teamGame('red_bull');
+    const gpId = state.teams.red_bull.staff.raceEngineer.id;
+    const displacedId = state.teams.mclaren.staff.raceEngineer.id;
+    state.redBull!.gpRetention = 0;
+    afterSpecialRace(state);
+    expect(state.redBull!.gpTransferred).toBe(true);
+    expect(state.teams.mclaren.staff.raceEngineer.id).toBe(gpId);
+    expect(state.teams.red_bull.staff.raceEngineer.id).not.toBe(gpId);
+    expect(displacedId && state.market!.freeStaff[displacedId]).toBeTruthy();
+  });
+
+  it('旧存档补齐新的特殊状态与实时比赛字段', () => {
+    const state = teamGame('mclaren') as GameState & { mclaren: NonNullable<GameState['mclaren']> };
+    state.mclaren.weeksTotal = undefined as never;
+    state.mclaren.weeksLeft = 3;
+    migrateState(state);
+    expect(state.mclaren.weeksTotal).toBe(3);
   });
 });

@@ -1,13 +1,14 @@
 import { addNarration, addNews, playerTeam } from './log';
+import { affordError, charge } from './finance';
 import type { GameState, TeamState } from './types';
-import { clamp, pushCapped, round1, stamp } from './util';
+import { clamp, deepClone, pushCapped, round1, stamp } from './util';
 
 const LOG_CAP = 10;
 const roundKey = (state: GameState) => `${state.season.number}-${state.season.roundIndex}`;
 const log = (state: GameState, target: { log: Array<{ at: string; text: string }> }, text: string) => pushCapped(target.log, { at: stamp(state), text }, LOG_CAP);
 
 export function initTeamSpecials(state: GameState, team: TeamState): void {
-  state.mclaren = team.special === 'mclaren' ? { softwareResolved: false, route: null, weeksLeft: 0, mercedesBuffApplied: false, log: [] } : null;
+  state.mclaren = team.special === 'mclaren' ? { softwareResolved: false, route: null, weeksLeft: 0, weeksTotal: 0, mercedesBuffApplied: false, log: [] } : null;
   state.mercedes = team.special === 'mercedes' ? {
     aduoApproved: false,
     aduoProgress: 0,
@@ -35,6 +36,7 @@ export function startMcLarenFix(state: GameState, route: 'independent' | 'merced
   if (m.route) return { ok: false, message: '专项项目已经启动，不能中途更换路线' };
   m.route = route;
   m.weeksLeft = route === 'independent' ? state.rules.mclaren.independentWeeks : state.rules.mclaren.cooperationWeeks;
+  m.weeksTotal = m.weeksLeft;
   const text = route === 'independent'
     ? `迈凯伦启动自主车体与动力单元软件适配项目，预计 ${m.weeksLeft} 周完成。`
     : `迈凯伦与梅赛德斯启动联合适配项目，预计 ${m.weeksLeft} 周完成；迈凯伦将共享车体资料。`;
@@ -79,9 +81,11 @@ export function retainGp(state: GameState): { ok: boolean; message: string } {
   if (!r) return { ok: false, message: '当前车队没有红牛 GP 留任机制' };
   if (r.gpTransferred) return { ok: false, message: 'GP 已经决定转投迈凯伦' };
   if (r.lastActionRound === roundKey(state)) return { ok: false, message: '每站只能与 GP 谈判一次' };
-  if (team.funds < state.rules.redBull.gpNegotiationCost) return { ok: false, message: '资金不足以提供留任方案' };
+  const cost = state.rules.redBull.gpNegotiationCost;
+  const paymentError = affordError(team, cost, 'misc', state.rules);
+  if (paymentError) return { ok: false, message: paymentError };
   r.lastActionRound = roundKey(state);
-  team.funds = round1(team.funds - state.rules.redBull.gpNegotiationCost);
+  charge(team, cost, 'misc', state.rules);
   r.gpRetention = round1(clamp(r.gpRetention + state.rules.redBull.gpNegotiationGain, 0, 100));
   const text = `车队向 GP 提交留任方案，留任意愿升至 ${r.gpRetention}。`;
   log(state, r, text);
@@ -111,7 +115,43 @@ export function advanceSpecialWeeks(state: GameState): void {
 }
 
 function driverPosition(state: GameState, id: string): number {
-  return Object.keys(state.standings.drivers).sort((a, b) => state.standings.drivers[b].points - state.standings.drivers[a].points || state.standings.drivers[b].wins - state.standings.drivers[a].wins).indexOf(id) + 1;
+  return Object.keys(state.standings.drivers).sort((a, b) => {
+    const A = state.standings.drivers[a], B = state.standings.drivers[b];
+    return B.points - A.points || B.wins - A.wins || (A.best ?? 99) - (B.best ?? 99);
+  }).indexOf(id) + 1;
+}
+
+function transferGpToMcLaren(state: GameState): void {
+  const redBull = state.teams.red_bull;
+  const mclaren = state.teams.mclaren;
+  const gp = redBull?.staff.raceEngineer;
+  if (!redBull || !mclaren || !gp) return;
+  const displaced = mclaren.staff.raceEngineer;
+  const promoted = deepClone(redBull.staff.raceEngineer2);
+  redBull.staff.raceEngineer = { ...promoted, role: 'raceEngineer', id: `${promoted.id ?? 'red-bull-engineer2'}-promoted` };
+  mclaren.staff.raceEngineer = { ...deepClone(gp), role: 'raceEngineer' };
+  if (displaced.id) state.market!.freeStaff[displaced.id] = deepClone(displaced);
+  const window = state.market?.window;
+  if (window && window.status !== 'closed') {
+    window.projectedRosters.red_bull.staff.raceEngineer = redBull.staff.raceEngineer.id ?? null;
+    window.projectedRosters.mclaren.staff.raceEngineer = mclaren.staff.raceEngineer.id ?? null;
+  }
+}
+
+function transferVerstappenToMercedes(state: GameState): void {
+  const redBull = state.teams.red_bull;
+  const mercedes = state.teams.mercedes;
+  const max = state.drivers.verstappen;
+  if (!redBull || !mercedes || !max) return;
+  const maxCar = redBull.cars.find(car => car.driverId === max.id);
+  const targetCar = mercedes.cars.find(car => car.slot === 1) ?? mercedes.cars[0];
+  const displacedId = targetCar?.driverId;
+  if (!maxCar || !targetCar || !displacedId) return;
+  const displaced = state.drivers[displacedId];
+  maxCar.driverId = displacedId;
+  targetCar.driverId = max.id;
+  max.teamId = 'mercedes';
+  if (displaced) displaced.teamId = 'red_bull';
 }
 
 export function afterSpecialRace(state: GameState): void {
@@ -145,9 +185,8 @@ export function afterSpecialRace(state: GameState): void {
     r.gpRetention = round1(clamp(r.gpRetention - state.rules.redBull.gpLossPerRace, 0, 100));
     if (r.gpRetention <= 0 && !r.gpTransferred) {
       r.gpTransferred = true;
-      const gp = state.teams.red_bull?.staff.raceEngineer;
-      if (gp && state.teams.mclaren) state.teams.mclaren.staff.raceEngineer = { ...gp, id: gp.id ? `${gp.id}-mclaren` : 'gp-mclaren' };
-      addNews(state, '员工', 'GP 接受迈凯伦邀请，将离开红牛并加入迈凯伦。');
+      transferGpToMcLaren(state);
+      addNews(state, '员工', 'GP 接受迈凯伦邀请并立即转会。红牛提拔二号车工程师接替他。');
     }
     const midpoint = Math.ceil(state.calendar.length / 2);
     if (!r.summerChecked && state.season.roundIndex + 1 >= midpoint) {
@@ -155,8 +194,9 @@ export function afterSpecialRace(state: GameState): void {
       const pos = driverPosition(state, 'verstappen');
       if (pos < 1 || pos > 3) {
         r.verstappenExit = true;
-        addNews(state, '车手', `夏休到来时维斯塔潘仅列车手榜第 ${pos}，其解约条款已触发，梅赛德斯开始推进签约。`);
-        addNarration(state, 'verstappen_clause', '维斯塔潘触发解约条款', `维斯塔潘在夏休时未进入积分榜前三，合同解约条款生效。他通知车队将转投梅赛德斯。`);
+        transferVerstappenToMercedes(state);
+        addNews(state, '车手', `夏休到来时维斯塔潘仅列车手榜第 ${pos}，其解约条款触发并转会梅赛德斯。`);
+        addNarration(state, 'verstappen_clause', '维斯塔潘触发解约条款', '维斯塔潘在夏休时未进入积分榜前三，合同解约条款生效。他立即转投梅赛德斯，梅赛德斯原一号车手转入红牛填补席位。');
       } else addNews(state, '车手', `夏休检查：维斯塔潘位列车手榜第 ${pos}，解约条款没有触发。`);
     }
   }

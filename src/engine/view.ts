@@ -294,6 +294,7 @@ export interface GameView {
   mclaren: GameState['mclaren'];
   mercedes: GameState['mercedes'];
   redBull: (GameState['redBull'] & { verstappenPosition?: number }) | null;
+  specialRules: Pick<GameState['rules'], 'mclaren' | 'mercedes' | 'redBull'>;
   aduo: AduoView;
   lastSeason: GameState['lastSeason'];
   labels: typeof LABELS & {
@@ -647,6 +648,11 @@ export function buildView(state: GameState): GameView {
       ...state.redBull,
       verstappenPosition: driverPos.get('verstappen') ?? 0,
     } : null,
+    specialRules: {
+      mclaren: { ...rules.mclaren },
+      mercedes: { ...rules.mercedes },
+      redBull: { ...rules.redBull },
+    },
     aduo: aduoView(state),
     lastSeason: state.lastSeason,
     labels: {
