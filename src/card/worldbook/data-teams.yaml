@@ -103,7 +103,7 @@ teams:
       raceEngineer: { name: 威尔·约瑟夫, skill: 84, abilities: { setup: 85, communication: 87, reaction: 83, weather: 82 }, salary: 1.1 }
       raceEngineer2: { name: 汤姆·斯托拉德, skill: 85, abilities: { setup: 86, communication: 85, reaction: 86, weather: 84 }, salary: 1.1 }
       pitCrew: { skill: 92, salary: 1.8 }
-      strategist: { name: 兰迪·辛格, skill: 86, abilities: { strategy: 88, weather: 85, reaction: 87, risk: 71 }, salary: 1.1 }
+      strategist: { name: 兰迪普·辛格, skill: 86, abilities: { strategy: 88, weather: 85, reaction: 87, risk: 71 }, salary: 1.1 }
     carBase: { perf: 78, rel: 87 }
     parts:
       power_unit: { perf: 91, rel: 87 }

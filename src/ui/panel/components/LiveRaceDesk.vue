@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, nextTick, reactive, ref, watch } from 'vue';
 import { act, store } from '../bridge';
 import Tyre from './Tyre.vue';
 import type { EnergyMode, PaceMode, PitTiming, TeamOrders } from '../../../engine/types';
@@ -14,7 +14,10 @@ const selections = reactive<Record<string, { pit: 'auto' | 'stay_out' | 'box'; c
 const orders = reactive<TeamOrders>({ mode: 'free', favorDriverId: null });
 const activeWindowId = computed(() => live.value?.pendingDecision?.id ?? '');
 const tyrePickerDriverId = ref('');
+const tyrePickerDialog = ref<HTMLElement | null>(null);
+let tyrePickerTrigger: HTMLElement | null = null;
 function resetDrafts() {
+  tyrePickerDriverId.value = '';
   for (const id of Object.keys(selections)) delete selections[id];
   Object.assign(orders, live.value?.teamOrders ?? { mode: 'free', favorDriverId: null });
 }
@@ -35,10 +38,19 @@ function driverName(id: string) { return names.value.get(id) ?? id; }
 function driverShort(id: string) { return shortNames.value.get(id) ?? driverName(id); }
 function isEligible(id: string) { return !!live.value?.pendingDecision?.eligibleDriverIds.includes(id); }
 function tyreOptions() { return Object.keys(v.value.labels.tyres); }
-function openTyrePicker(driverId: string) { tyrePickerDriverId.value = driverId; }
-function closeTyrePicker() { tyrePickerDriverId.value = ''; }
+function openTyrePicker(driverId: string, event: MouseEvent) {
+  tyrePickerTrigger = event.currentTarget as HTMLElement;
+  tyrePickerDriverId.value = driverId;
+  void nextTick(() => tyrePickerDialog.value?.focus());
+}
+function closeTyrePicker() {
+  tyrePickerDriverId.value = '';
+  void nextTick(() => tyrePickerTrigger?.focus());
+}
 function selectRedFlagTyre(compound: string) {
-  const draft = choice(tyrePickerDriverId.value);
+  const driverId = tyrePickerDriverId.value;
+  if (!driverId || !isEligible(driverId) || !live.value?.pendingDecision?.reasons.includes('red_flag')) { closeTyrePicker(); return; }
+  const draft = choice(driverId);
   draft.pit = 'box';
   draft.compound = compound;
   closeTyrePicker();
@@ -101,8 +113,8 @@ async function autoFinish() {
             <template v-if="isEligible(d.id)">
               <div v-if="live.pendingDecision.reasons.includes('red_flag')" class="red-flag-options">
                 <div class="seg">
-                  <button :class="{ on: choice(d.id).pit === 'auto' }" @click="choice(d.id).pit = 'auto'">保留轮胎</button>
-                  <button :class="{ on: choice(d.id).pit === 'box' }" @click="openTyrePicker(d.id)">{{ choice(d.id).pit === 'box' ? `更换为${v.labels.tyres[choice(d.id).compound]?.name ?? choice(d.id).compound}` : '免费换胎…' }}</button>
+                  <button :class="{ on: choice(d.id).pit === 'auto' }" @click="choice(d.id).pit = 'auto'">保留{{ v.labels.tyres[carById.get(d.id)?.tyre ?? '']?.name ?? carById.get(d.id)?.tyre }}</button>
+                  <button :class="{ on: choice(d.id).pit === 'box' }" @click="openTyrePicker(d.id, $event)">{{ choice(d.id).pit === 'box' ? `更换为${v.labels.tyres[choice(d.id).compound]?.name ?? choice(d.id).compound}` : '免费换胎…' }}</button>
                 </div>
               </div>
               <template v-else>
@@ -119,10 +131,10 @@ async function autoFinish() {
     </div>
     <Teleport to="body">
       <div v-if="tyrePickerDriverId" class="tyre-modal-backdrop" role="presentation" @click.self="closeTyrePicker">
-        <section class="tyre-modal" role="dialog" aria-modal="true" aria-label="选择红旗重启轮胎">
-          <div class="spread"><div><div class="tiny muted">红旗免费换胎</div><h3>选择 {{ driverShort(tyrePickerDriverId) }} 的重启轮胎</h3></div><button aria-label="关闭" @click="closeTyrePicker">×</button></div>
+        <section ref="tyrePickerDialog" class="tyre-modal" role="dialog" aria-modal="true" aria-label="选择红旗重启轮胎" tabindex="-1" @keydown.esc.stop.prevent="closeTyrePicker">
+          <div class="spread"><div><div class="tiny muted">红旗免费换胎</div><h3>选择 {{ driverShort(tyrePickerDriverId) }} 的重启轮胎</h3><div class="tiny muted">当前 {{ v.labels.tyres[carById.get(tyrePickerDriverId)?.tyre ?? '']?.name ?? carById.get(tyrePickerDriverId)?.tyre }} · 已使用 {{ carById.get(tyrePickerDriverId)?.tyreAge ?? 0 }} 圈</div></div><button aria-label="关闭" @click="closeTyrePicker">×</button></div>
           <div class="tyre-modal-grid">
-            <button v-for="compound in tyreOptions()" :key="compound" :class="{ on: choice(tyrePickerDriverId).compound === compound }" @click="selectRedFlagTyre(compound)"><Tyre :c="compound" /> <b>{{ v.labels.tyres[compound]?.name ?? compound }}</b></button>
+            <button v-for="compound in tyreOptions()" :key="compound" :class="{ on: choice(tyrePickerDriverId).pit === 'box' && choice(tyrePickerDriverId).compound === compound }" @click="selectRedFlagTyre(compound)"><Tyre :c="compound" /> <b>{{ v.labels.tyres[compound]?.name ?? compound }}</b><span v-if="compound === carById.get(tyrePickerDriverId)?.tyre" class="tiny">新胎</span></button>
           </div>
           <button class="ghost" @click="closeTyrePicker">取消</button>
         </section>

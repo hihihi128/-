@@ -36,9 +36,16 @@ describe('数据解析（世界书 YAML）', () => {
 
   it('11 支真实车队都提供具名的两位比赛工程师和策略负责人', () => {
     const db = normalizeDatabase(cardSources()).db!;
+    const expected: Record<string, [string, string, string]> = {
+      mercedes: ['马库斯·达德利', '彼得·博宁顿', '罗茜·韦特'], mclaren: ['威尔·约瑟夫', '汤姆·斯托拉德', '兰迪普·辛格'], red_bull: ['詹皮耶罗·兰比亚塞', '理查德·伍德', '汉娜·施密茨'],
+      ferrari: ['卡洛·桑蒂', '布莱恩·博齐', '拉文·贾恩'], williams: ['詹姆斯·厄文', '加埃唐·热戈', '夏尔-安托万·弗洛朗坦'], racing_bulls: ['亚历山大·伊利奥普洛斯', '皮埃尔·哈梅林', '马蒂厄·迪布瓦-卢卡'],
+      aston_martin: ['克里斯·克罗宁', '加里·甘农', '彼得·霍尔'], haas: ['劳拉·穆勒', '罗南·奥黑尔', '卡琳·克里德利希'], audi: ['史蒂文·佩特里克', '何塞·曼努埃尔·洛佩斯', '里特维克·达南贾亚·雷迪'],
+      alpine: ['乔什·佩克特', '斯图尔特·巴洛', '奥里奥尔·伊塞恩'], cadillac: ['约翰·霍华德', '卡洛·帕塞蒂', '亚历克斯·古迪纳夫'],
+    };
     expect(db.teams).toHaveLength(11);
     for (const team of db.teams) {
       expect([team.staff.raceEngineer, team.staff.raceEngineer2, team.staff.strategist].every(member => member.name && !member.name.includes('比赛工程师') && member.name !== '首席策略组')).toBe(true);
+      expect([team.staff.raceEngineer.name, team.staff.raceEngineer2.name, team.staff.strategist.name]).toEqual(expected[team.id]);
       expect(Object.keys(team.staff.raceEngineer.abilities ?? {})).toEqual(expect.arrayContaining(['setup', 'communication', 'reaction', 'weather']));
       expect(Object.keys(team.staff.raceEngineer2.abilities ?? {})).toEqual(expect.arrayContaining(['setup', 'communication', 'reaction', 'weather']));
       expect(Object.keys(team.staff.strategist.abilities ?? {})).toEqual(expect.arrayContaining(['strategy', 'weather', 'reaction', 'risk']));
