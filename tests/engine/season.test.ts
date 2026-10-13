@@ -29,6 +29,22 @@ describe('开局', () => {
     // 存档是纯 JSON
     expect(JSON.parse(JSON.stringify(s))).toEqual(s);
   });
+
+  it('比赛间隔逐周推进，并在每个日历周保留操作窗口', () => {
+    let state = act(newTestGame(2026), { type: 'START_SEASON' });
+    const gap = state.calendar[0].weeksGap;
+    expect(state.season.week).toBe(0);
+    expect(state.season.weeksUntilRound).toBe(gap);
+    expect(tryAct(state, { type: 'START_WEEKEND' }).ok).toBe(gap === 0);
+    for (let elapsed = 1; elapsed <= gap; elapsed += 1) {
+      state = act(state, { type: 'ADVANCE' });
+      expect(state.season.week).toBe(elapsed);
+      expect(state.season.weeksUntilRound).toBe(gap - elapsed);
+      expect(state.season.phase).toBe('pre_race');
+    }
+    state = act(state, { type: 'START_WEEKEND' });
+    expect(state.season.phase).toBe('practice');
+  });
 });
 
 describe('完整赛季流程', () => {

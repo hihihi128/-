@@ -43,7 +43,7 @@ async function setPriority(id: string | null) {
     <div class="card stack-s">
       <h3>车队优先级</h3>
       <div class="small muted">
-        指定优先车手后：升级件默认先给他、车队指令更容易偏向他；他的心态与信任上升，队友（尤其自尊心强的）会不满。每站只能调整一次。
+        指定优先车手后：升级件默认先给他、车队指令更容易偏向他；他的心态与信任上升，队友（尤其自尊心强的）会不满。每周只能调整一次。
       </div>
       <div class="row">
         <div class="seg">

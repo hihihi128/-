@@ -66,6 +66,16 @@ describe('2026 规则', () => {
     expect(pu.find(p => p.type === 'power_unit')).toMatchObject({ used: 7, limit: 4 });
   });
 
+  it('旧存档缺少动力单元计数时，第一次装件从第一件开始计算', () => {
+    const s = newTestGame();
+    const driver = s.drivers.c1;
+    delete driver.puUsed;
+    delete driver.puPool;
+    expect(recordPuFit(s, driver.id, 'power_unit', 'legacy-first')).toBe('');
+    expect(driver.puUsed!.power_unit).toBe(1);
+    expect(driver.puPool!.power_unit).toEqual(['legacy-first']);
+  });
+
   it('排位后的配额罚退留到下一站', () => {
     const s = advanceUntil(newTestGame(12), x => x.season.phase === 'post_race');
     s.drivers.c2.puUsed!.ers = 3;

@@ -180,7 +180,7 @@ onMounted(load);
     <div v-else-if="special === 'williams'" class="card notice special-team small stack-s">
       <b>威廉姆斯 · 2026 全年接班培养</b>
       <div>James Vowles 将在年底返回梅赛德斯。玩家从赛季初开始接受下一任领队培养。</div>
-      <ul class="tiny"><li>有限资金无法同时满足所有需求。</li><li>每站必须选择设施、赛车升级或保留现金。</li><li>接班准备度不足会让董事会暂缓正式任命，并延长代理考核。</li></ul>
+      <ul class="tiny"><li>有限资金无法同时满足所有需求。</li><li>每周可以选择设施、赛车升级或保留现金。</li><li>接班准备度不足会让董事会暂缓正式任命，并延长代理考核。</li></ul>
     </div>
     <div v-else-if="selectedTeam?.id === 'cadillac'" class="card notice special-team small stack-s">
       <b>凯迪拉克 · 从零开始</b>

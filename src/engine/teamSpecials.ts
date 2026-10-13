@@ -5,7 +5,7 @@ import type { GameState, TeamState } from './types';
 import { clamp, deepClone, pushCapped, round1, stamp } from './util';
 
 const LOG_CAP = 10;
-const roundKey = (state: GameState) => `${state.season.number}-${state.season.roundIndex}`;
+const weekKey = (state: GameState) => `${state.season.number}-w${state.season.week}`;
 const log = (state: GameState, target: { log: Array<{ at: string; text: string }> }, text: string) => pushCapped(target.log, { at: stamp(state), text }, LOG_CAP);
 
 export function initTeamSpecials(state: GameState, team: TeamState): void {
@@ -51,8 +51,8 @@ export function mercedesPolitics(state: GameState, strategy: 'lobby_aduo' | 'def
   const m = state.mercedes;
   if (!m) return { ok: false, message: '当前车队没有梅赛德斯政治机制' };
   if (m.dismissed) return { ok: false, message: `你已被 Toto Wolff 撤职：${m.dismissed}` };
-  if (m.lastActionRound === roundKey(state)) return { ok: false, message: '每站只能执行一次政治行动' };
-  m.lastActionRound = roundKey(state);
+  if (m.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能执行一次政治行动' };
+  m.lastActionRound = weekKey(state);
   let text = '';
   if (strategy === 'lobby_aduo') {
     m.aduoProgress = Math.min(100, m.aduoProgress + state.rules.mercedes.aduoProgressPerLobby);
@@ -81,11 +81,11 @@ export function retainGp(state: GameState): { ok: boolean; message: string } {
   const team = playerTeam(state);
   if (!r) return { ok: false, message: '当前车队没有红牛 GP 留任机制' };
   if (r.gpTransferred) return { ok: false, message: 'GP 已经决定转投迈凯伦' };
-  if (r.lastActionRound === roundKey(state)) return { ok: false, message: '每站只能与 GP 谈判一次' };
+  if (r.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能与 GP 谈判一次' };
   const cost = state.rules.redBull.gpNegotiationCost;
   const paymentError = affordError(team, cost, 'misc', state.rules);
   if (paymentError) return { ok: false, message: paymentError };
-  r.lastActionRound = roundKey(state);
+  r.lastActionRound = weekKey(state);
   charge(team, cost, 'misc', state.rules);
   r.gpRetention = round1(clamp(r.gpRetention + state.rules.redBull.gpNegotiationGain, 0, 100));
   const text = `车队向 GP 提交留任方案，留任意愿升至 ${r.gpRetention}。`;

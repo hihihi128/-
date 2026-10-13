@@ -22,18 +22,18 @@ afterEach(() => {
   document.body.replaceChildren();
 });
 
-describe('威廉姆斯本站预算方向', () => {
-  it('跨站后不会向提示词或总览泄漏上一站的预算方向', async () => {
+describe('威廉姆斯本周预算方向', () => {
+  it('跨周后不会向提示词或总览泄漏上一周的预算方向', async () => {
     let state = game();
     const focused = dispatch(state, { type: 'WILLIAMS_BUDGET_FOCUS', focus: 'facilities' }, { now: 1 });
     expect(focused.ok).toBe(true);
     state = focused.state;
-    expect(state.williams!.focusRound).toBe(`${state.season.number}-${state.season.roundIndex}`);
+    expect(state.williams!.focusRound).toBe(`${state.season.number}-w${state.season.week}`);
 
-    state.season.roundIndex += 1;
+    state.season.week += 1;
     const prompt = buildStatePrompt(state);
-    expect(prompt).toContain('本站预算方向 尚未决定');
-    expect(prompt).not.toContain('本站预算方向 设施');
+    expect(prompt).toContain('本周预算方向 尚未决定');
+    expect(prompt).not.toContain('本周预算方向 设施');
 
     store.view = buildView(state);
     const host = document.createElement('div');
@@ -42,8 +42,8 @@ describe('威廉姆斯本站预算方向', () => {
     app.mount(host);
     await nextTick();
 
-    expect(host.textContent).toContain('本站方向：尚未决定');
-    expect(host.textContent).not.toContain('本站方向：设施更新');
+    expect(host.textContent).toContain('本周方向：尚未决定');
+    expect(host.textContent).not.toContain('本周方向：设施更新');
     app.unmount();
   });
 });

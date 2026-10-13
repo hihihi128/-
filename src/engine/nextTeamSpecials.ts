@@ -6,7 +6,7 @@ import type { FiaMeetingIssue, GameState, LiveRaceState, TeamState } from './typ
 import { clamp, pushCapped, round1, stamp } from './util';
 
 const CAP = 12;
-const roundKey = (state: GameState) => `${state.season.number}-${state.season.roundIndex}`;
+const weekKey = (state: GameState) => `${state.season.number}-w${state.season.week}`;
 const append = (state: GameState, target: { log: Array<{ at: string; text: string }> }, text: string) => pushCapped(target.log, { at: stamp(state), text }, CAP);
 
 export function initNextTeamSpecials(state: GameState, team: TeamState): void {
@@ -48,8 +48,8 @@ function completeAstonChassis(state: GameState): void {
 export function astonCrisis(state: GameState, strategy: 'pressure_honda' | 'mediate' | 'push_newey'): { ok: boolean; message: string } {
   const a = state.astonMartin;
   if (!a) return { ok: false, message: '当前车队没有阿斯顿·马丁危机机制' };
-  if (a.lastActionRound === roundKey(state)) return { ok: false, message: '每站只能执行一次危机行动' };
-  a.lastActionRound = roundKey(state);
+  if (a.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能执行一次危机行动' };
+  a.lastActionRound = weekKey(state);
   const team = state.teams.aston_martin;
   let text: string;
   if (strategy === 'pressure_honda') {

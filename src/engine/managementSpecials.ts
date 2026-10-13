@@ -3,7 +3,7 @@ import type { Action, GameState, PartSpec, PartType, TeamState } from './types';
 import { clamp, pushCapped, round1, round2, stamp } from './util';
 
 const CAP = 12;
-const roundKey = (state: GameState) => `${state.season.number}-${state.season.roundIndex}`;
+const weekKey = (state: GameState) => `${state.season.number}-w${state.season.week}`;
 const append = (state: GameState, target: { log: Array<{ at: string; text: string }> }, text: string) => pushCapped(target.log, { at: stamp(state), text }, CAP);
 const DIRECTIONS: PartType[][] = [
   ['chassis', 'sidepods'],
@@ -82,8 +82,8 @@ export function initManagementSpecials(state: GameState, team: TeamState): void 
 export function alpineManagement(state: GameState, strategy: 'back_colapinto' | 'reassure_gasly' | 'integrate_power_unit'): { ok: boolean; message: string } {
   const a = state.alpine;
   if (!a) return { ok: false, message: '当前车队没有阿尔派管理机制' };
-  if (a.lastActionRound === roundKey(state)) return { ok: false, message: '每站只能执行一次阿尔派管理行动' };
-  a.lastActionRound = roundKey(state);
+  if (a.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能执行一次阿尔派管理行动' };
+  a.lastActionRound = weekKey(state);
   let text: string;
   if (strategy === 'back_colapinto') {
     a.fanPressure = round1(clamp(a.fanPressure - 14, 0, 100));
@@ -128,8 +128,8 @@ export function alpineOnPriority(state: GameState, driverId: string | null): voi
 export function haasBalance(state: GameState, strategy: 'protect_independence' | 'accept_toyota' | 'compromise'): { ok: boolean; message: string } {
   const h = state.haas;
   if (!h) return { ok: false, message: '当前车队没有哈斯股东平衡机制' };
-  if (h.lastActionRound === roundKey(state)) return { ok: false, message: '每站只能执行一次哈斯股东行动' };
-  h.lastActionRound = roundKey(state);
+  if (h.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能执行一次哈斯股东行动' };
+  h.lastActionRound = weekKey(state);
   const team = playerTeam(state);
   let text: string;
   if (strategy === 'protect_independence') {
@@ -159,11 +159,11 @@ export function haasBalance(state: GameState, strategy: 'protect_independence' |
 export function williamsBudgetFocus(state: GameState, focus: 'facilities' | 'development' | 'reserve'): { ok: boolean; message: string } {
   const w = state.williams;
   if (!w) return { ok: false, message: '当前车队没有威廉姆斯接班机制' };
-  const key = roundKey(state);
-  if (w.focusRound === key) return { ok: false, message: '本站预算方向已经确定' };
+  const key = weekKey(state);
+  if (w.focusRound === key) return { ok: false, message: '本周预算方向已经确定' };
   w.focus = focus; w.focusRound = key;
   const label = focus === 'facilities' ? '设施更新' : focus === 'development' ? '赛车升级' : '保留现金';
-  const text = `玩家把本站有限预算的优先级设为${label}。`;
+  const text = `玩家把本周有限预算的优先级设为${label}。`;
   append(state, w, text); addNews(state, '预算', text);
   return { ok: true, message: text };
 }
@@ -172,9 +172,9 @@ export function managementActionBlocker(state: GameState, action: Action): strin
   if (action.type === 'START_PROJECT') {
     if (state.alpine && !state.alpine.rndDirection.includes(action.partType)) return `布里亚托利已经决定本阶段只研发：${state.alpine.rndDirection.map(type => state.rules.parts[type]?.name ?? type).join('、')}`;
     if (state.haas && state.haas.toyotaInfluence >= state.rules.haas.interferenceThreshold && !state.haas.preferredParts.includes(action.partType)) return `丰田当前要求研发资源集中在：${state.haas.preferredParts.map(type => state.rules.parts[type]?.name ?? type).join('、')}`;
-    if (state.williams && (state.williams.focusRound !== roundKey(state) || state.williams.focus !== 'development')) return '请先把威廉姆斯本站预算方向设为赛车升级';
+    if (state.williams && (state.williams.focusRound !== weekKey(state) || state.williams.focus !== 'development')) return '请先把威廉姆斯本周预算方向设为赛车升级';
   }
-  if (action.type === 'UPGRADE_FACILITY' && state.williams && (state.williams.focusRound !== roundKey(state) || state.williams.focus !== 'facilities')) return '请先把威廉姆斯本站预算方向设为设施更新';
+  if (action.type === 'UPGRADE_FACILITY' && state.williams && (state.williams.focusRound !== weekKey(state) || state.williams.focus !== 'facilities')) return '请先把威廉姆斯本周预算方向设为设施更新';
   return null;
 }
 
@@ -194,7 +194,7 @@ export function recordManagementInvestment(state: GameState, action: Action, ok:
 }
 
 export function afterManagementRace(state: GameState): void {
-  const key = roundKey(state);
+  const key = weekKey(state);
   if (state.alpine) {
     const a = state.alpine;
     if (a.lastActionRound !== key) { a.briatoreSatisfaction -= 5; a.fanPressure += 5; a.gaslyCommitment -= 4; }

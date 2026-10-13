@@ -573,7 +573,8 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(ctrl.stateAt()!.season.phase).toBe('pre_race');
     await env.aiReplies('车队抵达首站。');
     await env.userSays('进入周末');
-    await ctrl.dispatch({ type: 'ADVANCE' });
+    const gap = ctrl.stateAt()!.season.weeksUntilRound ?? 0;
+    for (let week = 0; week <= gap; week += 1) await ctrl.dispatch({ type: 'ADVANCE' });
     expect(ctrl.stateAt()!.season.phase).toBe('practice');
     await env.deleteFrom(3);
     expect(ctrl.stateAt()!.season.phase).toBe('pre_race');

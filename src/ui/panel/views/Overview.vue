@@ -98,7 +98,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Bar label="ADUO 审批" :value="mb.aduoProgress" color="#6aa6ff" :hint="mb.aduoApproved ? '已获批准，动力单元故障风险消失' : `批准前每场正赛有 ${Math.round(v.specialRules.mercedes.failureChance * 100)}% 故障风险`" />
       <div class="row"><button :disabled="store.busy || !!mb.dismissed || negotiationActiveFor('mercedes_politics')" @click="act({ type: 'MERCEDES_POLITICS', strategy: 'lobby_aduo' })">游说 ADUO</button><button :disabled="store.busy || !!mb.dismissed || negotiationActiveFor('mercedes_politics')" @click="act({ type: 'MERCEDES_POLITICS', strategy: 'defend' })">技术辩护</button><button :disabled="store.busy || !!mb.dismissed || negotiationActiveFor('mercedes_politics')" @click="act({ type: 'MERCEDES_POLITICS', strategy: 'compromise' })">政治妥协</button></div>
       <NegotiationPanel v-if="!mb.dismissed" kind="mercedes_politics" />
-      <div class="tiny muted">每站只能执行一次政治行动。每场正赛后，其他车队都会继续施压。</div>
+      <div class="tiny muted">每周只能执行一次政治行动。每场正赛后，其他车队都会继续施压。</div>
     </div>
 
     <div v-if="rb" class="card stack-s special-card">
@@ -144,7 +144,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Bar label="梅奔动力单元匹配" :value="alpine.puIntegration" color="#00a19c" hint="达到 100% 后消除开局性能和可靠性损失" />
       <div class="small muted">布里亚托利当前只允许研发：{{ alpine.rndDirection.map((x) => v.labels.parts[x] ?? x).join('、') }}</div>
       <div class="row"><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'back_colapinto' })">公开支持科拉平托</button><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'reassure_gasly' })">安抚加斯利</button><button :disabled="store.busy || alpine.puIntegration >= 100" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'integrate_power_unit' })">推进动力匹配</button></div>
-      <div class="tiny muted">每站只能执行一次。选择任何一方都会让另一方承担代价。</div>
+      <div class="tiny muted">每周只能执行一次。选择任何一方都会让另一方承担代价。</div>
     </div>
 
     <div v-if="haas" class="card stack-s special-card">
@@ -161,10 +161,10 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <div class="spread"><h3>威廉姆斯 · 沃尔斯接班培养</h3><span class="badge" :class="williams.confirmedSuccessor ? 'ok' : 'warn'">{{ williams.confirmedSuccessor ? '已正式接任' : '培养中' }}</span></div>
       <Bar label="沃尔斯信心" :value="williams.vowlesConfidence" color="#64c4ff" />
       <Bar label="接班准备度" :value="williams.successionReadiness" :mark="v.nextSpecialRules.williams.successionThreshold" color="#005aff" :hint="`2026 年底至少需要 ${v.nextSpecialRules.williams.successionThreshold}`" />
-      <div class="small">本站方向：{{ williams.focusRound === `${v.season.number}-${v.season.roundIndex}` ? (williams.focus === 'facilities' ? '设施更新' : williams.focus === 'development' ? '赛车升级' : '保留现金') : '尚未决定' }}</div>
+      <div class="small">本周方向：{{ williams.focusRound === `${v.season.number}-w${v.season.week}` ? (williams.focus === 'facilities' ? '设施更新' : williams.focus === 'development' ? '赛车升级' : '保留现金') : '尚未决定' }}</div>
       <div class="grid2 small"><div>设施累计投入：{{ money(williams.facilityInvestment) }}</div><div>赛车升级投入：{{ money(williams.developmentInvestment) }}</div></div>
       <div class="row"><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'facilities' })">优先设施</button><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'development' })">优先赛车升级</button><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'reserve' })">保留现金</button></div>
-      <div class="tiny muted">每站只能确定一次预算方向。设施和研发动作必须符合本站方向。</div>
+      <div class="tiny muted">每周只能确定一次预算方向。设施和研发动作必须符合本周方向。</div>
     </div>
 
     <RandomEventPanel mode="card" />

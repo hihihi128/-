@@ -44,14 +44,14 @@ describe('三支车队特殊机制', () => {
     let own = teamGame('mclaren');
     own.rules.mclaren.independentWeeks = 1;
     own = act(own, { type: 'START_MCLAREN_FIX', route: 'independent' });
-    own = advanceUntil(own, state => state.season.phase === 'pre_race');
+    own = advanceUntil(own, state => !!state.mclaren?.softwareResolved);
     expect(own.mclaren?.softwareResolved).toBe(true);
 
     let joint = teamGame('mclaren');
     joint.rules.mclaren.cooperationWeeks = 1;
     const before = joint.teams.mercedes.staff.technicalDirector.skill;
     joint = act(joint, { type: 'START_MCLAREN_FIX', route: 'mercedes' });
-    joint = advanceUntil(joint, state => state.season.phase === 'pre_race');
+    joint = advanceUntil(joint, state => !!state.mclaren?.softwareResolved);
     expect(joint.mclaren).toMatchObject({ softwareResolved: true, mercedesBuffApplied: true });
     expect(joint.teams.mercedes.staff.technicalDirector.skill).toBe(before + joint.rules.mclaren.mercedesDevelopmentBuff);
   });
@@ -90,12 +90,16 @@ describe('三支车队特殊机制', () => {
     expect(a.session).toEqual(b.session);
   });
 
-  it('梅赛德斯政治行动推进 ADUO，并限制每站一次', () => {
+  it('梅赛德斯政治行动推进 ADUO，并在每个日历周解锁一次', () => {
     let state = teamGame('mercedes');
     state.rules.mercedes.aduoProgressPerLobby = 100;
     state = act(state, { type: 'MERCEDES_POLITICS', strategy: 'lobby_aduo' });
     expect(state.mercedes).toMatchObject({ aduoApproved: true, aduoProgress: 100 });
     expect(tryAct(state, { type: 'MERCEDES_POLITICS', strategy: 'defend' }).ok).toBe(false);
+    state = act(state, { type: 'ADVANCE' });
+    expect(tryAct(state, { type: 'MERCEDES_POLITICS', strategy: 'defend' }).ok).toBe(false);
+    state = act(state, { type: 'ADVANCE' });
+    expect(tryAct(state, { type: 'MERCEDES_POLITICS', strategy: 'defend' }).ok).toBe(true);
     expect(tryAct(state, { type: 'MERCEDES_POLITICS', strategy: 'invalid' } as never).ok).toBe(false);
   });
 

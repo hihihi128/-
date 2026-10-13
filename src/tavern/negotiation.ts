@@ -33,7 +33,7 @@ export interface NegotiationDefinition {
   unavailable(state: GameState): string | null;
 }
 
-const roundKey = (state: GameState) => `${state.season.number}-${state.season.roundIndex}`;
+const weekKey = (state: GameState) => `${state.season.number}-w${state.season.week}`;
 const teamName = (state: GameState, id: string) => state.teams[id]?.name ?? id;
 const owns = (target: object, key: PropertyKey) => Object.prototype.hasOwnProperty.call(target, key);
 
@@ -83,7 +83,7 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       const m = state.mercedes!;
       return `ADUO 审批 ${m.aduoProgress}%，政治压力 ${m.politicalPressure}/120，Toto 满意度 ${m.totoSatisfaction}，压缩比 ${m.compressionRatio}。`;
     },
-    unavailable: state => !state.mercedes ? '当前车队没有梅赛德斯政治机制' : state.mercedes.dismissed ? '玩家已被 Toto 撤职' : state.mercedes.lastActionRound === roundKey(state) ? '本站已经执行过政治行动' : null,
+    unavailable: state => !state.mercedes ? '当前车队没有梅赛德斯政治机制' : state.mercedes.dismissed ? '玩家已被 Toto 撤职' : state.mercedes.lastActionRound === weekKey(state) ? '本周已经执行过政治行动' : null,
   },
   aston_honda: {
     kind: 'aston_honda',
@@ -99,7 +99,7 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       const a = state.astonMartin!;
       return `ADUO 提前进度 ${a.aduoProgress}%，本田与纽维冲突 ${a.hondaConflict}，纽维车体进度 ${a.neweyProgress}%，媒体压力 ${a.mediaPressure}。`;
     },
-    unavailable: state => !state.astonMartin ? '当前车队没有阿斯顿·马丁危机机制' : state.astonMartin.lastActionRound === roundKey(state) ? '本站已经执行过危机行动' : null,
+    unavailable: state => !state.astonMartin ? '当前车队没有阿斯顿·马丁危机机制' : state.astonMartin.lastActionRound === weekKey(state) ? '本周已经执行过危机行动' : null,
   },
   red_bull_gp: {
     kind: 'red_bull_gp',
@@ -117,8 +117,8 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       ? '当前车队没有红牛 GP 留任机制'
       : state.redBull.gpTransferred
         ? 'GP 已经转投迈凯伦'
-        : state.redBull.lastActionRound === roundKey(state)
-          ? '本站已经与 GP 谈判过'
+        : state.redBull.lastActionRound === weekKey(state)
+          ? '本周已经与 GP 谈判过'
           : state.teams[state.meta.playerTeamId].funds < state.rules.redBull.gpNegotiationCost
             ? `车队资金不足，留任方案需要 ${state.rules.redBull.gpNegotiationCost}M`
             : null,
@@ -137,7 +137,7 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       const h = state.haas!;
       return `吉恩支持 ${h.geneSupport}，丰田支持 ${h.toyotaSupport}，丰田影响力 ${h.toyotaInfluence}%，丰田累计投入 ${h.fundingProvided}M。`;
     },
-    unavailable: state => !state.haas ? '当前车队没有哈斯股东机制' : state.haas.lastActionRound === roundKey(state) ? '本站已经执行过股东行动' : null,
+    unavailable: state => !state.haas ? '当前车队没有哈斯股东机制' : state.haas.lastActionRound === weekKey(state) ? '本周已经执行过股东行动' : null,
   },
 };
 

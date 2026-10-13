@@ -36,8 +36,8 @@ export function resetPuUsage(state: GameState, driver: DriverState, car: CarStat
 function ensure(driver: DriverState, pt: PartType): void {
   driver.puUsed ??= {};
   driver.puPool ??= {};
-  driver.puUsed[pt] ??= 1;
   driver.puPool[pt] ??= [];
+  driver.puUsed[pt] ??= driver.puPool[pt].length;
 }
 
 /**

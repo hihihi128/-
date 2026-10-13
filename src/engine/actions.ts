@@ -24,6 +24,7 @@ import { offerDriverContract, offerStaffContract, releasePerson } from './market
 import { resolveAiMarket } from './market-ai';
 import { Rng } from './rng';
 import {
+  advanceCalendarWeek,
   doPractice,
   doQualifying,
   doRace,
@@ -105,8 +106,8 @@ function setPriority(state: GameState, driverId: string | null): Outcome {
   const team = state.teams[state.meta.playerTeamId];
   if (driverId !== null && state.drivers[driverId]?.teamId !== team.id) return fail('只能指定本队车手');
   if (team.driverPriority === driverId) return ok('优先车手没有变化');
-  const key = `${state.season.number}-${state.season.roundIndex}`;
-  if (state.flags.priorityChanged === key) return fail('每站只能调整一次优先车手');
+  const key = `${state.season.number}-w${state.season.week}`;
+  if (state.flags.priorityChanged === key) return fail('每周只能调整一次优先车手');
   state.flags.priorityChanged = key;
   team.driverPriority = driverId;
   const mates = Object.values(state.drivers).filter(d => d.teamId === team.id);
@@ -164,6 +165,8 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
     }
     case 'START_SEASON':
       return startSeason(state, rng);
+    case 'ADVANCE_WEEK':
+      return advanceCalendarWeek(state, rng);
     case 'START_WEEKEND':
       return startWeekend(state, rng);
     case 'RUN_PRACTICE':
@@ -320,7 +323,7 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
 }
 
 /** 会产生随机结果的动作（用于「每次重新随机」模式） */
-const RANDOM_ACTIONS = new Set(['ADVANCE', 'START_SEASON', 'START_WEEKEND', 'RUN_PRACTICE', 'RUN_SPRINT_QUALIFYING', 'RUN_SPRINT', 'RUN_QUALIFYING', 'RUN_RACE', 'START_RACE', 'FINISH_ROUND', 'START_NEXT_SEASON', 'START_PROJECT']);
+const RANDOM_ACTIONS = new Set(['ADVANCE', 'START_SEASON', 'ADVANCE_WEEK', 'START_WEEKEND', 'RUN_PRACTICE', 'RUN_SPRINT_QUALIFYING', 'RUN_SPRINT', 'RUN_QUALIFYING', 'RUN_RACE', 'START_RACE', 'FINISH_ROUND', 'START_NEXT_SEASON', 'START_PROJECT']);
 
 export function dispatch(input: GameState, action: Action, opts: DispatchOptions = {}): ActionResult {
   const state = deepClone(input);

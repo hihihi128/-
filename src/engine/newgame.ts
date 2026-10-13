@@ -167,7 +167,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     rules,
     tracks: Object.fromEntries(db.tracks.map(t => [t.id, deepClone(t)])),
     calendar: deepClone(db.calendar),
-    season: { year: rules.seasonYear, number: 1, roundIndex: 0, phase: 'preseason', week: 0 },
+    season: { year: rules.seasonYear, number: 1, roundIndex: 0, phase: 'preseason', week: 0, weeksUntilRound: 0 },
     teams,
     teamOrder,
     drivers,

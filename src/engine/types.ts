@@ -1248,6 +1248,8 @@ export interface SeasonState {
   phase: Phase;
   /** 本赛季已过去的周数 */
   week: number;
+  /** 距下一站比赛周末的完整工厂周数；旧存档在赛前阶段默认为 0。 */
+  weeksUntilRound?: number;
 }
 
 export interface GameState {
@@ -1398,6 +1400,7 @@ export interface ContractQuote {
 export type Action =
   | { type: 'ADVANCE'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'START_SEASON' }
+  | { type: 'ADVANCE_WEEK' }
   | { type: 'START_WEEKEND' }
   | { type: 'RUN_PRACTICE' }
   | { type: 'RETURN_PRACTICE_TYRES'; driverId: string; setIds: string[] }

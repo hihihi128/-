@@ -110,6 +110,7 @@ export function migrateState(state: GameState): GameState {
   // Live race is additive and must be initialized before the legacy early return.
   // Never synthesize a session or consume RNG while loading an older save.
   if (state.weekend && state.weekend.liveRace === undefined) state.weekend.liveRace = null;
+  if (state.season && state.season.weeksUntilRound === undefined) state.season.weeksUntilRound = 0;
   if (state.weekend) {
     // The former format stored only one result. Preserve it as FP1 rather than
     // discarding a completed session or forcing an already-advanced save back

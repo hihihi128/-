@@ -135,9 +135,9 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   }
   if (state.williams) {
     const w = state.williams;
-    const currentFocus = w.focusRound === `${state.season.number}-${state.season.roundIndex}` ? w.focus : null;
+    const currentFocus = w.focusRound === `${state.season.number}-w${state.season.week}` ? w.focus : null;
     const focus = currentFocus === 'facilities' ? '设施' : currentFocus === 'development' ? '赛车升级' : currentFocus === 'reserve' ? '保留现金' : '尚未决定';
-    L.push(`【威廉姆斯·接班培养】沃尔斯信心 ${w.vowlesConfidence} · 接班准备度 ${w.successionReadiness}/${rules.williams.successionThreshold} · 本站预算方向 ${focus} · 设施累计投入 $${w.facilityInvestment.toFixed(1)}M · 升级累计投入 $${w.developmentInvestment.toFixed(1)}M${w.confirmedSuccessor ? ' · 已正式接任' : ''}。`);
+    L.push(`【威廉姆斯·接班培养】沃尔斯信心 ${w.vowlesConfidence} · 接班准备度 ${w.successionReadiness}/${rules.williams.successionThreshold} · 本周预算方向 ${focus} · 设施累计投入 $${w.facilityInvestment.toFixed(1)}M · 升级累计投入 $${w.developmentInvestment.toFixed(1)}M${w.confirmedSuccessor ? ' · 已正式接任' : ''}。`);
   }
   if (state.randomEvents?.current && (state.randomEvents.current.status === 'resolved' || state.randomEvents.current.status === 'unresolved')) L.push(`【本站随机事件】${state.randomEvents.current.title}：${state.randomEvents.current.detail}`);
   if (state.meta.playerTeamId === 'cadillac') L.push('【凯迪拉克·新军】车队通过全球公开招募组建，没有额外特殊机制，但初始赛车性能很差，需要依靠研发和人才市场追赶。');

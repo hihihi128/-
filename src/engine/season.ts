@@ -42,6 +42,10 @@ export function nextActionFor(state: GameState): NextAction | null {
     case 'preseason':
       return { action: { type: 'START_SEASON' }, label: `开始赛季（${round?.weeksGap ?? 0} 周后首站：${track?.name ?? ''}）` };
     case 'pre_race':
+      if ((state.season.weeksUntilRound ?? 0) > 0) return {
+        action: { type: 'ADVANCE_WEEK' },
+        label: `推进 1 周（距 ${track?.name ?? ''} 比赛周末还有 ${state.season.weeksUntilRound} 周）`,
+      };
       return { action: { type: 'START_WEEKEND' }, label: `进入${track?.name ?? ''}比赛周末` };
     case 'practice':
       if (state.weekend?.practiceReturn) return null;
@@ -79,12 +83,26 @@ export function startSeason(state: GameState, rng: Rng): Outcome {
     }
   }
   const gap = state.calendar[0]?.weeksGap ?? 0;
-  advanceWeeks(state, gap, rng);
+  state.season.weeksUntilRound = gap;
   state.season.phase = 'pre_race';
   const track = currentTrack(state);
   addNews(state, '赛季', `${state.season.year} 赛季正式开始，首站：${track.name}。`);
-  addNarration(state, 'season_start', '赛季开始', `季前准备结束（经过 ${gap} 周），车队抵达首站 ${track.name}（${track.type}）。`);
-  return ok(`赛季开始，${gap} 周后抵达首站`);
+  addNarration(state, 'season_start', '赛季开始', `季前准备结束。距首站 ${track.name}（${track.type}）还有 ${gap} 个完整工厂周，每周都可以安排一次管理行动。`);
+  return ok(`赛季开始，距首站还有 ${gap} 周`);
+}
+
+export function advanceCalendarWeek(state: GameState, rng: Rng): Outcome {
+  if (state.season.phase !== 'pre_race') return fail('只有比赛间隔可以逐周推进');
+  const remaining = state.season.weeksUntilRound ?? 0;
+  if (remaining <= 0) return fail('下一站比赛周末已经可以开始');
+  advanceWeeks(state, 1, rng);
+  state.season.weeksUntilRound = remaining - 1;
+  const track = currentTrack(state);
+  if (state.season.weeksUntilRound === 0) {
+    addNarration(state, 'travel', `抵达 ${track.name}`, `一个工厂周结束，车队抵达第 ${state.season.roundIndex + 1} 站 ${track.name}。`);
+    return ok(`推进 1 周，抵达 ${track.name}`);
+  }
+  return ok(`推进 1 周，距 ${track.name} 比赛周末还有 ${state.season.weeksUntilRound} 周`);
 }
 
 /** Compatibility path for a window the player did not interact with at all. */
@@ -103,6 +121,7 @@ function retainUntouchedMarket(state: GameState): void {
 
 export function startWeekend(state: GameState, rng: Rng): Outcome {
   if (state.season.phase !== 'pre_race') return fail('当前阶段不能进入比赛周末');
+  if ((state.season.weeksUntilRound ?? 0) > 0) return fail(`距比赛周末还有 ${state.season.weeksUntilRound} 周`);
   state.weekend = createWeekend(state, rng);
   maybeTriggerRacingBullsRecall(state, rng);
   triggerWeekendRandomEvent(state, rng);
@@ -249,11 +268,11 @@ export function finishRound(state: GameState, rng: Rng): Outcome {
   state.supernatural.pendingWeather = null;
   refreshAeroAllowance(state);
   const gap = state.calendar[state.season.roundIndex].weeksGap;
-  advanceWeeks(state, gap, rng);
+  state.season.weeksUntilRound = gap;
   state.season.phase = 'pre_race';
   const track = currentTrack(state);
-  addNarration(state, 'travel', `前往 ${track.name}`, `${gap} 周后，车队来到第 ${state.season.roundIndex + 1} 站 ${track.name}。工厂在这段时间里继续推进研发与生产。`);
-  return ok(`推进 ${gap} 周，来到 ${track.name}`);
+  addNarration(state, 'travel', `准备前往 ${track.name}`, `距第 ${state.season.roundIndex + 1} 站 ${track.name} 还有 ${gap} 个完整工厂周。研发、生产和管理行动将逐周推进。`);
+  return ok(`本站结束，距 ${track.name} 还有 ${gap} 周`);
 }
 
 /** 删除既没有库存、也没装车、且不是最新两个版本的旧规格 */
@@ -666,6 +685,7 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
   state.season.number += 1;
   state.season.roundIndex = 0;
   state.season.week = 0;
+  state.season.weeksUntilRound = 0;
   state.season.phase = 'preseason';
   if (state.randomEvents) { state.randomEvents.current = null; state.randomEvents.lastRoundKey = null; }
   const rules = state.rules;
