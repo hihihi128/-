@@ -57,6 +57,21 @@ describe('旧存档升级', () => {
     const s = decodeState(encodeState(legacy()));
     expect(s.rules.puAllocation).toBeTruthy();
   });
+
+  it('把旧格式的单节练习结果保留为第一节，不改变已推进的阶段', () => {
+    let state = advanceUntil(newTestGame(313), x => x.season.phase === 'practice');
+    state = act(state, { type: 'RUN_PRACTICE' });
+    expect(state.season.phase).toBe('practice');
+    const oldResult = state.weekend!.practice;
+    // In the former format this single result already advanced directly to qualifying.
+    state.season.phase = 'qualifying';
+    delete (state.weekend as unknown as Record<string, unknown>).practiceSessions;
+
+    const migrated = migrateState(state);
+    expect(migrated.season.phase).toBe('qualifying');
+    expect(migrated.weekend!.practiceSessions).toEqual([oldResult]);
+    expect(buildView(migrated).weekend!.practiceSessions).toEqual([oldResult]);
+  });
 });
 
 describe('动力单元配额：边界情况', () => {

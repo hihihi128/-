@@ -35,6 +35,10 @@ export function createApi(ctrl: F1Controller, panel: () => PanelHost | null) {
     requestEngineerStrategy: (driverId: string, api?: 'main' | 'secondary') => ctrl.requestEngineerStrategy(driverId, api),
     requestPerfectStrategy: (driverId: string, api?: 'main' | 'secondary') => ctrl.requestPerfectStrategy(driverId, api),
     requestSupernaturalIntervention: (request: { description: string; expectedRevisionId: string; api?: 'main' | 'secondary' }) => ctrl.requestSupernaturalIntervention(request),
+    getSpecialNegotiation: () => ctrl.getSpecialNegotiation(),
+    startSpecialNegotiation: (request: { kind: import('./negotiation').NegotiationKind; api?: 'main' | 'secondary' }) => ctrl.startSpecialNegotiation(request),
+    sendSpecialNegotiationTurn: (request: { text: string; sessionId: string }) => ctrl.sendSpecialNegotiationTurn(request),
+    cancelSpecialNegotiation: () => ctrl.cancelSpecialNegotiation(),
     /** 强制重新结算最新一条 AI 回复的指令 */
     reprocessLatest: async () => {
       const last = ctrl.latestFloor();

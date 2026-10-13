@@ -38,6 +38,7 @@ import {
   swapDriver,
 } from './season';
 import { validatePlan } from './strategy';
+import { completedPracticeSessions, practiceSessionCount } from './weekend';
 import { ENERGY_MODES, PACE_MODES, PIT_TIMINGS, validOrders } from './raceDecisions';
 import type { Action, ActionResult, DriverPlan, GameState } from './types';
 import { clamp, deepClone, hashString, round1 } from './util';
@@ -67,7 +68,7 @@ function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>)
   }
   if (patch.practiceProgram !== undefined) {
     if (!PROGRAMS.includes(patch.practiceProgram)) return fail('未知练习赛项目');
-    if (state.weekend.practice) return fail('练习赛已经结束');
+    if (state.season.phase !== 'practice' || completedPracticeSessions(state.weekend).length >= practiceSessionCount(state)) return fail('练习赛已经结束');
     plan.practiceProgram = patch.practiceProgram;
   }
   if (patch.qualiApproach !== undefined) {

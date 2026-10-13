@@ -22,6 +22,40 @@ describe('开局', () => {
 });
 
 describe('完整赛季流程', () => {
+  it('普通周末完成三节练习赛，且每节之间可以更换练习项目', () => {
+    let s = advanceUntil(newTestGame(71), x => x.season.phase === 'practice');
+    expect(s.calendar[s.season.roundIndex].sprint).toBe(false);
+    expect(s.weekend!.practiceSessions).toHaveLength(0);
+
+    s = act(s, { type: 'RUN_PRACTICE' });
+    expect(s.season.phase).toBe('practice');
+    expect(s.weekend!.practiceSessions).toHaveLength(1);
+    expect(s.weekend!.practice).toBe(s.weekend!.practiceSessions[0]);
+
+    s = act(s, { type: 'SET_PLAN', driverId: 'c1', plan: { practiceProgram: 'longrun' } });
+    s = act(s, { type: 'RUN_PRACTICE' });
+    expect(s.season.phase).toBe('practice');
+    expect(s.weekend!.practiceSessions).toHaveLength(2);
+    expect(s.weekend!.practiceSessions[1].gains.c1.program).toBe('longrun');
+
+    s = act(s, { type: 'SET_PLAN', driverId: 'c1', plan: { practiceProgram: 'quali_sim' } });
+    s = act(s, { type: 'RUN_PRACTICE' });
+    expect(s.season.phase).toBe('qualifying');
+    expect(s.weekend!.practiceSessions).toHaveLength(3);
+    expect(s.weekend!.practiceSessions[2].gains.c1.program).toBe('quali_sim');
+    expect(buildView(s).weekend!.practiceSessions).toHaveLength(3);
+  });
+
+  it('冲刺周末仅完成一节练习赛后进入冲刺排位', () => {
+    let s = newTestGame(72);
+    s.calendar[0].sprint = true;
+    s = advanceUntil(s, x => x.season.phase === 'practice');
+
+    s = act(s, { type: 'RUN_PRACTICE' });
+    expect(s.weekend!.practiceSessions).toHaveLength(1);
+    expect(s.season.phase).toBe('sprint_qualifying');
+  });
+
   it('ADVANCE 可以跑完整个赛季并进入新赛季', () => {
     let s = newTestGame(777);
     const phases: string[] = [s.season.phase];

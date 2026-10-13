@@ -32,6 +32,13 @@ import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, Drive
 import { hashString, money, round1 } from '../engine/util';
 import { buildView, supernaturalAvailability, type GameView } from '../engine/view';
 import type { TavernEnv, TextGenerationOptions } from './env';
+import {
+  NEGOTIATIONS,
+  negotiationDefinition,
+  negotiationPrompt,
+  parseNegotiationReply,
+  type NegotiationSessionView,
+} from './negotiation';
 import { AI_PTR, GAME_PTR, PTR, SaveStore, type RevisionInfo } from './store';
 
 export const HUD_TAG = '<F1M_HUD/>';
@@ -165,6 +172,20 @@ export interface SupernaturalInterventionResult extends Outcome {
   results: import('../engine/types').AiLogEntry[];
 }
 
+export interface NegotiationResult extends Outcome {
+  session: NegotiationSessionView | null;
+}
+
+interface ActiveNegotiation extends NegotiationSessionView {
+  chatId: string;
+  gameId: string;
+  revisionId: string;
+  floor: number;
+  phase: GameState['season']['phase'];
+  year: number;
+  roundIndex: number;
+}
+
 function safeWeatherAdvice(text: string, hasRainWindow: boolean): boolean {
   if (!hasRainWindow) return true;
   const mentionsWetTyre = /(半雨胎|全雨胎|雨胎|intermediate|\binter\b|wet tyre)/i.test(text);
@@ -217,6 +238,7 @@ export class F1Controller {
   data: (NormalizeResult & { canStart: boolean; origin: string; entries: string[] }) | null = null;
   private busy = false;
   private leadershipSyncQueue: Promise<void> = Promise.resolve();
+  private specialNegotiation: ActiveNegotiation | null = null;
   /** 「继续生成」开始时被续写楼层的原文（用于只结算新续写的部分） */
   private continuing: { floor: number; text: string } | null = null;
   private listeners = new Set<(reason: string) => void>();
@@ -612,6 +634,7 @@ export class F1Controller {
       return { ok: false, message: e instanceof Error ? e.message : String(e) };
     }
     this.store.reset(state.gameId);
+    this.specialNegotiation = null;
     const floor = Math.max(0, this.latestFloor());
     this.store.commit(state, { floor, kind: 'new', label: `新开局：${state.teams[state.meta.playerTeamId].name}`, parent: null });
     await this.syncLeadershipWorldbook(state);
@@ -759,6 +782,7 @@ export class F1Controller {
     const rev = this.store.getRevision(id);
     if (!rev) return { ok: false, message: '找不到该存档版本' };
     const state = this.store.stateOf(rev);
+    this.specialNegotiation = null;
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'restore', label: `读档：${rev.label}` });
     await this.syncLeadershipWorldbook(state);
     this.notify('restore');
@@ -783,6 +807,7 @@ export class F1Controller {
       return { ok: false, message: '存档格式不正确' };
     }
     migrateState(state);
+    this.specialNegotiation = null;
     this.store.reset(state.gameId);
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'import', label: '导入存档', parent: null });
     await this.syncLeadershipWorldbook(state);
@@ -883,6 +908,114 @@ export class F1Controller {
     return this.requestEngineerStrategy(driverId, requestedApi, true);
   }
 
+  getSpecialNegotiation(): NegotiationSessionView | null {
+    if (!this.specialNegotiation) return null;
+    const { chatId: _chatId, gameId: _gameId, revisionId: _revisionId, floor: _floor, phase: _phase, year: _year, roundIndex: _roundIndex, ...view } = this.specialNegotiation;
+    return JSON.parse(JSON.stringify(view)) as NegotiationSessionView;
+  }
+
+  startSpecialNegotiation(request: { kind: unknown; api?: unknown }): NegotiationResult {
+    const definition = negotiationDefinition(request.kind);
+    if (!definition) return { ok: false, message: '未知的特殊谈判事件', session: this.getSpecialNegotiation() };
+    const selected = request.api === undefined ? this.settings.engineerApi : request.api;
+    if (selected !== 'main' && selected !== 'secondary') return { ok: false, message: 'API 必须是 main 或 secondary', session: this.getSpecialNegotiation() };
+    if (this.busy || this.env.isGenerating()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', session: this.getSpecialNegotiation() };
+    if (this.specialNegotiation?.status === 'active') return { ok: false, message: '请先完成或取消当前谈判', session: this.getSpecialNegotiation() };
+    const secondaryError = selected === 'secondary' ? this.secondaryApiError() : null;
+    if (secondaryError) return { ok: false, message: secondaryError, session: null };
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    if (!current) return { ok: false, message: '还没有开局', session: null };
+    const unavailable = definition.unavailable(current.state);
+    if (unavailable) return { ok: false, message: unavailable, session: null };
+    const openingSpeaker = definition.participants[0];
+    this.specialNegotiation = {
+      id: `neg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
+      kind: definition.kind,
+      title: definition.title,
+      participants: [...definition.participants],
+      api: selected,
+      round: 0,
+      minRounds: 2,
+      maxRounds: 4,
+      status: 'active',
+      messages: [{ role: 'counterparty', speaker: openingSpeaker, text: definition.opening }],
+      outcome: null,
+      chatId: this.env.chatId(),
+      gameId: current.state.gameId,
+      revisionId: current.rev.id,
+      floor,
+      phase: current.state.season.phase,
+      year: current.state.season.year,
+      roundIndex: current.state.season.roundIndex,
+    };
+    return { ok: true, message: `已开始${definition.title}`, session: this.getSpecialNegotiation() };
+  }
+
+  cancelSpecialNegotiation(): NegotiationResult {
+    if (!this.specialNegotiation) return { ok: true, message: '当前没有谈判', session: null };
+    this.specialNegotiation = null;
+    return { ok: true, message: '已取消谈判，存档没有变化', session: null };
+  }
+
+  async sendSpecialNegotiationTurn(request: { text: unknown; sessionId: unknown }): Promise<NegotiationResult> {
+    const fail = (message: string): NegotiationResult => ({ ok: false, message, session: this.getSpecialNegotiation() });
+    const session = this.specialNegotiation;
+    if (!session || session.status !== 'active') return fail('当前没有进行中的谈判');
+    if (request.sessionId !== session.id) return fail('谈判会话已经变化，请刷新后重试');
+    if (typeof request.text !== 'string' || !request.text.trim() || request.text.trim().length > 1000) return fail('谈判发言必须为 1–1000 个非空字符');
+    if (session.round >= session.maxRounds) return fail('谈判轮数已经用完');
+    if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
+    const definition = NEGOTIATIONS[session.kind];
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    if (!current || this.env.chatId() !== session.chatId || floor !== session.floor || current.state.gameId !== session.gameId || current.rev.id !== session.revisionId || current.state.season.phase !== session.phase || current.state.season.year !== session.year || current.state.season.roundIndex !== session.roundIndex) {
+      return fail('谈判期间存档或聊天已经变化，请重新开始谈判');
+    }
+    const unavailable = definition.unavailable(current.state);
+    if (unavailable) return fail(unavailable);
+    const playerText = request.text.trim();
+    const nextRound = session.round + 1;
+    const prompt = negotiationPrompt(current.state, session, playerText);
+    this.busy = true;
+    try {
+      const generated = await withTimeout(
+        this.env.generateText(prompt, session.api === 'secondary' ? this.secondaryApiOptions() : undefined),
+        60_000,
+        '谈判 API 请求超时',
+      );
+      if (new TextEncoder().encode(generated).byteLength > 16 * 1024) return fail('谈判 API 返回超过 16 KiB');
+      const reply = parseNegotiationReply(generated, definition, nextRound, session.minRounds, session.maxRounds);
+      const latestFloor = this.latestFloor();
+      const latest = this.store.resolve(latestFloor);
+      if (this.env.chatId() !== session.chatId || latestFloor !== session.floor || !latest || latest.state.gameId !== session.gameId || latest.rev.id !== session.revisionId || latest.state.season.phase !== session.phase || latest.state.season.year !== session.year || latest.state.season.roundIndex !== session.roundIndex) {
+        return fail('等待 API 时存档或聊天已经变化，结果已安全丢弃');
+      }
+      session.messages.push({ role: 'player', speaker: '玩家领队', text: playerText });
+      session.messages.push({ role: 'counterparty', speaker: reply.speaker, text: reply.reply });
+      session.round = nextRound;
+      if (reply.status === 'continue') return { ok: true, message: `谈判进入第 ${nextRound + 1} 轮`, session: this.getSpecialNegotiation() };
+      if (reply.status === 'breakdown') {
+        session.status = 'breakdown';
+        session.outcome = '谈判破裂，存档没有变化。';
+        return { ok: true, message: session.outcome, session: this.getSpecialNegotiation() };
+      }
+      const choice = definition.choices[reply.choice!];
+      if (!choice?.action) return fail('谈判没有可执行的结算动作');
+      const applied = dispatch(latest.state, choice.action);
+      if (!applied.ok) return fail(`协议无法结算：${applied.message}`);
+      this.store.commit(applied.state, { floor: Math.max(0, latestFloor), kind: 'ui', label: `${definition.title}：${choice.label}` });
+      session.status = 'agreement';
+      session.outcome = `${choice.label}。${applied.message}`;
+      this.notify('negotiation');
+      return { ok: true, message: session.outcome, session: this.getSpecialNegotiation() };
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : '谈判 API 请求失败');
+    } finally {
+      this.busy = false;
+    }
+  }
+
   /**
    * A deliberately separate, guarded path for the opt-in supernatural panel.
    * It never delegates to the loose narration protocol or dispatches rows one
@@ -978,6 +1111,7 @@ export class F1Controller {
     this.store.load();
     this.data = null;
     this.continuing = null;
+    this.specialNegotiation = null;
     this.env.uninject(INJECT_ID);
     void this.syncLeadershipWorldbook();
     this.notify('chat_changed');

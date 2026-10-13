@@ -37,6 +37,16 @@ export function currentTrack(state: GameState): TrackDef {
   return t;
 }
 
+/** 冲刺周末只有一节练习赛，普通周末在排位前进行三节。 */
+export function practiceSessionCount(state: GameState): number {
+  return currentRound(state)?.sprint ? 1 : 3;
+}
+
+/** Tolerate an unmigrated legacy weekend while callers load and advance it. */
+export function completedPracticeSessions(weekend: WeekendState): PracticeResult[] {
+  return Array.isArray(weekend.practiceSessions) ? weekend.practiceSessions : weekend.practice ? [weekend.practice] : [];
+}
+
 function baseSetup(team: TeamState, slot: number): SetupState {
   const engineer = raceEngineerFor(team, slot);
   return {
@@ -86,6 +96,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     teamOrders: prev?.teamOrders ? deepClone(prev.teamOrders) : { mode: 'free', favorDriverId: null },
     penalties: {},
     parcFerme: false,
+    practiceSessions: [],
     practice: null,
     sprintQualifying: null,
     sprint: null,
@@ -138,7 +149,10 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
   const round = currentRound(state);
   const rules = state.rules;
   const wet = w.weather.practice === 'wet';
-  const sessionMul = round?.sprint ? 0.6 : 1;
+  // Three normal-weekend sessions should offer more preparation than one
+  // sprint-weekend session without tripling the former total setup gain.
+  const sessionMul = round?.sprint ? 0.6 : 0.4;
+  const session = completedPracticeSessions(w).length + 1;
   const result: PracticeResult = { timesheet: [], gains: {}, events: [] };
 
   for (const { driver, team, car } of activeEntries(state)) {
@@ -199,7 +213,8 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
       `${driverName(state, car.driverId)}：项目「${LABELS.program[g.program]}」，练习赛 P${pos}，调校信心 ${s.confidence}（+${g.setup}），轮胎数据 ${s.tyreKnowledge}（+${g.tyre}）${g.verified.length ? `，验证了 ${g.verified.join('、')}` : ''}`,
     );
   }
-  addNarration(state, 'practice', `${track.name} 练习赛结束`, `${wet ? '雨中进行的' : ''}练习赛结束。${lines.join('；')}。`);
+  addNarration(state, 'practice', `${track.name} 第 ${session} 节练习赛结束`, `${wet ? '雨中进行的' : ''}第 ${session} 节练习赛结束。${lines.join('；')}。`);
+  w.practiceSessions = [...completedPracticeSessions(w), result];
   w.practice = result;
   return result;
 }

@@ -155,7 +155,7 @@ describe('三支车队特殊机制', () => {
       roundIndex: 0,
       weather: { practice: 'dry', qualifying: 'dry', race: 'dry', sprintQualifying: 'dry', sprint: 'dry' },
       forecast: { qualifying: 0, race: 0 }, setup: {}, plans: {}, teamOrders: { mode: 'free', favorDriverId: null }, penalties: {}, parcFerme: false,
-      practice: null, sprintQualifying: null, sprint: null, qualifying: null, race: null,
+      practiceSessions: [], practice: null, sprintQualifying: null, sprint: null, qualifying: null, race: null,
       liveRace: { version: 1, id: 'legacy', kind: 'race', roundIndex: 0, totalLaps: 1, completedLaps: 0, lap: 0, stage: 'grid', revision: 1, rngState: 1, weatherRngState: 1, forecastRngState: 1, strategistSkill: 50, expectedPositions: {}, cars: {}, order: [], weatherTrajectory: [0], weatherHistory: [], rain: 0, wetness: 0, surface: 'dry', forecast: { issuedLap: 0, horizonLaps: 1, rainProbability: 0, intensityRange: [0, 0], arrivalLaps: null, confidence: 1 }, scLeft: 0, vscLeft: 0, safetyCars: 0, redFlags: 0, redFlag: null, fastestLap: null, events: [], lapChart: {}, orderOutcomes: [], orderCooldown: {}, teamOrders: { mode: 'free', favorDriverId: null }, pendingDecision: null, damageLedger: [], specialIncidents: [] },
     };
     migrateState(state);

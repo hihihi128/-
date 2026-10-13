@@ -15,9 +15,14 @@ const phase = computed(() => v.value.season.phase);
 const isSprint = computed(() => !!v.value.round?.sprint);
 const current = computed(() => !!w.value?.isCurrent);
 const generating = computed(() => !!store.status?.generating);
+const practiceSessions = computed(() => {
+  const ww = w.value;
+  return ww?.practiceSessions?.length ? ww.practiceSessions : ww?.practice ? [ww.practice] : [];
+});
+const practiceSessionTotal = computed(() => (isSprint.value ? 1 : 3));
 
 const steps = computed(() => {
-  const s: Array<{ id: string; label: string }> = [{ id: 'practice', label: '练习赛' }];
+  const s: Array<{ id: string; label: string }> = [{ id: 'practice', label: `练习赛 ${practiceSessions.value.length}/${practiceSessionTotal.value}` }];
   if (isSprint.value) s.push({ id: 'sprint_qualifying', label: '冲刺排位' }, { id: 'sprint', label: '冲刺赛' });
   s.push({ id: 'qualifying', label: '排位赛' }, { id: 'race', label: '正赛' }, { id: 'post_race', label: '赛后' });
   return s;
@@ -25,7 +30,7 @@ const steps = computed(() => {
 const stepIndex = computed(() => (current.value ? steps.value.findIndex(s => s.id === phase.value) : -1));
 
 const done = computed(() => ({
-  practice: !!w.value?.practice,
+  practice: phase.value !== 'practice' || practiceSessions.value.length >= practiceSessionTotal.value,
   sprintQualifying: !!w.value?.sprintQualifying,
   sprint: !!w.value?.sprint,
   qualifying: !!w.value?.qualifying,
@@ -33,13 +38,22 @@ const done = computed(() => ({
 }));
 
 const resultTab = ref<'race' | 'qualifying' | 'sprint' | 'sprintQualifying' | 'practice'>('race');
+const practiceResultIndex = ref(0);
 const shownResult = computed(() => {
   const ww = w.value;
   if (!ww) return null;
   const order: Array<typeof resultTab.value> = [resultTab.value, 'race', 'qualifying', 'sprint', 'sprintQualifying', 'practice'];
-  for (const k of order) if (ww[k]) return k;
+  for (const k of order) {
+    if (k === 'practice' ? practiceSessions.value.length : ww[k]) return k;
+  }
   return null;
 });
+const shownPractice = computed(() => practiceSessions.value[Math.min(practiceResultIndex.value, practiceSessions.value.length - 1)] ?? null);
+
+function showPracticeResult(index: number) {
+  practiceResultIndex.value = index;
+  resultTab.value = 'practice';
+}
 
 function setPlan(d: WeekendDriverView, patch: Partial<DriverPlan>) {
   return act({ type: 'SET_PLAN', driverId: d.driverId, plan: patch }, { silent: true });
@@ -63,6 +77,7 @@ watch(() => w.value?.roundIndex, () => {
   engineerSuggestions.value = {};
   perfectSuggestions.value = {};
   perfectOpen.value = false;
+  practiceResultIndex.value = 0;
 });
 
 function customFor(d: WeekendDriverView): string[] {
@@ -202,6 +217,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
         <div class="small muted">
           <template v-if="current && w">
             天气：练习 {{ weatherText(w.weather.practice) }} ·
+            练习进度 {{ practiceSessions.length }}/{{ practiceSessionTotal }} ·
             <template v-if="isSprint">冲刺排位 {{ weatherText(w.weather.sprintQualifying, w.forecast.qualifying) }} · 冲刺赛 {{ weatherText(w.weather.sprint, w.forecast.race) }} · </template>
             排位 {{ weatherText(w.weather.qualifying, w.forecast.qualifying) }} · 正赛 {{ weatherText(w.weather.race, w.forecast.race) }}
             <span v-if="w.forecast.raceRainWindow"> · 预计第 {{ w.forecast.raceRainWindow[0] }}–{{ w.forecast.raceRainWindow[1] }} 圈可能降雨</span>
@@ -332,7 +348,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
       <div class="spread">
         <h3>{{ current ? '本站' : '上一站' }}成绩</h3>
         <div class="seg">
-          <button v-if="w.practice" :class="{ on: shownResult === 'practice' }" @click="resultTab = 'practice'">练习</button>
+          <button v-for="(_, i) in practiceSessions" :key="`practice-${i}`" :class="{ on: shownResult === 'practice' && practiceResultIndex === i }" @click="showPracticeResult(i)">练习 {{ i + 1 }}</button>
           <button v-if="w.sprintQualifying" :class="{ on: shownResult === 'sprintQualifying' }" @click="resultTab = 'sprintQualifying'">冲刺排位</button>
           <button v-if="w.sprint" :class="{ on: shownResult === 'sprint' }" @click="resultTab = 'sprint'">冲刺赛</button>
           <button v-if="w.qualifying" :class="{ on: shownResult === 'qualifying' }" @click="resultTab = 'qualifying'">排位</button>
@@ -340,19 +356,19 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
         </div>
       </div>
 
-      <div v-if="shownResult === 'practice' && w.practice" class="table-wrap">
+      <div v-if="shownResult === 'practice' && shownPractice" class="table-wrap">
         <table>
           <thead><tr><th>#</th><th>车手</th><th>圈速</th><th>圈数</th><th>项目收益</th></tr></thead>
           <tbody>
-            <tr v-for="(e, i) in w.practice.timesheet" :key="e.driverId" :class="{ me: teamOf(e.driverId).mine }">
+            <tr v-for="(e, i) in shownPractice.timesheet" :key="e.driverId" :class="{ me: teamOf(e.driverId).mine }">
               <td class="mono">{{ i + 1 }}</td>
               <td><span class="swatch" :style="{ background: teamOf(e.driverId).color }"></span>{{ name(e.driverId) }}</td>
               <td class="mono">{{ lapTime(e.time) }}</td>
               <td class="mono">{{ e.laps }}</td>
               <td class="tiny">
-                <template v-if="teamOf(e.driverId).mine && w.practice.gains[e.driverId]">
-                  调校 +{{ w.practice.gains[e.driverId].setup }} · 轮胎 +{{ w.practice.gains[e.driverId].tyre }}
-                  <template v-if="w.practice.gains[e.driverId].verified.length"> · 验证 {{ w.practice.gains[e.driverId].verified.join('、') }}</template>
+                <template v-if="teamOf(e.driverId).mine && shownPractice.gains[e.driverId]">
+                  调校 +{{ shownPractice.gains[e.driverId].setup }} · 轮胎 +{{ shownPractice.gains[e.driverId].tyre }}
+                  <template v-if="shownPractice.gains[e.driverId].verified.length"> · 验证 {{ shownPractice.gains[e.driverId].verified.join('、') }}</template>
                 </template>
               </td>
             </tr>

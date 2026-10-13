@@ -19,7 +19,7 @@ import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, find
 import type { Rng } from './rng';
 import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, RaceResult, TeamState } from './types';
 import { clamp, deepClone, money, round1, round2 } from './util';
-import { createWeekend, currentRound, currentTrack, runPractice, runQualifying } from './weekend';
+import { completedPracticeSessions, createWeekend, currentRound, currentTrack, practiceSessionCount, runPractice, runQualifying } from './weekend';
 
 const ok = (message: string): Outcome => ({ ok: true, message });
 const fail = (message: string): Outcome => ({ ok: false, message });
@@ -43,7 +43,10 @@ export function nextActionFor(state: GameState): NextAction | null {
     case 'pre_race':
       return { action: { type: 'START_WEEKEND' }, label: `进入${track?.name ?? ''}比赛周末` };
     case 'practice':
-      return { action: { type: 'RUN_PRACTICE' }, label: '进行练习赛' };
+      return {
+        action: { type: 'RUN_PRACTICE' },
+        label: `进行练习赛（${(state.weekend ? completedPracticeSessions(state.weekend).length : 0) + 1}/${practiceSessionCount(state)}）`,
+      };
     case 'sprint_qualifying':
       return { action: { type: 'RUN_SPRINT_QUALIFYING' }, label: '进行冲刺排位赛' };
     case 'sprint':
@@ -108,16 +111,20 @@ export function startWeekend(state: GameState, rng: Rng): Outcome {
     state,
     'weekend_start',
     `${track.name} 比赛周末开始`,
-    `车队来到 ${track.name}（${track.type}，${track.laps} 圈）。天气预报：排位赛降雨概率 ${Math.round(w.forecast.qualifying * 100)}%，正赛降雨概率 ${Math.round(w.forecast.race * 100)}%${w.forecast.raceRainWindow ? `，预计第 ${w.forecast.raceRainWindow[0]}–${w.forecast.raceRainWindow[1]} 圈可能降雨` : ''}。${currentRound(state)?.sprint ? '本站是冲刺赛周末。' : ''}`,
+    `车队来到 ${track.name}（${track.type}，${track.laps} 圈）。本周末安排 ${practiceSessionCount(state)} 节练习赛。天气预报：排位赛降雨概率 ${Math.round(w.forecast.qualifying * 100)}%，正赛降雨概率 ${Math.round(w.forecast.race * 100)}%${w.forecast.raceRainWindow ? `，预计第 ${w.forecast.raceRainWindow[0]}–${w.forecast.raceRainWindow[1]} 圈可能降雨` : ''}。${currentRound(state)?.sprint ? '本站是冲刺赛周末。' : ''}`,
   );
   return ok(`进入 ${track.name} 比赛周末`);
 }
 
 export function doPractice(state: GameState, rng: Rng): Outcome {
   if (state.season.phase !== 'practice' || !state.weekend) return fail('当前不是练习赛阶段');
+  const total = practiceSessionCount(state);
+  if (completedPracticeSessions(state.weekend).length >= total) return fail('本站练习赛已经结束');
   runPractice(state, rng);
+  const completed = completedPracticeSessions(state.weekend).length;
+  if (completed < total) return ok(`第 ${completed}/${total} 节练习赛结束`);
   state.season.phase = currentRound(state)?.sprint ? 'sprint_qualifying' : 'qualifying';
-  return ok('练习赛结束');
+  return ok(`${total} 节练习赛结束`);
 }
 
 export function doQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 'sprint_qualifying'): Outcome {

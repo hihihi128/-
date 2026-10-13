@@ -231,6 +231,9 @@ export interface WeekendView {
   teammateRelationship: number;
   penalties: Record<string, number>;
   drivers: WeekendDriverView[];
+  /** Individual FP results, including a migrated legacy result as FP1. */
+  practiceSessions: PracticeResult[];
+  /** Latest practice result retained for consumers of the old view shape. */
   practice: PracticeResult | null;
   sprintQualifying: QualiResult | null;
   sprint: RaceResult | null;
@@ -783,6 +786,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
     teammateRelationship: teammateRelationship(state, team.id),
     penalties: w.penalties,
     drivers,
+    practiceSessions: Array.isArray(w.practiceSessions) ? w.practiceSessions : w.practice ? [w.practice] : [],
     practice: w.practice,
     sprintQualifying: w.sprintQualifying,
     sprint: w.sprint,

@@ -84,6 +84,15 @@ export function migrateState(state: GameState): GameState {
   // Never synthesize a session or consume RNG while loading an older save.
   if (state.weekend && state.weekend.liveRace === undefined) state.weekend.liveRace = null;
   if (state.weekend) {
+    // The former format stored only one result. Preserve it as FP1 rather than
+    // discarding a completed session or forcing an already-advanced save back
+    // into the new three-session flow.
+    if (!Array.isArray(state.weekend.practiceSessions)) {
+      state.weekend.practiceSessions = state.weekend.practice ? [state.weekend.practice] : [];
+    }
+    if (!state.weekend.practice && state.weekend.practiceSessions.length) {
+      state.weekend.practice = state.weekend.practiceSessions[state.weekend.practiceSessions.length - 1];
+    }
     const bias = state.weekend.supernaturalRainBias;
     if (bias !== undefined && (!Number.isFinite(bias) || bias < -0.2 || bias > 0.2)) delete state.weekend.supernaturalRainBias;
     const effects = state.weekend.supernaturalCarEffects;

@@ -2,6 +2,7 @@
 import { computed } from 'vue';
 import Bar from '../components/Bar.vue';
 import Kpi from '../components/Kpi.vue';
+import NegotiationPanel from '../components/NegotiationPanel.vue';
 import { act, call, money, pct, store } from '../bridge';
 
 const v = computed(() => store.view!);
@@ -84,6 +85,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Bar label="政治压力" :value="mb.politicalPressure" :max="120" :mark="v.specialRules.mercedes.banPoliticalPressure" :color="mb.politicalPressure >= 80 ? '#ff5a5a' : '#ffb347'" :hint="`达到 ${v.specialRules.mercedes.banPoliticalPressure} 会失去 1:18 压缩比`" />
       <Bar label="ADUO 审批" :value="mb.aduoProgress" color="#6aa6ff" :hint="mb.aduoApproved ? '已获批准，动力单元故障风险消失' : `批准前每场正赛有 ${Math.round(v.specialRules.mercedes.failureChance * 100)}% 故障风险`" />
       <div class="row"><button :disabled="store.busy || !!mb.dismissed" @click="act({ type: 'MERCEDES_POLITICS', strategy: 'lobby_aduo' })">游说 ADUO</button><button :disabled="store.busy || !!mb.dismissed" @click="act({ type: 'MERCEDES_POLITICS', strategy: 'defend' })">技术辩护</button><button :disabled="store.busy || !!mb.dismissed" @click="act({ type: 'MERCEDES_POLITICS', strategy: 'compromise' })">政治妥协</button></div>
+      <NegotiationPanel v-if="!mb.dismissed" kind="mercedes_politics" />
       <div class="tiny muted">每站只能执行一次政治行动。每场正赛后，其他车队都会继续施压。</div>
     </div>
 
@@ -91,6 +93,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <div class="spread"><h3>红牛 · 人才与维斯塔潘危机</h3><span class="badge" :class="(rb.verstappenPosition ?? 99) <= 3 ? 'ok' : 'bad'">维斯塔潘 P{{ rb.verstappenPosition || '-' }}</span></div>
       <Bar label="GP 留任意愿" :value="rb.gpRetention" :color="rb.gpRetention < 25 ? '#ff5a5a' : '#3671c6'" :hint="rb.gpTransferred ? 'GP 已决定转投迈凯伦' : '每场正赛后都会下降'" />
       <button :disabled="store.busy || rb.gpTransferred" @click="act({ type: 'RED_BULL_RETAIN_GP' })">提交 GP 留任方案（{{ v.specialRules.redBull.gpNegotiationCost }}M$）</button>
+      <NegotiationPanel v-if="!rb.gpTransferred" kind="red_bull_gp" />
       <div class="small" :class="rb.verstappenExit ? 'notice bad' : 'notice warn'">{{ rb.verstappenExit ? '维斯塔潘的解约条款已经触发，他已转投梅赛德斯。' : rb.summerChecked ? '夏休检查已通过。' : '夏休时维斯塔潘必须位列车手榜前三。' }}</div>
       <div class="tiny muted">RB23 准备不足会使红牛车手的单车失误概率提高 {{ Math.round((v.specialRules.redBull.mistakeMultiplier - 1) * 100) }}%。</div>
     </div>
@@ -103,6 +106,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Bar label="西班牙媒体压力" :value="am.mediaPressure" color="#f08b32" hint="每场比赛后持续降低媒体声望和董事会信心" />
       <div class="grid2"><Bar label="老斯特罗尔满意" :value="am.strollFavor" color="#2d9c7b" /><Bar label="阿隆索粉丝愤怒" :value="am.alonsoFanAnger" color="#d45d5d" /></div>
       <div class="row"><button :disabled="store.busy" @click="act({ type: 'ASTON_CRISIS', strategy: 'pressure_honda' })">用车手安全施压</button><button :disabled="store.busy" @click="act({ type: 'ASTON_CRISIS', strategy: 'mediate' })">调解本田与纽维</button><button :disabled="store.busy" @click="act({ type: 'ASTON_CRISIS', strategy: 'push_newey' })">催促适配车体</button></div>
+      <NegotiationPanel kind="aston_honda" />
       <div class="tiny muted">调整优先车手也会改变老斯特罗尔满意度与阿隆索粉丝愤怒。</div>
     </div>
 
@@ -117,6 +121,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Bar label="ADUO 推进" :value="au.aduoProgress" color="#d33" :hint="au.alliance ? '盟友：阿斯顿·马丁、梅赛德斯、法拉利' : '与三支车队组成 ADUO 联盟'" />
       <Bar label="政治支持" :value="au.politicalSupport" color="#555" />
       <div v-if="!au.alliance" class="row"><button :disabled="store.busy" @click="act({ type: 'AUDI_ALLIANCE' })">组建四队 ADUO 联盟</button></div>
+      <NegotiationPanel v-if="!au.alliance" kind="aduo_alliance" />
     </div>
 
     <div v-if="alpine" class="card stack-s special-card">
@@ -137,6 +142,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Bar label="丰田影响力" :value="haas.toyotaInfluence" :mark="v.nextSpecialRules.haas.interferenceThreshold" color="#e60012" :hint="`达到 ${v.nextSpecialRules.haas.interferenceThreshold}% 后会限制研发方向`" />
       <div class="small">丰田累计投入：{{ money(haas.fundingProvided) }}。当前偏好：{{ haas.preferredParts.map((x) => v.labels.parts[x] ?? x).join('、') }}。</div>
       <div class="row"><button :disabled="store.busy" @click="act({ type: 'HAAS_BALANCE', strategy: 'protect_independence' })">维护车队独立</button><button :disabled="store.busy || haas.partnershipWithdrawn" @click="act({ type: 'HAAS_BALANCE', strategy: 'accept_toyota' })">接受丰田追加投入</button><button :disabled="store.busy" @click="act({ type: 'HAAS_BALANCE', strategy: 'compromise' })">提出折中</button></div>
+      <NegotiationPanel kind="haas_toyota" />
     </div>
 
     <div v-if="williams" class="card stack-s special-card">
@@ -159,6 +165,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <div class="notice warn small">议题：{{ fiaIssue[fia.current.issue] }}。对手：{{ fia.current.opponents.map(teamLabel).join('、') }}。</div>
       <Bar label="政治资本" :value="fia.politicalCapital" color="#355c8a" hint="董事会信心、媒体声望和政治资本共同决定说服检定" />
       <div class="row"><button class="primary" :disabled="store.busy" @click="act({ type: 'FIA_DEBATE', stance: 'support' })">支持议题</button><button :disabled="store.busy" @click="act({ type: 'FIA_DEBATE', stance: 'oppose' })">反对议题</button><button :disabled="store.busy" @click="act({ type: 'FIA_DEBATE', stance: 'compromise' })">提出折中</button></div>
+      <NegotiationPanel kind="fia_roundtable" />
     </div>
 
     <div class="grid g2">

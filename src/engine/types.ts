@@ -962,6 +962,9 @@ export interface WeekendState {
   penalties: Record<string, number>;
   /** 封闭车辆规则：排位后不能换件 */
   parcFerme: boolean;
+  /** 已完成的练习赛；冲刺周末 1 节，普通周末 3 节。 */
+  practiceSessions: PracticeResult[];
+  /** 最近一节练习赛结果，保留以兼容旧存档和调用方。 */
   practice: PracticeResult | null;
   sprintQualifying: QualiResult | null;
   sprint: RaceResult | null;

@@ -124,6 +124,34 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(legacyForecast.weatherResponse).toBe('目前没有明确降雨窗口，按干地基础方案执行');
   });
 
+  it('特殊事件通过副 API 完成至少两轮谈判后才提交白名单动作', async () => {
+    const specialEnv = new FakeTavern(cardWorldbook());
+    const specialCtrl = new F1Controller(specialEnv);
+    specialCtrl.init();
+    await specialCtrl.loadData();
+    expect((await specialCtrl.newGame({ playerTeamId: 'audi', seed: 88 })).ok).toBe(true);
+    specialCtrl.updateSettings({ engineerProxyPreset: '政治谈判副线', engineerModel: 'roleplay-model' });
+    let callCount = 0;
+    specialEnv.generateText = async (_prompt, options) => {
+      callCount++;
+      expect(options).toEqual({ proxyPreset: '政治谈判副线', model: 'roleplay-model' });
+      return callCount === 1
+        ? '{"speaker":"法拉利代表","reply":"先明确各队共享哪些技术资料。","status":"continue","choice":null}'
+        : '{"speaker":"梅赛德斯代表","reply":"四队接受共同游说方案，但各自保留技术边界。","status":"agreement","choice":"alliance"}';
+    };
+
+    const started = specialCtrl.startSpecialNegotiation({ kind: 'aduo_alliance', api: 'secondary' });
+    expect(started).toMatchObject({ ok: true, session: { round: 0, status: 'active', api: 'secondary' } });
+    const first = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '奥迪只共享法规论据，不共享核心设计。' });
+    expect(first).toMatchObject({ ok: true, session: { round: 1, status: 'active' } });
+    expect(specialCtrl.stateAt()!.audi?.alliance).toBe(false);
+
+    const second = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '四队共同签署游说文件，并各自保留知识产权。' });
+    expect(second).toMatchObject({ ok: true, session: { round: 2, status: 'agreement' } });
+    expect(specialCtrl.stateAt()!.audi?.alliance).toBe(true);
+    expect(specialCtrl.listRevisions()[0].label).toContain('ADUO 四队联盟谈判');
+  });
+
   it('validates direct secondary API settings before generation', async () => {
     for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
     expect(() => ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: '', engineerApiUrl: 'not-a-url', engineerModel: 'test-model' })).toThrow('有效的 http:// 或 https:// 地址');
