@@ -86,7 +86,7 @@ export class FakeTavern implements TavernEnv {
     for (const entry of this.worldbook) {
       if (!entry.name.startsWith(prefix) || !managed.has(entry.name.trim())) continue;
       found++;
-      const enabled = !disabled.has(entry.name);
+      const enabled = !disabled.has(entry.name.trim());
       if (entry.enabled === enabled) continue;
       entry.enabled = enabled;
       changed++;

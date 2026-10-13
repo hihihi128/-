@@ -53,7 +53,7 @@ export interface TavernEnv {
   registerMacro(regex: RegExp, fn: () => string): void;
   /** 读取名字以 prefix 开头的世界书条目（角色卡绑定的世界书 → 全局世界书 → 角色卡内嵌世界书） */
   readWorldbookEntries(prefix: string): Promise<{ entries: WorldbookText[]; origin: string }>;
-  /** 恢复 prefix 下的所有条目，再禁用 disabledNames 中的精确条目名。缺少写入 API 时安全跳过。 */
+  /** 只同步 managedNames 中的精确条目名，并禁用 disabledNames 中的条目。缺少写入 API 时安全跳过。 */
   syncWorldbookEntryStates(prefix: string, managedNames: string[], disabledNames: string[]): Promise<{ found: number; changed: number; failed: number }>;
   parseYaml(text: string): unknown;
   on(event: string, fn: (...args: any[]) => void): void;
