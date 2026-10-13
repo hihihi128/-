@@ -1,6 +1,7 @@
 import { addNarration, addNews, playerTeam } from './log';
 import { recordPuFit, resetPuUsage } from './powerunit';
 import { Rng } from './rng';
+import { ensureDriverWeekendTyres } from './tyres';
 import type { FiaMeetingIssue, GameState, LiveRaceState, TeamState } from './types';
 import { clamp, pushCapped, round1, stamp } from './util';
 
@@ -121,6 +122,7 @@ export function selectRacingBullsReserve(state: GameState, driverId: string): { 
     replacementPuPool: replacement.puPool ? Object.fromEntries(Object.entries(replacement.puPool).map(([key, value]) => [key, [...value]])) : undefined,
   };
   car.driverId = replacement.id; original.role = 'reserve'; replacement.role = 'race'; replacement.teamId = 'racing_bulls';
+  if (state.weekend) ensureDriverWeekendTyres(state, team, replacement.id);
   resetPuUsage(state, replacement, car);
   state.standings.drivers[replacement.id] ??= { points: 0, wins: 0, podiums: 0, poles: 0, fastestLaps: 0, dnfs: 0, best: null, results: Array(state.calendar.length).fill(null), sprintPoints: 0 };
   r.pendingRecall = null;
@@ -236,6 +238,8 @@ export function afterNextTeamRace(state: GameState): void {
 }
 
 export function specialDecisionBlocker(state: GameState, actionType: string | undefined): string | null {
+  const event = state.randomEvents?.current;
+  if (event?.status === 'awaiting_player' && !event.generationError && actionType !== 'CLEAR_NARRATION') return '本站随机事件正在等待你的处理方案。请先完成或跳过事件。';
   if (state.racingBulls?.pendingRecall && actionType !== 'RACING_BULLS_SELECT_RESERVE' && actionType !== 'CLEAR_NARRATION') return '红牛已经调走一名正式车手。请先选择本周末替补车手。';
   if (state.fiaMeeting?.current && actionType !== 'FIA_DEBATE' && actionType !== 'CLEAR_NARRATION') return 'FIA 领队座谈会正在等待你的立场。请先完成辩论。';
   return null;

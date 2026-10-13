@@ -190,10 +190,10 @@ const matrix = computed(() => {
           </tbody>
         </table>
         <div class="stack-s">
-          <div class="small muted">维修组专项训练（${{ p.pitTraining.cost }}M · {{ p.pitTraining.weeks }} 周）</div>
+          <div class="small muted">维修组专项训练（${{ p.pitTraining.speed.cost }}M · {{ p.pitTraining.speed.weeks }} 周）</div>
           <div class="tiny muted">当前：速度 {{ p.team.pitCrewTraining?.speed ?? p.staff.find(s => s.role === 'pitCrew')?.skill }} · 稳定性 {{ p.team.pitCrewTraining?.consistency ?? p.staff.find(s => s.role === 'pitCrew')?.skill }} · 失误控制 {{ p.team.pitCrewTraining?.error_control ?? p.staff.find(s => s.role === 'pitCrew')?.skill }}</div>
           <div class="row wrap">
-            <button v-for="focus in pitFocuses" :key="focus[0]" class="small" :disabled="!p.pitTraining.ok || store.busy" :title="focus[1]" @click="act({ type: 'TRAIN_PIT_CREW', focus: focus[0] })">
+            <button v-for="focus in pitFocuses" :key="focus[0]" class="small" :disabled="!p.pitTraining[focus[0]].ok || store.busy" :title="p.pitTraining[focus[0]].blockers.join('；') || focus[1]" @click="act({ type: 'TRAIN_PIT_CREW', focus: focus[0] })">
               {{ focus[1] }}
             </button>
           </div>

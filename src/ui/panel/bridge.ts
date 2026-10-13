@@ -23,6 +23,7 @@ export const store = reactive({
   status: null as Status | null,
   view: null as GameView | null,
   negotiation: null as NegotiationSessionView | null,
+  randomEventOpen: false,
   busy: false,
   toasts: [] as Toast[],
   tab: 'overview',

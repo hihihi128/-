@@ -12,7 +12,7 @@ import { ferrariAfterRace, ferrariMediaDelta, ferrariOnAllocation, ferrariOnBenc
 import { afterSpecialRace } from './teamSpecials';
 import { afterNextTeamRace, maybeTriggerRacingBullsRecall } from './nextTeamSpecials';
 import { afterManagementRace, completeAlpineDriverExit, completeWilliamsHandover } from './managementSpecials';
-import { triggerWeekendRandomEvent } from './randomEvents';
+import { closeUnansweredRandomEvent, triggerWeekendRandomEvent } from './randomEvents';
 import { resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
@@ -20,7 +20,7 @@ import type { Rng } from './rng';
 import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, PracticeReturnRequest, RaceResult, TeamState } from './types';
 import { clamp, deepClone, money, round1, round2 } from './util';
 import { completedPracticeSessions, createWeekend, currentRound, currentTrack, practiceSessionCount, runPractice, runQualifying } from './weekend';
-import { driverTyreSets } from './tyres';
+import { driverTyreSets, weekendTyreKey } from './tyres';
 
 const ok = (message: string): Outcome => ({ ok: true, message });
 const fail = (message: string): Outcome => ({ ok: false, message });
@@ -145,7 +145,9 @@ export function returnPracticeTyres(state: GameState, driverId: string, setIds: 
   const team = state.teams[state.meta.playerTeamId];
   if (state.season.phase !== 'practice' || !request || !team || !request.driverIds.includes(driverId)) return fail('当前无需交回该车手的练习赛轮胎');
   if (new Set(setIds).size !== request.required) return fail(`必须交回 ${request.required} 组轮胎`);
-  const sets = driverTyreSets(team, driverId, state.season.roundIndex);
+  const eligibleIds = request.eligibleSetIds?.[driverId] ?? [];
+  if (setIds.some(id => !eligibleIds.includes(id))) return fail('选择中包含不符合本节练习赛交回条件的轮胎组');
+  const sets = driverTyreSets(team, driverId, weekendTyreKey(state));
   const selected = setIds.map(id => sets.find(set => set.id === id));
   if (selected.some(set => !set || set.returned)) return fail('选择中包含无效或已交回的轮胎组');
   for (const set of selected) set!.returned = true;
@@ -224,6 +226,7 @@ function finalizeLiveRace(state: GameState, rng: Rng): Outcome {
 
 export function finishRound(state: GameState, rng: Rng): Outcome {
   if (state.season.phase !== 'post_race') return fail('请先完成正赛');
+  closeUnansweredRandomEvent(state);
   // 心态向 60 回归；清理报废的旧零件规格（控制存档体积）
   for (const d of Object.values(state.drivers)) d.morale = round1(d.morale + (60 - d.morale) * 0.15);
   for (const tid of state.teamOrder) pruneObsoleteSpecs(state.teams[tid]);

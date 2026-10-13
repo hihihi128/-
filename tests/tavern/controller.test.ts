@@ -233,6 +233,9 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(started.ok).toBe(true);
     const event = eventCtrl.stateAt()!.randomEvents!.current!;
     expect(event).toMatchObject({ status: 'awaiting_player', title: '车手训练冲突' });
+    const blocked = await eventCtrl.dispatch({ type: 'RUN_PRACTICE' });
+    expect(blocked).toMatchObject({ ok: false });
+    expect(blocked.message).toContain('随机事件');
     const funds = eventCtrl.stateAt()!.teams.haas.funds;
     const result = await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '先复查，再按医疗建议降低负荷。', expectedRevisionId: eventCtrl.status().revisionId! });
     expect(result).toMatchObject({ ok: true, event: { status: 'resolved', playerAnswer: '先复查，再按医疗建议降低负荷。' } });
@@ -241,6 +244,28 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(optionsSeen[0]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
     expect(optionsSeen[1]).toBeUndefined();
     expect(optionsSeen[2]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
+  });
+
+  it('副 API 未配置时使用本地事件，并允许无效果跳过', async () => {
+    const eventEnv = new FakeTavern(cardWorldbook());
+    const eventCtrl = new F1Controller(eventEnv);
+    eventCtrl.init();
+    await eventCtrl.loadData();
+    expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 92 })).ok).toBe(true);
+    const save = JSON.parse(eventCtrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 1, partIssueWeight: 0 };
+    expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    const started = await eventCtrl.dispatch({ type: 'START_WEEKEND' });
+    expect(started.ok).toBe(true);
+    const event = eventCtrl.stateAt()!.randomEvents!.current!;
+    expect(event).toMatchObject({ status: 'awaiting_player' });
+    expect(event.generationError).toContain('副 API');
+    const funds = eventCtrl.stateAt()!.teams.haas.funds;
+    const skipped = eventCtrl.skipRandomEvent({ eventId: event.id, expectedRevisionId: eventCtrl.status().revisionId! });
+    expect(skipped).toMatchObject({ ok: true, event: { status: 'unresolved', effects: [] } });
+    expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds);
+    expect(eventCtrl.stateAt()!.randomEvents!.history.at(-1)?.status).toBe('unresolved');
   });
 
   it('validates direct secondary API settings before generation', async () => {

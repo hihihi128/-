@@ -6,7 +6,7 @@ function returnPracticeTyres(s: ReturnType<typeof newTestGame>) {
   while (s.weekend?.practiceReturn) {
     const request = s.weekend.practiceReturn;
     const driverId = request.driverIds[0];
-    const set = s.teams[s.meta.playerTeamId].tyreInventory![driverId].find(set => !set.returned && set.roundIndex === s.season.roundIndex)!;
+    const set = s.teams[s.meta.playerTeamId].tyreInventory![driverId].find(set => request.eligibleSetIds[driverId].includes(set.id))!;
     s = act(s, { type: 'RETURN_PRACTICE_TYRES', driverId, setIds: [set.id] });
   }
   return s;

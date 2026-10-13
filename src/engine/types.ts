@@ -743,13 +743,16 @@ export interface TyreSet {
   state: 'new' | 'used';
   laps: number;
   returned: boolean;
-  roundIndex: number;
+  /** Season + calendar round key. Prevents same-index sets leaking into a new season. */
+  weekendKey: string;
 }
 
 export interface PracticeReturnRequest {
   session: number;
   required: number;
   driverIds: string[];
+  /** Frozen at the end of the session so the UI and action validate the same choice set. */
+  eligibleSetIds: Record<string, string[]>;
 }
 
 export interface QualiSession {
@@ -867,7 +870,6 @@ export interface LiveRaceCar {
   wetSkill: number;
   tyreFactor: number;
   setupBonus: number;
-  pitCrewSkill: number;
   raceEngineerReaction: number;
   raceEngineerWeather: number;
   plan: DriverPlan;

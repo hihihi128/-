@@ -23,7 +23,8 @@ const practiceSessionTotal = computed(() => w.value?.practiceSessionTotal ?? 0);
 const returnSelections = ref<Record<string, string[]>>({});
 function toggleReturnSet(driverId: string, setId: string) {
   const selected = returnSelections.value[driverId] ?? [];
-  returnSelections.value[driverId] = selected.includes(setId) ? selected.filter(id => id !== setId) : [...selected, setId];
+  const required = w.value?.practiceReturn?.required ?? 0;
+  returnSelections.value[driverId] = selected.includes(setId) ? selected.filter(id => id !== setId) : selected.length < required ? [...selected, setId] : selected;
 }
 function returnTyres(driverId: string) {
   void act({ type: 'RETURN_PRACTICE_TYRES', driverId, setIds: returnSelections.value[driverId] ?? [] });
@@ -277,8 +278,8 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
             <div class="label">实体轮胎库存 <span class="tiny muted">新胎 / 已使用 · 圈数</span></div>
             <div class="row wrap tyre-inventory">
               <label v-for="set in d.tyreSets" :key="set.id" class="tyre-set tiny" :class="{ returned: set.returned, selected: (returnSelections[d.driverId] ?? []).includes(set.id) }">
-                <input v-if="w.practiceReturn?.driverIds.includes(d.driverId) && !set.returned" type="checkbox" :checked="(returnSelections[d.driverId] ?? []).includes(set.id)" @change="toggleReturnSet(d.driverId, set.id)" />
-                <Tyre :c="set.compound" /> {{ set.state === 'new' ? '新' : '已用' }} {{ set.laps }}L<span v-if="set.returned"> · 已交回</span>
+                <input v-if="w.practiceReturn?.driverIds.includes(d.driverId) && set.returnEligible" type="checkbox" :checked="(returnSelections[d.driverId] ?? []).includes(set.id)" @change="toggleReturnSet(d.driverId, set.id)" />
+                <Tyre :c="set.compound" /> {{ set.state === 'new' ? '新' : '已用' }} {{ set.laps }}L<span v-if="set.returned"> · 已交回</span><span v-else-if="w.practiceReturn?.driverIds.includes(d.driverId) && !set.returnEligible"> · 不可交回</span>
               </label>
             </div>
             <div v-if="w.practiceReturn?.driverIds.includes(d.driverId)" class="row">

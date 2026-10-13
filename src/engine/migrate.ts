@@ -53,10 +53,22 @@ export function migrateState(state: GameState): GameState {
   if (state.haas === undefined) state.haas = null;
   if (state.williams === undefined) state.williams = null;
   state.randomEvents ??= { lastRoundKey: null, current: null, history: [] };
-  const randomRecords = [...state.randomEvents.history, ...(state.randomEvents.current ? [state.randomEvents.current] : [])];
-  for (let index = 0; index < randomRecords.length; index++) {
-    const record = randomRecords[index];
+  for (let index = 0; index < state.randomEvents.history.length; index++) {
+    const record = state.randomEvents.history[index];
     record.id ??= `legacy-random-event-${record.roundKey}-${index}`;
+    record.status ??= record.kind === 'none' ? 'none' : 'resolved';
+    record.prompt ??= record.detail;
+    record.answerOptions ??= [];
+    record.playerAnswer ??= null;
+    record.mainReply ??= null;
+    record.outcomeSummary ??= record.status === 'resolved' ? record.detail : null;
+    record.effects ??= [];
+    record.generationError ??= null;
+  }
+  if (state.randomEvents.current) {
+    const record = state.randomEvents.current;
+    const matching = [...state.randomEvents.history].reverse().find(history => history.roundKey === record.roundKey);
+    record.id ??= matching?.id ?? `legacy-random-event-${record.roundKey}-current`;
     record.status ??= record.kind === 'none' ? 'none' : 'resolved';
     record.prompt ??= record.detail;
     record.answerOptions ??= [];
@@ -169,6 +181,11 @@ export function migrateState(state: GameState): GameState {
     team.aduoTier ??= 0;
   }
   migrateTyreInventory(state);
+  if (state.weekend?.practiceReturn) {
+    const team = state.teams[state.meta.playerTeamId];
+    const key = `${state.season.year}:r${state.weekend.roundIndex + 1}`;
+    state.weekend.practiceReturn.eligibleSetIds ??= Object.fromEntries(state.weekend.practiceReturn.driverIds.map(driverId => [driverId, (team?.tyreInventory?.[driverId] ?? []).filter(set => set.weekendKey === key && !set.returned).map(set => set.id)]));
+  }
   // 已经是 2026 规则的存档（有 puAllocation）不再补规则：玩家可能在世界书里有意删掉了某些默认项
   if (state.rules.puAllocation) return state;
   fillMissing(state.rules as unknown as Record<string, unknown>, DEFAULT_RULES as unknown as Record<string, unknown>, true);

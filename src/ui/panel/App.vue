@@ -12,6 +12,7 @@ import NewGame from './views/NewGame.vue';
 import TimingTower from './components/TimingTower.vue';
 import MobileTabBar from './components/MobileTabBar.vue';
 import SupernaturalPanel from './components/SupernaturalPanel.vue';
+import RandomEventPanel from './components/RandomEventPanel.vue';
 
 const tabs = [
   { id: 'overview', label: '总览' },
@@ -73,6 +74,7 @@ function supernaturalSettings() {
     <NewGame v-else-if="showNewGame" />
 
     <template v-else-if="view && team">
+      <RandomEventPanel mode="modal" />
       <header class="top">
         <div class="team-badge" :style="{ background: team.color }">{{ team.short }}</div>
         <div class="grow">

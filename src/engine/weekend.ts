@@ -8,7 +8,7 @@ import { createPreRaceRainWindow, createWeatherTrajectory } from './raceWeather'
 import { Rng } from './rng';
 import { raceEngineerFor, staffAbility } from './staff';
 import { effectiveSetup } from './supernatural';
-import { provisionWeekendTyres, takeTyreSet, useTyreSet } from './tyres';
+import { ensureDriverWeekendTyres, provisionWeekendTyres, returnEligibleTyreSets, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
 import type {
   DriverPlan,
   DriverState,
@@ -106,7 +106,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     race: null,
     liveRace: null,
   };
-  provisionWeekendTyres(state, state.season.roundIndex);
+  provisionWeekendTyres(state);
   // 保留上一站积累的罚退（例如 AI 叙事产生的罚退）
   const pendingPenalties = state.flags.pendingPenalties;
   if (typeof pendingPenalties === 'string' && pendingPenalties) {
@@ -118,6 +118,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     delete state.flags.pendingPenalties;
   }
   for (const { driver, team, car } of activeEntries(state)) {
+    ensureDriverWeekendTyres(state, team, driver.id);
     weekend.setup[driver.id] = baseSetup(team, car.slot);
     const old = prev?.plans[driver.id];
     weekend.plans[driver.id] = old ? { ...deepClone(old), tyrePlan: 'auto', sprintTyre: 'auto' } : deepClone(DEFAULT_PLAN);
@@ -194,7 +195,7 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
     const laps = rng.int(18, 34);
     const practiceCompounds = wet ? [rules.wetCompound] : rules.dryCompounds;
     const compound = practiceCompounds[(session - 1) % practiceCompounds.length];
-    useTyreSet(takeTyreSet(team, driver.id, compound, state.season.roundIndex), laps);
+    useTyreSet(takeTyreSet(team, driver.id, compound, weekendTyreKey(state)), laps);
     result.timesheet.push({ driverId: driver.id, teamId: team.id, time: round3(time), laps });
   }
   result.timesheet.sort((a, b) => a.time - b.time);
@@ -225,7 +226,9 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
   w.practice = result;
   const playerDrivers = playerTeam(state).cars.map(car => car.driverId).filter((id): id is string => !!id);
   const required = Math.max(0, rules.practiceReturnSets);
-  w.practiceReturn = playerDrivers.length && required ? { session, required, driverIds: playerDrivers } : null;
+  const player = playerTeam(state);
+  const eligibleSetIds = Object.fromEntries(playerDrivers.map(driverId => [driverId, returnEligibleTyreSets(state, player, driverId).map(set => set.id)]));
+  w.practiceReturn = playerDrivers.length && required ? { session, required, driverIds: playerDrivers, eligibleSetIds } : null;
   return result;
 }
 

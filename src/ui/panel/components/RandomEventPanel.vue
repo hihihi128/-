@@ -1,23 +1,35 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, nextTick, ref, watch } from 'vue';
 import { call, store } from '../bridge';
 
+const props = withDefaults(defineProps<{ mode?: 'card' | 'modal' }>(), { mode: 'card' });
 const event = computed(() => store.view?.randomEvents?.current ?? null);
-const open = ref(event.value?.status === 'awaiting_player');
 const answer = ref('');
+const failedMainReply = ref<{ speaker: string; reply: string } | null>(null);
+const dialog = ref<HTMLElement | null>(null);
+const secondaryConfigured = computed(() => {
+  const settings = store.status?.settings;
+  return !!settings?.engineerProxyPreset || (!!settings?.engineerApiUrl && !!settings?.engineerModel);
+});
 
 watch(() => event.value?.id, id => {
   if (id && event.value?.status === 'awaiting_player') {
-    open.value = true;
+    store.randomEventOpen = true;
     answer.value = '';
+    failedMainReply.value = null;
+    void nextTick(() => dialog.value?.focus());
   }
+}, { immediate: true });
+watch(() => store.randomEventOpen, value => {
+  if (value) void nextTick(() => dialog.value?.focus());
 });
 
 async function submit() {
   const current = event.value;
   const revisionId = store.status?.revisionId;
   if (!current || !revisionId || !answer.value.trim()) return;
-  await call(api => api.resolveRandomEvent({ eventId: current.id, answer: answer.value, expectedRevisionId: revisionId }));
+  const result = await call(api => api.resolveRandomEvent({ eventId: current.id, answer: answer.value, expectedRevisionId: revisionId }));
+  if (result && !result.ok) failedMainReply.value = result.mainReply;
 }
 
 async function skip() {
@@ -37,7 +49,7 @@ function effectLabel(effect: NonNullable<typeof event.value>['effects'][number])
 </script>
 
 <template>
-  <div v-if="event" class="card stack-s special-card">
+  <div v-if="props.mode === 'card' && event" class="card stack-s special-card">
     <div class="spread">
       <h3>本站随机事件</h3>
       <span class="badge" :class="event.status === 'resolved' || event.status === 'none' ? 'ok' : event.status === 'unresolved' ? 'bad' : 'warn'">
@@ -47,21 +59,23 @@ function effectLabel(effect: NonNullable<typeof event.value>['effects'][number])
     <b>{{ event.title }}</b>
     <div class="small">{{ event.status === 'resolved' || event.status === 'unresolved' ? event.outcomeSummary : event.prompt }}</div>
     <div v-if="event.effects.length" class="row wrap"><span v-for="(effect, index) in event.effects" :key="index" class="badge">{{ effectLabel(effect) }}</span></div>
-    <button v-if="event.kind !== 'none'" class="small" @click="open = true">{{ event.status === 'awaiting_player' ? '处理事件' : '查看事件记录' }}</button>
+    <button v-if="event.kind !== 'none'" class="small" @click="store.randomEventOpen = true">{{ event.status === 'awaiting_player' ? '处理事件' : '查看事件记录' }}</button>
   </div>
 
-  <div v-if="open && event && event.kind !== 'none'" class="event-backdrop" role="presentation" @click.self="event.status !== 'awaiting_player' && (open = false)">
-    <section class="event-modal stack" role="dialog" aria-modal="true" aria-label="随机事件" tabindex="-1" @keydown.esc="event.status !== 'awaiting_player' && (open = false)">
-      <div class="spread"><div><div class="tiny muted">副 API 随机事件</div><h2>{{ event.title }}</h2></div><button v-if="event.status !== 'awaiting_player'" aria-label="关闭" @click="open = false">×</button></div>
-      <div class="notice warn">{{ event.prompt }}</div>
+  <div v-if="props.mode === 'modal' && store.randomEventOpen && event && event.kind !== 'none'" class="event-backdrop" role="presentation" @click.self="(event.status !== 'awaiting_player' || !!event.generationError) && (store.randomEventOpen = false)">
+    <section ref="dialog" class="event-modal stack" role="dialog" aria-modal="true" aria-label="随机事件" tabindex="-1" @keydown.esc="(event.status !== 'awaiting_player' || !!event.generationError) && (store.randomEventOpen = false)">
+      <div class="spread"><div><div class="tiny muted">副 API 随机事件</div><h2>{{ event.title }}</h2></div><button v-if="event.status !== 'awaiting_player' || event.generationError" aria-label="关闭" @click="store.randomEventOpen = false">×</button></div>
+      <div v-if="!event.id.startsWith('legacy-random-event-') || event.status === 'awaiting_player'" class="notice warn">{{ event.prompt }}</div>
       <div v-if="event.generationError" class="tiny muted">副 API 生成失败，已使用本地安全事件：{{ event.generationError }}</div>
 
       <template v-if="event.status === 'awaiting_player'">
         <div v-if="event.answerOptions.length" class="row wrap">
-          <button v-for="option in event.answerOptions" :key="option" class="small" :disabled="store.busy" @click="answer = option">{{ option }}</button>
+          <button v-for="(option, index) in event.answerOptions" :key="`${index}-${option}`" class="small" :disabled="store.busy" @click="answer = option">{{ option }}</button>
         </div>
         <label class="field"><span>你的处理方案</span><textarea v-model="answer" rows="5" maxlength="1000" placeholder="说明你的决定、执行方式和可接受代价……" :disabled="store.busy" /></label>
-        <div class="spread"><span class="tiny muted">主 API 将先以车队角色回应，再由副 API 判定结果。</span><div class="row"><button class="small" :disabled="store.busy" @click="skip">跳过（无效果）</button><button class="primary" :disabled="store.busy || !answer.trim()" @click="submit">提交处理方案</button></div></div>
+        <div v-if="failedMainReply" class="dialog-line"><b>上次主 API 回应（副 API 判定失败）</b><div>{{ failedMainReply.speaker }}：{{ failedMainReply.reply }}</div></div>
+        <div v-if="!secondaryConfigured" class="notice warn small">尚未配置副 API。请前往“存档与设置”配置，或跳过本次事件。</div>
+        <div class="spread"><span class="tiny muted">主 API 将先以车队角色回应，再由副 API 判定结果。</span><div class="row"><button class="small" :disabled="store.busy" @click="skip">跳过（无效果）</button><button class="primary" :disabled="store.busy || !answer.trim() || !secondaryConfigured" @click="submit">提交处理方案</button></div></div>
       </template>
 
       <template v-else>

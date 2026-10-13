@@ -1,7 +1,7 @@
 import type { GameState, RandomEventEffect, RandomEventRecord } from '../engine/types';
-import { randomEventContext, type RandomEventContent } from '../engine/randomEvents';
+import { RANDOM_EVENT_EFFECT_CAPS, randomEventContext, type RandomEventContent } from '../engine/randomEvents';
 
-const EFFECT_OPS = new Set<RandomEventEffect['op']>(['driver_fitness', 'driver_morale', 'funds', 'project_weeks', 'part_reliability', 'staff_skill', 'aero_hours']);
+const EFFECT_OPS = new Set<RandomEventEffect['op']>(Object.keys(RANDOM_EVENT_EFFECT_CAPS) as RandomEventEffect['op'][]);
 
 function jsonObject(text: string): Record<string, unknown> {
   const start = text.indexOf('{');

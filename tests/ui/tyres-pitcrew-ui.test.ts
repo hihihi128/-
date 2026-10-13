@@ -11,6 +11,7 @@ describe('tyre inventory and pit-stop interface', () => {
     expect(weekend).toContain("RETURN_PRACTICE_TYRES");
     expect(weekend).toContain('实体轮胎库存');
     expect(weekend).toContain("set.state === 'new' ? '新' : '已用'");
+    expect(weekend).toContain('set.returnEligible');
     expect(weekend).toContain('确认交回');
   });
 

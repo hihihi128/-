@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { applyRandomEventResolution, setRandomEventContent, triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
+import { applyRandomEventResolution, closeUnansweredRandomEvent, setRandomEventContent, triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
 import { Rng } from '../../src/engine/rng';
 import { parseRandomEventContent, parseRandomEventMainReply, parseRandomEventResolution } from '../../src/tavern/randomEventFlow';
 import { newTestGame } from '../helpers';
@@ -27,8 +27,28 @@ describe('随机事件双 API 协议', () => {
     const event = state.randomEvents!.current!;
     setRandomEventContent(state, event.id, { title: event.title, prompt: event.prompt, answerOptions: ['谨慎', '激进'] });
     expect(applyRandomEventResolution(state, event.id, 'resolved', '越界。', [{ op: 'funds', targetId: null, delta: 50, reason: '过大' }]).ok).toBe(false);
+    expect(applyRandomEventResolution(state, event.id, 'resolved', '叠加越界。', [
+      { op: 'funds', targetId: null, delta: 2, reason: '一' },
+      { op: 'funds', targetId: null, delta: 2, reason: '二' },
+      { op: 'funds', targetId: null, delta: 2, reason: '三' },
+    ]).ok).toBe(false);
     const rival = Object.values(state.drivers).find(driver => driver.teamId !== state.meta.playerTeamId)!;
     expect(applyRandomEventResolution(state, event.id, 'resolved', '非法目标。', [{ op: 'driver_morale', targetId: rival.id, delta: 2, reason: '不属于玩家' }]).ok).toBe(false);
+    const project = state.teams[state.meta.playerTeamId].projects[0];
+    if (project) expect(applyRandomEventResolution(state, event.id, 'resolved', '小数周。', [{ op: 'project_weeks', targetId: project.id, delta: .5, reason: '无效小数' }]).ok).toBe(false);
     expect(event.status).toBe('awaiting_player');
+  });
+
+  it('closes an unanswered fallback event without effects at round end', () => {
+    const state = newTestGame(12);
+    state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0 };
+    triggerWeekendRandomEvent(state, new Rng(2));
+    const event = state.randomEvents!.current!;
+    setRandomEventContent(state, event.id, { title: event.title, prompt: event.prompt, answerOptions: ['谨慎', '激进'] }, '副 API 未配置');
+    const funds = state.teams[state.meta.playerTeamId].funds;
+    closeUnansweredRandomEvent(state);
+    expect(event).toMatchObject({ status: 'unresolved', effects: [] });
+    expect(state.randomEvents!.history.at(-1)?.status).toBe('unresolved');
+    expect(state.teams[state.meta.playerTeamId].funds).toBe(funds);
   });
 });

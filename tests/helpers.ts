@@ -69,10 +69,9 @@ export function advanceUntil(state: GameState, pred: (s: GameState) => boolean, 
   for (let i = 0; i < max && !pred(s); i++) {
     if (s.fiaMeeting?.current) s = act(s, { type: 'FIA_DEBATE', stance: 'compromise' });
     else if (s.weekend?.practiceReturn) {
-      const team = s.teams[s.meta.playerTeamId];
       const request = s.weekend.practiceReturn;
       const driverId = request.driverIds[0];
-      const setIds = (team.tyreInventory?.[driverId] ?? []).filter(set => !set.returned && set.roundIndex === s.season.roundIndex).slice(0, request.required).map(set => set.id);
+      const setIds = request.eligibleSetIds[driverId].slice(0, request.required);
       s = act(s, { type: 'RETURN_PRACTICE_TYRES', driverId, setIds });
     }
     else s = act(s, { type: 'ADVANCE' });

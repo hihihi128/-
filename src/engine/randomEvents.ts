@@ -1,4 +1,5 @@
 import { addNarration, addNews, playerTeam } from './log';
+import { adjustPitCrewTraining } from './pitstop';
 import { Rng } from './rng';
 import type { GameState, RandomEventEffect, RandomEventKind, RandomEventRecord } from './types';
 import { clamp, pushCapped, round1 } from './util';
@@ -9,7 +10,7 @@ export interface RandomEventContent {
   answerOptions: string[];
 }
 
-const EFFECT_CAPS: Record<RandomEventEffect['op'], [number, number]> = {
+export const RANDOM_EVENT_EFFECT_CAPS: Record<RandomEventEffect['op'], [number, number]> = {
   driver_fitness: [-12, 12],
   driver_morale: [-12, 12],
   funds: [-5, 5],
@@ -87,6 +88,8 @@ export function setRandomEventContent(state: GameState, eventId: string, content
   event.answerOptions = [...content.answerOptions];
   event.generationError = generationError;
   event.status = 'awaiting_player';
+  const history = state.randomEvents?.history.find(record => record.id === eventId);
+  if (history && history !== event) Object.assign(history, { ...event, answerOptions: [...event.answerOptions], effects: event.effects.map(effect => ({ ...effect })) });
   return true;
 }
 
@@ -103,8 +106,9 @@ export function randomEventContext(state: GameState): Record<string, unknown> {
 
 function validateEffect(state: GameState, effect: RandomEventEffect): string | null {
   const team = playerTeam(state);
-  const cap = EFFECT_CAPS[effect.op];
+  const cap = RANDOM_EVENT_EFFECT_CAPS[effect.op];
   if (!cap || !Number.isFinite(effect.delta) || effect.delta < cap[0] || effect.delta > cap[1] || effect.delta === 0) return `效果 ${effect.op} 的数值越界`;
+  if (effect.op === 'project_weeks' && !Number.isInteger(effect.delta)) return '研发周期效果必须使用整数周';
   if (!effect.reason.trim() || effect.reason.length > 160) return `效果 ${effect.op} 的原因无效`;
   if (effect.op === 'funds' || effect.op === 'aero_hours') return effect.targetId === null ? null : `效果 ${effect.op} 不接受目标 ID`;
   if (!effect.targetId) return `效果 ${effect.op} 缺少目标 ID`;
@@ -126,6 +130,16 @@ export function applyRandomEventResolution(
   if (!event || event.id !== eventId || event.status !== 'awaiting_player') return { ok: false, message: '随机事件已经变化或完成' };
   if (!summary.trim() || summary.length > 500) return { ok: false, message: '随机事件结论无效' };
   if (effects.length > 3) return { ok: false, message: '随机事件最多应用三个效果' };
+  const totals = new Map<string, number>();
+  for (const effect of effects) {
+    const key = `${effect.op}:${effect.targetId ?? ''}`;
+    totals.set(key, (totals.get(key) ?? 0) + effect.delta);
+  }
+  for (const [key, delta] of totals) {
+    const op = key.slice(0, key.indexOf(':')) as RandomEventEffect['op'];
+    const cap = RANDOM_EVENT_EFFECT_CAPS[op];
+    if (!cap || delta < cap[0] || delta > cap[1]) return { ok: false, message: `效果 ${op} 的累计数值越界` };
+  }
   for (const effect of effects) {
     const error = validateEffect(state, effect);
     if (error) return { ok: false, message: error };
@@ -142,7 +156,9 @@ export function applyRandomEventResolution(
       driver.morale = round1(clamp(driver.morale + effect.delta, 0, 100));
     } else if (effect.op === 'staff_skill') {
       const staff = Object.values(team.staff).find(value => value.id === effect.targetId)!;
+      const before = staff.skill;
       staff.skill = round1(clamp(staff.skill + effect.delta, 1, 99));
+      if (staff.role === 'pitCrew') adjustPitCrewTraining(team, staff.skill - before);
     } else if (effect.op === 'project_weeks') {
       const project = team.projects.find(value => value.id === effect.targetId)!;
       const delta = Math.trunc(effect.delta);
@@ -159,7 +175,16 @@ export function applyRandomEventResolution(
   event.outcomeSummary = summary.trim();
   event.effects = effects.map(effect => ({ ...effect, reason: effect.reason.trim() }));
   event.detail = summary.trim();
+  const history = state.randomEvents?.history.find(record => record.id === eventId);
+  if (history && history !== event) Object.assign(history, { ...event, answerOptions: [...event.answerOptions], effects: event.effects.map(effect => ({ ...effect })) });
   addNews(state, outcome === 'resolved' ? '随机事件已解决' : '随机事件未解决', event.detail);
   addNarration(state, 'random_event', event.title, `${event.prompt} ${event.detail}`);
   return { ok: true, message: event.detail };
+}
+
+/** Close non-blocking fallback events before the game leaves their round. */
+export function closeUnansweredRandomEvent(state: GameState): void {
+  const event = state.randomEvents?.current;
+  if (event?.status !== 'awaiting_player') return;
+  applyRandomEventResolution(state, event.id, 'unresolved', '本站结束前未处理该事件，因此没有产生额外效果。', []);
 }

@@ -5,6 +5,17 @@ function focus(team: TeamState, key: PitCrewFocus): number {
   return clamp(team.pitCrewTraining?.[key] ?? team.staff.pitCrew.skill, 1, 100);
 }
 
+export function adjustPitCrewTraining(team: TeamState, delta: number): void {
+  const previousSkill = team.staff.pitCrew.skill - delta;
+  team.pitCrewTraining ??= { speed: previousSkill, consistency: previousSkill, error_control: previousSkill };
+  for (const key of ['speed', 'consistency', 'error_control'] as PitCrewFocus[]) team.pitCrewTraining[key] = round1(clamp(team.pitCrewTraining[key] + delta, 1, 100));
+}
+
+export function resetPitCrewTraining(team: TeamState): void {
+  const skill = team.staff.pitCrew.skill;
+  team.pitCrewTraining = { speed: skill, consistency: skill, error_control: skill };
+}
+
 /** Public estimate used before a stop; randomness is deliberately excluded. */
 export function predictedStationaryTime(team: TeamState, repair = false): number {
   const base = 2.2 + (100 - focus(team, 'speed')) / 100 * 1.3;

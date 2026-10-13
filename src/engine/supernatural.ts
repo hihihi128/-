@@ -1,5 +1,6 @@
 import { dismissalReason } from './teamSpecials';
 import { staffAbility } from './staff';
+import { adjustPitCrewTraining } from './pitstop';
 import type { AiLogEntry, DriverAttr, GameState, SetupState, StaffAbility } from './types';
 import { clamp, pushCapped, round1, round2, stamp } from './util';
 
@@ -190,7 +191,10 @@ export function applySupernaturalCommands(state: GameState, rows: unknown[], inv
       const before = command.field === 'skill' ? member.skill : staffAbility(member, command.field);
       const allowed = apply(`staff_skill:${command.staffId}`, clamp(command.delta, 1 - before, 100 - before), SUPERNATURAL_LIMITS.staffSkill);
       const after = numeric(before, allowed, 1, 100); const actual = round1(after - before);
-      if (command.field === 'skill') member.skill = after;
+      if (command.field === 'skill') {
+        member.skill = after;
+        if (member.role === 'pitCrew') adjustPitCrewTraining(team, actual);
+      }
       else member.abilities = { ...member.abilities, [command.field]: after };
       if (!actual) reject(command.op, `${command.staffId}.${command.field}`, command.delta, command.reason, '技能已饱和或本次额度已用尽');
       else { changed = true; log({ op: command.op, target: `${command.staffId}.${command.field}`, requested: command.delta, applied: actual, reason: command.reason, ok: true, note: actual !== command.delta ? '已按上限或边界裁剪' : '' }); }

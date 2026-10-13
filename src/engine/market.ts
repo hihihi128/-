@@ -2,6 +2,7 @@ import { STAFF_ROLES } from './defaults';
 import { costCapOf } from './finance';
 import { addNarration, addNews } from './log';
 import { driverOverall } from './ratings';
+import { resetPitCrewTraining } from './pitstop';
 import type {
   CandidatePreference,
   ContractOfferTerms,
@@ -404,6 +405,7 @@ export function closeMarket(state: GameState): MarketOutcome {
       const id = roster.staff[role]!; const source = staffPool.get(id); if (!source) return fail(`找不到员工 ${id}`);
       const agreement = window.agreements.find(a => a.personKind === 'staff' && a.personId === id);
       team.staff[role] = agreement ? { ...source, id, role, salary: agreement.annualSalary, contractStart: agreement.startYear, contractEnd: agreement.endYear } : { ...source, id, role };
+      if (role === 'pitCrew') resetPitCrewTraining(team);
       employedStaff.add(id);
     }
   }

@@ -49,6 +49,7 @@ import type {
 } from './types';
 import { round1 } from './util';
 import { predictedStationaryTime } from './pitstop';
+import { weekendTyreKey } from './tyres';
 import { currentRound } from './weekend';
 import { marketCloseBlockers } from './market';
 
@@ -185,7 +186,7 @@ export interface WeekendDriverView {
   options: StrategyOption[];
   sprintOptions: StrategyOption[];
   tyreLife: Record<string, number>;
-  tyreSets: Array<{ id: string; compound: string; state: 'new' | 'used'; laps: number; returned: boolean }>;
+  tyreSets: Array<{ id: string; compound: string; state: 'new' | 'used'; laps: number; returned: boolean; returnEligible: boolean }>;
 }
 
 export type RevealedWeather = Record<keyof WeekendState['weather'], Weather | null>;
@@ -282,7 +283,7 @@ export interface GameView {
     rndOptions: ProjectPreview[];
     facilities: Array<{ id: string; name: string; level: number; max: number; preview: ReturnType<typeof previewFacility> }>;
     staff: Array<{ role: string; label: string; name: string; skill: number; abilities?: import('./types').StaffMember['abilities']; salary: number }>;
-    pitTraining: ReturnType<typeof previewPitTraining>;
+    pitTraining: Record<import('./types').PitCrewFocus, ReturnType<typeof previewPitTraining>>;
   };
   teams: Array<{ id: string; name: string; short: string; color: string; isPlayer: boolean; points: number; rank: number; carOverall: number; trackScore: number | null; paceRank: number | null }>;
   drivers: DriverView[];
@@ -593,7 +594,11 @@ export function buildView(state: GameState): GameView {
         preview: previewFacility(state, team.id, f),
       })),
       staff: STAFF_ROLES.map(r => ({ role: r, label: LABELS.staff[r], name: team.staff[r].name, skill: team.staff[r].skill, abilities: team.staff[r].abilities, salary: team.staff[r].salary })),
-      pitTraining: previewPitTraining(state, team.id),
+      pitTraining: {
+        speed: previewPitTraining(state, team.id, 'speed'),
+        consistency: previewPitTraining(state, team.id, 'consistency'),
+        error_control: previewPitTraining(state, team.id, 'error_control'),
+      },
     },
     teams: teamRows.map((tid, i) => {
       const t = state.teams[tid];
@@ -750,7 +755,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
         options: strategyOptions(state.rules, track, track.laps, ctx, { wet: false, sprint: false }).slice(0, 6),
         sprintOptions: roundDef?.sprint ? strategyOptions(state.rules, track, sprintLaps, ctx, { wet: false, sprint: true }) : [],
         tyreLife: Object.fromEntries(Object.entries(state.rules.tyres).map(([k, t]) => [k, round1(effectiveCliff(t, factor))])),
-        tyreSets: (team.tyreInventory?.[d.id] ?? []).filter(set => set.roundIndex === w.roundIndex).map(set => ({ id: set.id, compound: set.compound, state: set.state, laps: set.laps, returned: set.returned })),
+        tyreSets: (team.tyreInventory?.[d.id] ?? []).filter(set => set.weekendKey === weekendTyreKey(state, w.roundIndex)).map(set => ({ id: set.id, compound: set.compound, state: set.state, laps: set.laps, returned: set.returned, returnEligible: !!w.practiceReturn?.eligibleSetIds?.[d.id]?.includes(set.id) })),
       });
     }
   }

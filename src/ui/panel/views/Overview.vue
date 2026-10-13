@@ -167,7 +167,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <div class="tiny muted">每站只能确定一次预算方向。设施和研发动作必须符合本站方向。</div>
     </div>
 
-    <RandomEventPanel />
+    <RandomEventPanel mode="card" />
 
     <div v-if="fia?.current" class="card stack-s fia-meeting">
       <div class="spread"><h3>FIA 领队座谈会</h3><span class="badge warn">第 {{ fia.current.index }} 次会议</span></div>

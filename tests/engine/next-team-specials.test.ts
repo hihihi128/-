@@ -8,7 +8,7 @@ import { advanceRaceSession, createRaceSession } from '../../src/engine/race';
 import { Rng } from '../../src/engine/rng';
 import type { GameState } from '../../src/engine/types';
 import { buildView } from '../../src/engine/view';
-import { advanceUntil, cardSources } from '../helpers';
+import { act, advanceUntil, cardSources } from '../helpers';
 
 type TeamId = 'aston_martin' | 'racing_bulls' | 'audi' | 'cadillac';
 
@@ -100,6 +100,24 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     expect(state.drivers[reserve].role).toBe('reserve');
     expect(state.drivers[reserve].puUsed).toEqual(originalPuUsed);
     expect(state.drivers[reserve].puPool).toEqual(originalPuPool);
+  });
+
+  it('小红牛在周末中途换上储备车手时补发该车手的本周末轮胎', () => {
+    let state = game('racing_bulls');
+    state.rules.racingBulls.recallChance = 1;
+    state = advanceUntil(state, value => value.season.phase === 'practice');
+    const reserve = state.racingBulls!.pendingRecall!.candidateIds[0];
+    expect(selectRacingBullsReserve(state, reserve).ok).toBe(true);
+    const inventory = state.teams.racing_bulls.tyreInventory?.[reserve] ?? [];
+    expect(inventory.length).toBeGreaterThan(0);
+    expect(inventory.every(set => set.weekendKey === `${state.season.year}:r${state.season.roundIndex + 1}`)).toBe(true);
+    state = act(state, { type: 'RUN_PRACTICE' });
+    while (state.weekend!.practiceReturn) {
+      const request = state.weekend!.practiceReturn;
+      const returningDriver = request.driverIds[0];
+      state = act(state, { type: 'RETURN_PRACTICE_TYRES', driverId: returningDriver, setIds: request.eligibleSetIds[returningDriver].slice(0, request.required) });
+    }
+    expect(state.weekend!.practiceSessions).toHaveLength(1);
   });
 
   it('奥迪涡轮让起步随机掉位，联盟持续推进 ADUO', () => {

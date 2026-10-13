@@ -155,6 +155,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     const event = state.randomEvents!.current!;
     expect(setRandomEventContent(state, event.id, { title: event.title, prompt: event.prompt, answerOptions: ['复核', '继续'] })).toBe(true);
     expect(applyRandomEventResolution(state, event.id, 'unresolved', '复核失败，项目需要延期。', [{ op: 'project_weeks', targetId: project.id, delta: 1, reason: '数据仍不一致' }]).ok).toBe(true);
+    expect(state.randomEvents!.history.at(-1)).toMatchObject({ id: event.id, status: 'unresolved', outcomeSummary: '复核失败，项目需要延期。' });
     expect(project).toMatchObject({ weeksLeft: before.weeksLeft + 1, weeksTotal: before.weeksTotal + 1 });
     expect(project.weeksTotal - project.weeksLeft).toBe(before.elapsed);
   });
