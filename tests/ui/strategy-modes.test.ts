@@ -13,6 +13,8 @@ describe('strategy mode interface', () => {
     expect(weekend).toContain('完美策略 AI');
     expect(weekend).toContain('requestPerfectStrategy');
     expect(weekend).toContain('codex-fab');
+    expect(weekend).toContain("d.plan.strategySource === 'perfect'");
+    expect(weekend).toContain('bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 12px)');
     expect(weekend).not.toContain('d.options.slice(0, 2)');
     expect(weekend).not.toContain('车队工程师建议');
     expect(weekend).toContain("strategySource: 'player', tyrePlan: [...customFor(d)], paceMode: 'balanced', pitTiming: 'standard', scReaction: true");

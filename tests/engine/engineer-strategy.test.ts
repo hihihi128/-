@@ -69,4 +69,18 @@ describe('engineer strategy execution', () => {
     state = act(state, { type: 'ADVANCE_RACE', sessionId: live.id, expectedRevision: live.revision, until: 'next_lap' });
     expect(state.weekend!.liveRace!.events.some(event => event.drivers.includes(driverIds[0]) && event.text.includes('工程师误判'))).toBe(false);
   });
+
+  it('perfect strategy stays automated without staff weather mistakes', () => {
+    let state = advanceUntil(newTestGame(7193), current => current.season.phase === 'race');
+    const driverIds = Object.values(state.drivers).filter(driver => driver.teamId === state.meta.playerTeamId).map(driver => driver.id);
+    for (const driverId of driverIds) state = act(state, { type: 'SET_PLAN', driverId, plan: { strategySource: 'perfect' } });
+    state = act(state, { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    live.wetness = .29;
+    live.surface = 'damp';
+    live.weatherTrajectory[0] = 1;
+    state = act(state, { type: 'ADVANCE_RACE', sessionId: live.id, expectedRevision: live.revision, until: 'next_lap' });
+    expect(state.weekend!.liveRace!.pendingDecision).toBeNull();
+    expect(state.weekend!.liveRace!.events.some(event => event.drivers.some(id => driverIds.includes(id)) && (event.text.includes('工程师误判') || event.text.includes('反应过度')))).toBe(false);
+  });
 });

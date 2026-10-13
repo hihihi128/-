@@ -16,7 +16,7 @@ calendar:
   - { track: hungaroring, name: 匈牙利大奖赛, sprint: false, weeksGap: 1, date: 7月24–26日 }
   - { track: zandvoort, name: 荷兰大奖赛, sprint: true, weeksGap: 4, date: 8月21–23日 }
   - { track: monza, name: 意大利大奖赛, sprint: false, weeksGap: 2, date: 9月4–6日 }
-  - { track: madrid, name: 马德里大奖赛, sprint: false, weeksGap: 1, date: 9月11–13日 }
+  - { track: madrid, name: 西班牙大奖赛（马德里）, sprint: false, weeksGap: 1, date: 9月11–13日 }
   - { track: baku, name: 阿塞拜疆大奖赛, sprint: false, weeksGap: 2, date: 9月24–26日 }
   - { track: singapore, name: 新加坡大奖赛, sprint: true, weeksGap: 2, date: 10月9–11日 }
   - { track: cota, name: 美国大奖赛, sprint: false, weeksGap: 2, date: 10月23–25日 }

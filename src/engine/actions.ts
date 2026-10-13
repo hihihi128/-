@@ -62,7 +62,7 @@ function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>)
   const plan = state.weekend.plans[driverId] ?? deepClone(DEFAULT_PLAN);
   const rules = state.rules;
   if (patch.strategySource !== undefined) {
-    if (patch.strategySource !== 'player' && patch.strategySource !== 'engineer') return fail('未知策略来源');
+    if (patch.strategySource !== 'player' && patch.strategySource !== 'engineer' && patch.strategySource !== 'perfect') return fail('未知策略来源');
     plan.strategySource = patch.strategySource;
   }
   if (patch.practiceProgram !== undefined) {

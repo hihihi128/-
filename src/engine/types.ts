@@ -686,7 +686,7 @@ export type EnergyMode = 'harvest' | 'balanced' | 'deploy';
 
 export interface DriverPlan {
   /** 策略来源；旧存档缺失时按玩家策略处理。 */
-  strategySource?: 'player' | 'engineer';
+  strategySource?: 'player' | 'engineer' | 'perfect';
   practiceProgram: PracticeProgram;
   qualiApproach: QualiApproach;
   /** 轮胎策略：各段配方；'auto' 由策略组自动选择 */

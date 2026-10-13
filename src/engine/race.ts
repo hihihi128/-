@@ -618,7 +618,7 @@ function playerCars(session: LiveRaceState): LiveRaceCar[] {
 }
 
 function playerControlledCars(session: LiveRaceState): LiveRaceCar[] {
-  return playerCars(session).filter(c => c.plan.strategySource !== 'engineer');
+  return playerCars(session).filter(c => c.plan.strategySource !== 'engineer' && c.plan.strategySource !== 'perfect');
 }
 
 function expectedLivePositions(state: GameState): Record<string, number> {

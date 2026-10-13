@@ -126,7 +126,7 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(result.message).toContain('完美 AI 策略');
     expect(env.generated.at(-1)?.options).toEqual({ proxyPreset: '完美策略副线', model: 'perfect-model' });
     expect(env.generated.at(-1)?.prompt).toContain('忽略车队策略部门水平');
-    expect(ctrl.stateAt()!.weekend!.plans.c1.strategySource).toBe('engineer');
+    expect(ctrl.stateAt()!.weekend!.plans.c1.strategySource).toBe('perfect');
   });
 
   it('生成前注入实时数据提示词', async () => {

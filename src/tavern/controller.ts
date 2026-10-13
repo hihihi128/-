@@ -25,6 +25,7 @@ import { buildStatePrompt } from '../engine/prompt';
 import { applyAiCommands, describeLog, parseAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
 import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
+import { strategyOptions } from '../engine/strategy';
 import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, StaffRole } from '../engine/types';
 import { hashString, money, round1 } from '../engine/util';
 import { buildView, type GameView } from '../engine/view';
@@ -525,25 +526,32 @@ export class F1Controller {
     if (this.env.isGenerating()) return { ok: false, message: '当前正在生成内容，请稍后再请求工程师建议' };
     const state = this.stateAt();
     if (!state?.weekend) return { ok: false, message: '比赛周末开始后才能请求工程师建议' };
+    if (state.weekend.liveRace) return { ok: false, message: '比赛进行中，不能重新生成赛前策略' };
     const view = buildView(state);
     const driverView = view.weekend?.drivers.find(driver => driver.driverId === driverId);
     const driver = state.drivers[driverId];
     const team = state.teams[state.meta.playerTeamId];
     if (!driverView || !driver || driver.teamId !== team.id) return { ok: false, message: '找不到本队正式车手' };
-    if (!driverView.options.length) return { ok: false, message: '当前没有可用的干地策略方案' };
+    const car = team.cars.find(value => value.driverId === driverId);
+    const round = state.calendar[state.weekend.roundIndex];
+    const track = round ? state.tracks[round.trackId] : null;
+    const perfectOptions = perfect && car && track
+      ? strategyOptions(state.rules, track, track.laps, { driverTyre: driver.attrs.tyre, carTyre: carRatings(team, car, state.rules, 'disclosed').tyre, paceMode: 'balanced', knowledge: state.weekend.setup[driverId]?.tyreKnowledge ?? 0 }, { wet: false, sprint: false }).slice(0, 6)
+      : null;
+    const availableOptions = perfectOptions ?? driverView.options;
+    if (!availableOptions.length) return { ok: false, message: '当前没有可用的干地策略方案' };
 
     const slot = team.cars.find(car => car.driverId === driverId)?.slot ?? 1;
     const engineer = raceEngineerFor(team, slot);
     const decisionSkill = strategyDecisionSkill(team, slot);
     const level = perfect ? 0 : decisionSkill >= 90 ? 0 : decisionSkill >= 82 ? 1 : decisionSkill >= 73 ? 2 : decisionSkill >= 64 ? 3 : decisionSkill >= 55 ? 4 : 5;
     const labels = ['顶级', '优秀', '中游', '保守迟钝', '较差', '灾难级'];
-    const liveCar = state.weekend.liveRace?.kind === 'race' ? state.weekend.liveRace.cars[driverId] : undefined;
     const activeDriverIds = new Set(Object.values(state.teams).flatMap(currentTeam => currentTeam.cars.map(car => car.driverId).filter((id): id is string => !!id)));
     const qualifyingGrid = (state.weekend.qualifying?.grid ?? []).filter(id => activeDriverIds.has(id));
-    const gridPosition = liveCar?.grid ?? (qualifyingGrid.includes(driverId) ? qualifyingGrid.indexOf(driverId) + 1 : null);
+    const gridPosition = qualifyingGrid.includes(driverId) ? qualifyingGrid.indexOf(driverId) + 1 : null;
     const rainWindow = state.weekend.forecast.raceRainWindow ?? null;
     const rainTarget = rainWindow ? (rainWindow[0] + rainWindow[1]) / 2 : null;
-    const contextRanked = [...driverView.options].sort((a, b) => {
+    const contextRanked = [...availableOptions].sort((a, b) => {
       const score = (option: typeof a) => {
         if (rainTarget === null) return option.cost;
         const stopsBeforeRain = option.stints.slice(0, -1).reduce<{ laps: number; count: number }>((acc, laps) => ({ laps: acc.laps + laps, count: acc.count + (acc.laps + laps < rainTarget ? 1 : 0) }), { laps: 0, count: 0 }).count;
@@ -554,7 +562,7 @@ export class F1Controller {
     });
     const option = contextRanked[Math.min(level, contextRanked.length - 1)];
     const plan: Partial<DriverPlan> = {
-      strategySource: 'engineer',
+      strategySource: perfect ? 'perfect' : 'engineer',
       tyrePlan: [...option.compounds],
       paceMode: level >= 4 ? (level === 5 ? 'conserve' : 'push') : 'balanced',
       pitTiming: level >= 4 ? 'late' : 'standard',
