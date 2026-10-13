@@ -27,7 +27,7 @@ describe('半雨胎与全雨胎', () => {
     expect(DEFAULT_RULES.tyres[DEFAULT_RULES.wetCompound].name).toBe('半雨胎');
     expect(DEFAULT_RULES.tyres[DEFAULT_RULES.fullWetCompound].name).toBe('全雨胎');
     expect(wetCompoundFor(DEFAULT_RULES, .45)).toBe(DEFAULT_RULES.wetCompound);
-    expect(wetCompoundFor(DEFAULT_RULES, .8)).toBe(DEFAULT_RULES.fullWetCompound);
+    expect(wetCompoundFor(DEFAULT_RULES, .9)).toBe(DEFAULT_RULES.fullWetCompound);
   });
 
   it('半雨胎适合潮湿赛道，全雨胎适合严重积水', () => {

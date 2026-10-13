@@ -23,6 +23,16 @@ describe('旧存档升级', () => {
     expect(state.rules.tyres.wet.name).toBe('全雨胎');
   });
 
+  it('旧自定义规则占用 wet 键时使用独立全雨胎键', () => {
+    const state = newTestGame(6);
+    delete (state.rules as Partial<typeof state.rules>).fullWetCompound;
+    state.rules.tyres.wet = { ...state.rules.tyres.medium, name: '自定义干胎' };
+    migrateState(state);
+    expect(state.rules.fullWetCompound).toBe('full_wet');
+    expect(state.rules.tyres.full_wet).toMatchObject({ name: '全雨胎', wet: true });
+    expect(state.rules.tyres.wet.name).toBe('自定义干胎');
+  });
+
   it('2025 规则存档补齐 2026 字段后可以生成视图并继续推进', () => {
     const raw = legacy();
     expect(raw.rules.puAllocation).toBeUndefined();

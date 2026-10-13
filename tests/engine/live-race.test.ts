@@ -68,6 +68,37 @@ describe('resumable live race', () => {
     expect(live.cars[aiIds[1]].pits).toBe(0);
   });
 
+  it('moves an automatic car from intermediates to full wets, then back to slicks as the track changes', () => {
+    const ready = raceReady(709);
+    const state = act(ready, { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    const car = Object.values(live.cars).find(candidate => !candidate.player)!;
+    for (const candidate of Object.values(live.cars)) candidate.player = false;
+    live.pendingDecision = null;
+    live.stage = 'ready';
+    live.wetness = .9;
+    live.surface = 'wet';
+    live.weatherTrajectory[live.completedLaps] = 1;
+    car.tyre = state.rules.wetCompound;
+    car.plan.strategySource = 'player';
+    car.plannedCompounds = [state.rules.wetCompound];
+    car.stints = [live.totalLaps];
+    car.stintIndex = 0;
+    car.tyreAge = 6;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(car.tyre).toBe(state.rules.fullWetCompound);
+
+    live.pendingDecision = null;
+    live.stage = 'ready';
+    live.wetness = .08;
+    live.surface = 'damp';
+    live.weatherTrajectory[live.completedLaps] = 0;
+    car.tyre = state.rules.wetCompound;
+    car.tyreAge = 6;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(state.rules.tyres[car.tyre].wet).toBe(false);
+  });
+
   it('does not stop too early or twice during one safety-car period', () => {
     const ready = raceReady();
     const aiId = Object.values(ready.teams).find(team => !team.isPlayer)!.cars[0].driverId!;

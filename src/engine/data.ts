@@ -383,8 +383,6 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
   }
   if (!rules.tyres[rules.wetCompound]) ctx.err('rules.wetCompound', `雨地配方「${rules.wetCompound}」未定义`);
   if (!rules.tyres[rules.fullWetCompound]) ctx.err('rules.fullWetCompound', `全雨胎配方「${rules.fullWetCompound}」未定义`);
-  if (rules.tyres[rules.wetCompound] && !rules.tyres[rules.wetCompound].wet) ctx.err('rules.wetCompound', '半雨胎配方必须标记为雨胎');
-  if (rules.tyres[rules.fullWetCompound] && !rules.tyres[rules.fullWetCompound].wet) ctx.err('rules.fullWetCompound', '全雨胎配方必须标记为雨胎');
   if (rules.aeroAllowanceByPosition.length === 0) {
     ctx.err('rules.aeroAllowanceByPosition', '风洞时长倍率表不能为空');
     rules.aeroAllowanceByPosition = [...DEFAULT_RULES.aeroAllowanceByPosition];

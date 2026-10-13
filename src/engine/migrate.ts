@@ -181,7 +181,9 @@ export function migrateState(state: GameState): GameState {
     team.aduoTier ??= 0;
   }
   if (!state.rules.fullWetCompound) {
-    state.rules.fullWetCompound = DEFAULT_RULES.fullWetCompound;
+    const defaultKey = DEFAULT_RULES.fullWetCompound;
+    const existing = state.rules.tyres[defaultKey];
+    state.rules.fullWetCompound = existing && (!existing.wet || defaultKey === state.rules.wetCompound) ? 'full_wet' : defaultKey;
     state.rules.tyres[state.rules.fullWetCompound] ??= deepClone(DEFAULT_RULES.tyres[DEFAULT_RULES.fullWetCompound]);
   }
   if (state.rules.tyres[state.rules.wetCompound]?.name === '雨胎') state.rules.tyres[state.rules.wetCompound].name = '半雨胎';

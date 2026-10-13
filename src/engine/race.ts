@@ -701,7 +701,7 @@ export function createRaceSession(
     const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
     const wet = trajectory[0] > 0.18;
     const compounds = wet
-      ? [wetCompoundFor(rules, trajectory[0])]
+      ? [wetCompoundFor(rules, .55)]
       : kind === 'sprint'
         ? [plan.sprintTyre !== 'auto' && rules.tyres[plan.sprintTyre] ? plan.sprintTyre : rules.dryCompounds[1] ?? rules.dryCompounds[0]]
         : plan.tyrePlan !== 'auto' && !validatePlan(rules, plan.tyrePlan, false)
@@ -768,18 +768,27 @@ function createWindow(session: LiveRaceState, reasons: RaceDecisionWindow['reaso
 }
 
 export function wetCompoundFor(rules: GameState['rules'], wetness: number): Compound {
-  return wetness >= .68 ? rules.fullWetCompound : rules.wetCompound;
+  return wetness >= .82 ? rules.fullWetCompound : rules.wetCompound;
 }
 
 export function tyreWeatherPenalty(rules: GameState['rules'], compound: Compound, wetness: number): number {
-  if (compound === rules.fullWetCompound) return Math.max(0, .52 - wetness) * 5;
-  if (compound === rules.wetCompound) return Math.max(0, .28 - wetness) * 4 + Math.max(0, wetness - .72) * 5;
+  if (compound === rules.fullWetCompound) return Math.max(0, .62 - wetness) * 6;
+  if (compound === rules.wetCompound) return Math.max(0, .34 - wetness) * 7 + Math.max(0, wetness - .72) * 6;
   if (rules.tyres[compound]?.wet) return Math.max(0, .4 - wetness) * 4;
   return Math.max(0, wetness - .2) * 8;
 }
 
 function tyreMismatch(rules: GameState['rules'], car: LiveRaceCar, wetness: number): number {
   return tyreWeatherPenalty(rules, car.tyre, wetness);
+}
+
+function weatherTyreCost(rules: GameState['rules'], compound: Compound, wetness: number): number {
+  return (rules.tyres[compound]?.pace ?? 0) + tyreWeatherPenalty(rules, compound, wetness);
+}
+
+function weatherTyreChangeWorthwhile(rules: GameState['rules'], current: Compound, target: Compound, wetness: number): boolean {
+  if (target === current || (!rules.tyres[current]?.wet && !rules.tyres[target]?.wet)) return false;
+  return weatherTyreCost(rules, target, wetness) + .25 < weatherTyreCost(rules, current, wetness);
 }
 
 function replacementCompound(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound {
@@ -853,9 +862,7 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const planned = car.stintIndex < car.plannedCompounds.length - 1;
   const engineerOverride = applyEngineerWeatherDecision(state, session, car);
   const targetCompound = replacementCompound(state, session, car);
-  const currentMismatch = tyreMismatch(state.rules, car, session.wetness);
-  const targetMismatch = tyreMismatch(state.rules, { ...car, tyre: targetCompound }, session.wetness);
-  const weatherStop = engineerOverride || (car.tyreAge >= 2 && targetCompound !== car.tyre && currentMismatch > 1.2 && targetMismatch + .35 < currentMismatch);
+  const weatherStop = engineerOverride || (car.tyreAge >= 2 && weatherTyreChangeWorthwhile(state.rules, car.tyre, targetCompound, session.wetness));
   const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
   const neutralActive = session.scLeft > 0 || session.vscLeft > 0;
   if (!neutralActive) car.neutralStopTaken = false;
@@ -1056,7 +1063,11 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     for (const car of Object.values(session.cars).filter(c => c.player)) { const pos = session.order.indexOf(car.driverId); session.lapChart[car.driverId]?.push(pos < 0 ? 0 : pos + 1); }
     const fastestCar = liveCars(session).filter(c => c.bestLap !== null).sort((a, b) => (a.bestLap ?? Infinity) - (b.bestLap ?? Infinity))[0];
     if (fastestCar && fastestCar.bestLap !== null) session.fastestLap = { driverId: fastestCar.driverId, time: round3(fastestCar.bestLap), lap };
-    const plannedPlayer = playerControlledCars(session).filter(c => c.repairPending || (c.stayOutUntilLap < lap && (c.stintIndex < c.plannedCompounds.length - 1 && c.tyreAge >= pitTriggerLap(c) || tyreMismatch(rules, c, session.wetness) > 1.2)));
+    const plannedPlayer = playerControlledCars(session).filter(c => {
+      const target = replacementCompound(state, session, c);
+      const weatherChange = weatherTyreChangeWorthwhile(rules, c.tyre, target, session.wetness);
+      return c.repairPending || (c.stayOutUntilLap < lap && (c.stintIndex < c.plannedCompounds.length - 1 && c.tyreAge >= pitTriggerLap(c) || weatherChange));
+    });
     const reasons: RaceDecisionWindow['reasons'] = [];
     if (plannedPlayer.length) reasons.push('pit_opportunity');
     const weatherChanged = Math.abs(session.wetness - previousWetness) > .18 || session.surface !== previousSurface;
