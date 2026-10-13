@@ -14,7 +14,7 @@ const secondaryConfigured = computed(() => {
 
 watch(() => [event.value?.id, event.value?.status] as const, ([id, status], previous) => {
   const [previousId, previousStatus] = previous ?? [];
-  if (id && status === 'awaiting_player' && (id !== previousId || previousStatus !== 'awaiting_player')) {
+  if (id && status === 'awaiting_player' && event.value?.category === 'problem' && (id !== previousId || previousStatus !== 'awaiting_player')) {
     store.randomEventOpen = true;
     answer.value = '';
     failedMainReply.value = null;
@@ -58,15 +58,15 @@ function effectLabel(effect: NonNullable<typeof event.value>['effects'][number])
       </span>
     </div>
     <b>{{ event.title }}</b>
-    <div class="tiny muted">第 {{ event.completedDialogueTurns + (event.status === 'resolved' || event.status === 'unresolved' ? 0 : 1) }}/{{ event.totalDialogueTurns }} 轮 · {{ event.category === 'routine' ? '日常小事' : '需要处理的问题' }}</div>
+    <div v-if="event.kind !== 'none'" class="tiny muted">第 {{ event.completedDialogueTurns + (event.status === 'resolved' || event.status === 'unresolved' ? 0 : 1) }}/{{ event.totalDialogueTurns }} 轮 · {{ event.category === 'routine' ? '日常小事' : '需要处理的问题' }}</div>
     <div class="small">{{ event.status === 'resolved' || event.status === 'unresolved' ? event.outcomeSummary : event.prompt }}</div>
     <div v-if="event.effects.length" class="row wrap"><span v-for="(effect, index) in event.effects" :key="index" class="badge">{{ effectLabel(effect) }}</span></div>
     <button v-if="event.kind !== 'none'" class="small" @click="store.randomEventOpen = true">{{ event.status === 'awaiting_player' ? '处理事件' : '查看事件记录' }}</button>
   </div>
 
-  <div v-if="props.mode === 'modal' && store.randomEventOpen && event && event.kind !== 'none'" class="event-backdrop" role="presentation" @click.self="(event.status !== 'awaiting_player' || !!event.generationError) && (store.randomEventOpen = false)">
-    <section ref="dialog" class="event-modal stack" role="dialog" aria-modal="true" aria-label="随机事件" tabindex="-1" @keydown.esc="(event.status !== 'awaiting_player' || !!event.generationError) && (store.randomEventOpen = false)">
-      <div class="spread"><div><div class="tiny muted">主聊天叙述 · 副 API 判定</div><h2>{{ event.title }}</h2></div><button v-if="event.status !== 'awaiting_player' || event.generationError" aria-label="关闭" @click="store.randomEventOpen = false">×</button></div>
+  <div v-if="props.mode === 'modal' && store.randomEventOpen && event && event.kind !== 'none'" class="event-backdrop" role="presentation" @click.self="store.randomEventOpen = false">
+    <section ref="dialog" class="event-modal stack" role="dialog" aria-modal="true" aria-label="随机事件" tabindex="-1" @keydown.esc="store.randomEventOpen = false">
+      <div class="spread"><div><div class="tiny muted">主聊天叙述 · 副 API 判定</div><h2>{{ event.title }}</h2></div><button aria-label="关闭" @click="store.randomEventOpen = false">×</button></div>
       <div class="tiny muted">{{ event.category === 'routine' ? '日常小事' : '需要处理的问题' }} · 第 {{ Math.min(event.completedDialogueTurns + 1, event.totalDialogueTurns) }}/{{ event.totalDialogueTurns }} 轮</div>
       <div v-if="!event.id.startsWith('legacy-random-event-') || event.status === 'awaiting_player'" class="notice warn">{{ event.prompt }}</div>
       <div v-if="event.generationError" class="tiny muted">随机事件准备、剧情或副 API 判定失败：{{ event.generationError }}</div>
@@ -78,7 +78,7 @@ function effectLabel(effect: NonNullable<typeof event.value>['effects'][number])
         <div v-if="event.dialogue.length" class="stack-s"><div v-for="(turn, index) in event.dialogue" :key="index" class="dialog-line"><b>第 {{ index + 1 }} 轮</b><div>你：{{ turn.player }}</div><div>剧情：{{ turn.assistant }}</div></div></div>
         <label class="field"><span>{{ event.completedDialogueTurns === 0 ? '你的处理方案' : '你的后续回应' }}</span><textarea v-model="answer" rows="5" maxlength="1000" :placeholder="event.completedDialogueTurns === 0 ? '说明你的决定、执行方式和可接受代价……' : '根据上一轮剧情继续回应……'" :disabled="store.busy" /></label>
         <div v-if="failedMainReply" class="dialog-line"><b>上次主 API 剧情（副 API 判定失败）</b><div>{{ failedMainReply }}</div></div>
-        <div v-else-if="event.mainReply" class="dialog-line"><b>上次主 API 剧情（可重新提交）</b><div>{{ event.mainReply }}</div></div>
+        <div v-else-if="event.generationError && event.mainReply" class="dialog-line"><b>上次主 API 剧情（副 API 判定失败）</b><div>{{ event.mainReply }}</div></div>
         <div v-if="!secondaryConfigured" class="notice warn small">尚未配置副 API。请前往“存档与设置”配置，或跳过本次事件。</div>
         <div class="spread"><span class="tiny muted">提交后由主 API 在正常聊天中继续剧情；最后一轮结束后，副 API 才会判定效果。</span><div class="row"><button class="small" :disabled="store.busy" @click="skip">跳过（无效果）</button><button class="primary" :disabled="store.busy || !answer.trim() || !secondaryConfigured" @click="submit">{{ event.completedDialogueTurns + 1 >= event.totalDialogueTurns ? '提交并完成剧情' : '提交并继续剧情' }}</button></div></div>
       </template>

@@ -76,7 +76,10 @@ export function migrateState(state: GameState): GameState {
   state.randomEvents.weekKey ??= null;
   state.randomEvents.weeklyQuota ??= 0;
   state.randomEvents.weeklyStarted ??= 0;
-  const hadRoutineEventWeight = state.rules.randomEvents?.routineWeight !== undefined;
+  const legacyRandomRules = state.rules.randomEvents;
+  const hadRoutineEventWeight = legacyRandomRules?.routineWeight !== undefined;
+  const legacyEventsDisabled = !!legacyRandomRules && legacyRandomRules.routineWeight === undefined
+    && legacyRandomRules.driverInjuryWeight === 0 && legacyRandomRules.windTunnelWeight === 0 && legacyRandomRules.partIssueWeight === 0;
   for (let index = 0; index < state.randomEvents.history.length; index++) {
     const record = state.randomEvents.history[index];
     record.id ??= `legacy-random-event-${record.roundKey}-${index}`;
@@ -89,8 +92,8 @@ export function migrateState(state: GameState): GameState {
     record.effects ??= [];
     record.generationError ??= null;
     record.category ??= record.kind.startsWith('routine_') ? 'routine' : 'problem';
-    record.totalDialogueTurns ??= 2;
-    record.completedDialogueTurns ??= record.mainReply ? 1 : 0;
+    record.totalDialogueTurns ??= ['none', 'resolved', 'unresolved'].includes(record.status) ? 1 : 2;
+    record.completedDialogueTurns ??= ['none', 'resolved', 'unresolved'].includes(record.status) ? record.totalDialogueTurns : record.playerAnswer && record.mainReply ? 1 : 0;
     record.dialogue ??= record.playerAnswer && record.mainReply ? [{ player: record.playerAnswer, assistant: record.mainReply }] : [];
   }
   if (state.randomEvents.current) {
@@ -106,8 +109,8 @@ export function migrateState(state: GameState): GameState {
     record.effects ??= [];
     record.generationError ??= null;
     record.category ??= record.kind.startsWith('routine_') ? 'routine' : 'problem';
-    record.totalDialogueTurns ??= 2;
-    record.completedDialogueTurns ??= record.mainReply ? 1 : 0;
+    record.totalDialogueTurns ??= ['none', 'resolved', 'unresolved'].includes(record.status) ? 1 : 2;
+    record.completedDialogueTurns ??= ['none', 'resolved', 'unresolved'].includes(record.status) ? record.totalDialogueTurns : record.playerAnswer && record.mainReply ? 1 : 0;
     record.dialogue ??= record.playerAnswer && record.mainReply ? [{ player: record.playerAnswer, assistant: record.mainReply }] : [];
   }
   for (const driver of Object.values(state.drivers ?? {})) driver.affinity ??= 50;
@@ -134,7 +137,11 @@ export function migrateState(state: GameState): GameState {
   fillMissing(state.rules.haas as unknown as Record<string, unknown>, DEFAULT_RULES.haas as unknown as Record<string, unknown>);
   fillMissing(state.rules.williams as unknown as Record<string, unknown>, DEFAULT_RULES.williams as unknown as Record<string, unknown>);
   fillMissing(state.rules.randomEvents as unknown as Record<string, unknown>, DEFAULT_RULES.randomEvents as unknown as Record<string, unknown>);
-  if (!hadRoutineEventWeight) {
+  if (legacyEventsDisabled) {
+    state.rules.randomEvents.routineWeight = 0;
+    state.rules.randomEvents.minPerWeek = 0;
+    state.rules.randomEvents.maxPerWeek = 0;
+  } else if (!hadRoutineEventWeight) {
     const randomRules = state.rules.randomEvents;
     const problemWeight = randomRules.driverInjuryWeight + randomRules.windTunnelWeight + randomRules.partIssueWeight;
     randomRules.routineWeight = problemWeight > 0 ? problemWeight * 4 : 80;

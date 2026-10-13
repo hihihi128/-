@@ -680,6 +680,7 @@ export class F1Controller {
 
   async dispatch(action: Action): Promise<Outcome> {
     if (this.busy) return { ok: false, message: '上一个操作还在处理中' };
+    if (this.adjudicatingRandomEventId) return { ok: false, message: '副 API 正在判定随机事件，请等待判定结束后再操作' };
     if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成回复，请等待生成结束后再操作' };
     const floor = this.latestFloor();
     let cur = this.store.resolve(floor);
@@ -856,7 +857,7 @@ export class F1Controller {
       nextEvent.completedDialogueTurns += 1;
       nextEvent.status = 'awaiting_player';
       nextEvent.playerAnswer = null;
-      nextEvent.mainReply = mainReply;
+      nextEvent.mainReply = null;
       nextEvent.generationError = null;
       const history = next.randomEvents?.history.find(record => record.id === nextEvent.id);
       if (history && history !== nextEvent) Object.assign(history, deepClone(nextEvent));
@@ -878,20 +879,10 @@ export class F1Controller {
       const latest = this.randomEventNarrationCurrent(pending, id);
       const visibleReply = stripAiCommands(stripHud(this.env.getMessage(id)?.message ?? '')).trim();
       if (!latest || visibleReply !== mainReply) {
-        // The edited assistant floor may not carry a persisted revision yet.
-        // Restore from the validated narration snapshot instead of looking the
-        // latest floor up again, otherwise the event can remain stranded in
-        // awaiting_narration after its prose changes during adjudication.
-        const retry = deepClone(latest?.state ?? current.state);
-        const retryEvent = retry.randomEvents?.current;
-        if (retryEvent?.id === pending.eventId && retryEvent.status === 'awaiting_narration') {
-          retryEvent.status = 'awaiting_player';
-          retryEvent.playerAnswer = null;
-          retryEvent.mainReply = mainReply;
-          retryEvent.generationError = '副 API 判定期间聊天内容发生变化；旧判定已安全丢弃，请重新提交。';
-          this.store.commit(retry, { floor: Math.max(0, id), kind: 'ui', label: `${retryEvent.title}：叙述或判定失败，可重试` });
-          this.notify('random_event');
-        } else this.restoreRandomEventForRetry(pending.eventId, '副 API 判定期间聊天内容发生变化；旧判定已安全丢弃，请重新提交。', mainReply);
+        // Never commit the pre-adjudication snapshot here. A newer action may
+        // already own the latest state, and restoring the old snapshot would
+        // silently roll that action back.
+        this.restoreRandomEventForRetry(pending.eventId, '副 API 判定期间聊天内容发生变化；旧判定已安全丢弃，请重新提交。', mainReply);
         return;
       }
       const next = deepClone(latest.state);
@@ -900,7 +891,14 @@ export class F1Controller {
       nextEvent.dialogue.push({ player: pending.answer, assistant: mainReply });
       nextEvent.completedDialogueTurns += 1;
       nextEvent.mainReply = mainReply;
-      const applied = applyRandomEventResolution(next, pending.eventId, resolution.outcome, resolution.summary, resolution.effects);
+      const effects = nextEvent.category === 'routine'
+        ? resolution.effects.filter(effect => {
+            if (effect.op !== 'affinity' || Math.abs(effect.delta) < 0.05 || Math.abs(effect.delta) > 0.1 || !effect.targetId) return false;
+            const team = next.teams[next.meta.playerTeamId];
+            return next.drivers[effect.targetId]?.teamId === team.id || Object.values(team.staff).some(person => person.id === effect.targetId);
+          }).slice(0, 1)
+        : resolution.effects;
+      const applied = applyRandomEventResolution(next, pending.eventId, resolution.outcome, resolution.summary, effects);
       if (!applied.ok) throw new Error(applied.message);
       this.store.commit(next, { floor: Math.max(0, id), kind: 'ui', label: `${current.event.title}：${resolution.outcome === 'resolved' ? '已解决' : '未解决'}` });
       this.notify('random_event');
@@ -1453,7 +1451,7 @@ export class F1Controller {
   private async maybeStartRandomEventAfterChat(id: number): Promise<void> {
     if (this.preparingWeeklyRandomEvent || this.busy || this.env.isGenerating() || id !== this.latestFloor()) return;
     const current = this.store.resolve(id);
-    if (!current || current.state.season.phase === 'preseason' || current.state.season.phase === 'season_end') return;
+    if (!current || current.state.season.phase !== 'pre_race') return;
     const active = current.state.randomEvents?.current;
     if (active && !['none', 'resolved', 'unresolved'].includes(active.status)) return;
     const next = deepClone(current.state);

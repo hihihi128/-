@@ -32,7 +32,7 @@ function weightedKind(state: GameState, rng: Rng): RandomEventKind {
   ];
   let roll = rng.next() * rows.reduce((sum, row) => sum + Math.max(0, row[1]), 0);
   for (const [kind, weight] of rows) { roll -= Math.max(0, weight); if (roll <= 0) return kind; }
-  return 'none';
+  return routineKinds[rng.int(0, routineKinds.length - 1)];
 }
 
 function fallbackContent(state: GameState, kind: RandomEventKind, rng: Rng): RandomEventContent {
@@ -84,7 +84,9 @@ export function beginRandomEventWeek(state: GameState, rng: Rng): void {
   closeUnansweredRandomEvent(state, '本周结束前没有完成该事件，因此没有产生额外效果。');
   state.randomEvents.weekKey = key;
   state.randomEvents.lastRoundKey = key;
-  state.randomEvents.weeklyQuota = rng.int(state.rules.randomEvents.minPerWeek ?? 3, state.rules.randomEvents.maxPerWeek ?? 4);
+  const configuredMin = Math.max(0, state.rules.randomEvents.minPerWeek ?? 3);
+  const configuredMax = Math.max(0, state.rules.randomEvents.maxPerWeek ?? 4);
+  state.randomEvents.weeklyQuota = configuredMax === 0 ? 0 : rng.int(Math.min(configuredMin, configuredMax), Math.max(configuredMin, configuredMax));
   state.randomEvents.weeklyStarted = 0;
   state.randomEvents.current = null;
 }

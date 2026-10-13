@@ -194,3 +194,4 @@ rules:
   #   partIssueWeight: 7
   #   minDialogueTurns: 2
   #   maxDialogueTurns: 3
+  # 若要关闭随机事件，请同时把 minPerWeek 与 maxPerWeek 设为 0。

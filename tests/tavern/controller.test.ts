@@ -292,6 +292,39 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ id: event.id, status: 'awaiting_player' });
   });
 
+  it('副 API 判定期间拒绝游戏动作，避免旧快照回滚新状态', async () => {
+    const eventEnv = new FakeTavern(cardWorldbook());
+    const eventCtrl = new F1Controller(eventEnv);
+    eventCtrl.init();
+    await eventCtrl.loadData();
+    expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 94 })).ok).toBe(true);
+    const save = JSON.parse(eventCtrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 3, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 1, maxDialogueTurns: 1 };
+    expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    eventCtrl.updateSettings({ engineerProxyPreset: '随机事件副线', engineerModel: 'event-model' });
+    let releaseJudgment!: (value: string) => void;
+    let calls = 0;
+    eventEnv.generateText = async () => {
+      calls += 1;
+      if (calls === 1) return '{"title":"训练安排","prompt":"如何安排训练？","answerOptions":["降低负荷"]}';
+      return new Promise<string>(resolve => { releaseJudgment = resolve; });
+    };
+    await eventEnv.userSays('聊聊训练。');
+    await eventEnv.aiReplies('先看本周计划。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const event = eventCtrl.stateAt()!.randomEvents!.current!;
+    expect((await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '降低负荷。', expectedRevisionId: eventCtrl.status().revisionId! })).ok).toBe(true);
+    await eventEnv.aiReplies('医疗主管确认新安排。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const blocked = await eventCtrl.dispatch({ type: 'CLEAR_NARRATION' });
+    expect(blocked).toMatchObject({ ok: false });
+    expect(blocked.message).toContain('判定随机事件');
+    releaseJudgment(`{"eventId":"${event.id}","outcome":"resolved","summary":"训练安排已经确认。","effects":[]}`);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ id: event.id, status: 'resolved' });
+  });
+
   it('副 API 未配置时使用本地事件，并允许无效果跳过', async () => {
     const eventEnv = new FakeTavern(cardWorldbook());
     const eventCtrl = new F1Controller(eventEnv);

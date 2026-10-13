@@ -38,6 +38,60 @@ ctrl.init();
 const panel = new PanelHost(document, panelHtml);
 w.F1Manager = createApi(ctrl, () => panel);
 
+type WeeklyFixtureCategory = 'routine' | 'problem';
+let weeklyFixtureCategory: WeeklyFixtureCategory = 'routine';
+
+/**
+ * Development-only deterministic responses for the real controller/panel path.
+ * They keep browser checks independent of external model credentials while the
+ * panel still talks to the same F1Manager API it uses in SillyTavern.
+ */
+const weeklyFixtureGenerateText = async (prompt: string) => {
+  const state = ctrl.stateAt();
+  const event = state?.randomEvents?.current;
+  if (prompt.includes('随机事件编剧')) {
+    return JSON.stringify({
+      title: weeklyFixtureCategory === 'routine' ? '工程师的午餐邀请' : '供应商检测争议',
+      prompt: weeklyFixtureCategory === 'routine'
+        ? '这是一件没有危机的日常小事，工程师想在午餐时交流近况。'
+        : '一批关键零件的检测结果不一致，需要你决定如何处理。',
+      answerOptions: weeklyFixtureCategory === 'routine'
+        ? ['接受邀请并聊聊近况', '礼貌婉拒并另约时间']
+        : ['暂停使用并安排复查', '要求供应商立即说明'],
+    });
+  }
+  if (prompt.includes('随机事件裁判') && state && event) {
+    const team = state.teams[state.meta.playerTeamId];
+    const target = Object.values(team.staff)[0];
+    return JSON.stringify({
+      eventId: event.id,
+      outcome: 'resolved',
+      summary: weeklyFixtureCategory === 'routine' ? '交流顺利结束，彼此多了一点了解。' : '复查流程完成，车队已控制风险。',
+      effects: weeklyFixtureCategory === 'routine' && target?.id
+        ? [{ op: 'affinity', targetId: target.id, delta: 0.05, reason: '轻松交流增进了了解' }]
+        : [],
+    });
+  }
+  return '工程师建议采用这套方案，并根据赛道变化保留临场调整空间。';
+};
+
+/** Browser tests call this once, then interact through the visible dev page. */
+w.__f1mWeeklyEventFixture = {
+  configure: async ({ category = 'routine', turns = 2 }: { category?: WeeklyFixtureCategory; turns?: 2 | 3 } = {}) => {
+    weeklyFixtureCategory = category;
+    env.generateText = weeklyFixtureGenerateText;
+    ctrl.updateSettings({ engineerProxyPreset: 'dev-weekly-event-fixture', engineerModel: 'fixture-model' });
+    if (!ctrl.stateAt()) await ctrl.newGame({ playerTeamId: 'haas', seed: 7003 });
+    const saved = JSON.parse(ctrl.exportSave()!);
+    saved.state.season.phase = 'pre_race';
+    saved.state.rules.randomEvents = category === 'routine'
+      ? { minPerWeek: 3, maxPerWeek: 3, routineWeight: 1, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: turns, maxDialogueTurns: turns }
+      : { minPerWeek: 3, maxPerWeek: 3, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: turns, maxDialogueTurns: turns };
+    await ctrl.importSave(JSON.stringify(saved));
+    return ctrl.status();
+  },
+};
+
 // 开发页专用：给没有中文字体的截图环境加载 dev/public/cjk.ttf（文件不存在时自动忽略）
 const FONT_CSS = `@font-face{font-family:'Noto Sans CJK SC';src:url('${location.origin}/cjk.ttf');font-weight:100 900;font-style:normal}@font-face{font-family:'Noto Sans CJK SC';src:url('${location.origin}/cjk.ttf');font-weight:100 900;font-style:italic}.mono{font-family:ui-monospace,Menlo,Consolas,'Noto Sans CJK SC',monospace!important}`;
 function injectFont(doc: Document | null): void {
@@ -128,6 +182,11 @@ function renderChat(): void {
 function fakeAiText(): string {
   const s = ctrl.stateAt();
   if (!s) return '（模拟 AI）围场里一片忙碌，大家都在等待新领队的决定。';
+  const randomEvent = s.randomEvents?.current;
+  if (randomEvent?.status === 'awaiting_narration') {
+    const turn = randomEvent.completedDialogueTurns + 1;
+    return `（模拟主 API）${randomEvent.title}正在自然推进。第 ${turn}/${randomEvent.totalDialogueTurns} 轮中，相关人员认真回应了你的安排，并等待你的下一步回应。`;
+  }
   const team = s.teams[s.meta.playerTeamId];
   const ev = s.narration.map(e => `「${e.title}」`).join('、');
   const d = team.cars[0]?.driverId;
