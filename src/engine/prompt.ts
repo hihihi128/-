@@ -123,7 +123,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   }
   if (state.audi) {
     const a = state.audi;
-    L.push(`【奥迪·副领队】比诺托负责技术，玩家处理围场政治。奥迪涡轮问题${a.turboFixed ? '已经通过 ADUO 解决' : `尚未解决，起步随机丢 ${rules.audi.startDropMin}–${rules.audi.startDropMax} 位`}。ADUO 进度 ${a.aduoProgress}% · 政治支持 ${a.politicalSupport}${a.alliance ? ` · 盟友 ${teamName(state, a.alliance)}` : ' · 尚未选择盟友'}。`);
+    L.push(`【奥迪·副领队】比诺托负责技术，玩家处理围场政治。奥迪涡轮问题${a.turboFixed ? '已经通过 ADUO 解决' : `尚未解决，起步随机丢 ${rules.audi.startDropMin}–${rules.audi.startDropMax} 位`}。ADUO 进度 ${a.aduoProgress}% · 政治支持 ${a.politicalSupport}${a.alliance ? ' · 已与阿斯顿·马丁、梅赛德斯和法拉利结盟' : ' · 尚未组成四队联盟'}。`);
   }
   if (state.meta.playerTeamId === 'cadillac') L.push('【凯迪拉克·新军】车队通过全球公开招募组建，没有额外特殊机制，但初始赛车性能很差，需要依靠研发和人才市场追赶。');
   if (state.fiaMeeting?.current) {

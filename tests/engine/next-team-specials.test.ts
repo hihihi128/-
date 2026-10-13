@@ -26,7 +26,7 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
   it('按车队初始化状态，凯迪拉克保持无特殊机制', () => {
     expect(game('aston_martin').astonMartin).toMatchObject({ aduoEngineArrived: false, aduoProgress: 0 });
     expect(game('racing_bulls').racingBulls).toMatchObject({ pendingRecall: null, activeRecall: null });
-    expect(game('audi').audi).toMatchObject({ turboFixed: false, alliance: null });
+    expect(game('audi').audi).toMatchObject({ turboFixed: false, alliance: false });
     const cadillac = game('cadillac');
     expect(cadillac.astonMartin).toBeNull();
     expect(cadillac.audi).toBeNull();
@@ -113,10 +113,10 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     for (const id of Object.values(session.cars).filter(car => car.teamId === 'audi').map(car => car.driverId)) {
       expect(session.order.indexOf(id)).toBeGreaterThanOrEqual(original.indexOf(id));
     }
-    expect(audiAlliance(state, 'mercedes').ok).toBe(true);
+    expect(audiAlliance(state).ok).toBe(true);
     state.rules.audi.progressPerRace = 100;
     afterNextTeamRace(state);
-    expect(state.audi).toMatchObject({ turboFixed: true, alliance: 'mercedes' });
+    expect(state.audi).toMatchObject({ turboFixed: true, alliance: true });
   });
 
   it('每三站打开 FIA 座谈会，辩论完成前阻止其它操作', () => {
@@ -161,5 +161,12 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     migrateState(legacyRace);
     legacyRace = advanceUntil(legacyRace, value => value.season.phase === 'post_race');
     expect(legacyRace.season.phase).toBe('post_race');
+  });
+
+  it('把旧奥迪单一盟友存档迁移为四队联盟', () => {
+    const state = game('audi');
+    (state.audi as unknown as { alliance: string }).alliance = 'mercedes';
+    migrateState(state);
+    expect(state.audi?.alliance).toBe(true);
   });
 });

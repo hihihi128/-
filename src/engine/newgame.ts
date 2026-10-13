@@ -238,7 +238,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
   } else if (state.audi) {
     newsText = `比诺托邀请 ${name} 担任奥迪副领队，负责围场政治。`;
     title = '四环入局：奥迪副领队';
-    detail = ['Jonathan Wheatley 在 2025 年底转往阿斯顿·马丁。技术背景出身的比诺托上位，并邀请玩家处理车队间政治斗争。', reasonLine, '奥迪自研动力单元存在涡轮问题，修复前起步会随机丢失两到三个位置。玩家可以与阿斯顿·马丁、梅赛德斯或法拉利结盟，共同争取 ADUO。', tail];
+    detail = ['Jonathan Wheatley 在 2025 年底转往阿斯顿·马丁。技术背景出身的比诺托上位，并邀请玩家处理车队间政治斗争。', reasonLine, '奥迪自研动力单元存在涡轮问题，修复前起步会随机丢失两到三个位置。玩家可以与阿斯顿·马丁、梅赛德斯和法拉利组成四队联盟，共同争取 ADUO。', tail];
   } else if (team.id === 'cadillac') {
     newsText = `新军凯迪拉克通过全球公开招募，任命 ${name} 为首任领队。`;
     title = '从零开始：凯迪拉克新军';

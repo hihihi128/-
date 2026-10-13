@@ -279,8 +279,7 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
     case 'RACING_BULLS_SELECT_RESERVE':
       return selectRacingBullsReserve(state, action.driverId);
     case 'AUDI_ALLIANCE':
-      if (!['aston_martin', 'mercedes', 'ferrari'].includes(action.partner)) return fail('未知的 ADUO 联盟伙伴');
-      return audiAlliance(state, action.partner);
+      return audiAlliance(state);
     case 'FIA_DEBATE':
       if (!['support', 'oppose', 'compromise'].includes(action.stance)) return fail('未知的 FIA 辩论立场');
       return fiaDebate(state, action.stance);

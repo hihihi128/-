@@ -110,9 +110,9 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
 
     <div v-if="au" class="card stack-s special-card">
       <div class="spread"><h3>奥迪 · 涡轮与 ADUO 联盟</h3><span class="badge" :class="au.turboFixed ? 'ok' : 'bad'">{{ au.turboFixed ? '涡轮问题已解决' : `起步随机掉 ${v.nextSpecialRules.audi.startDropMin}–${v.nextSpecialRules.audi.startDropMax} 位` }}</span></div>
-      <Bar label="ADUO 推进" :value="au.aduoProgress" color="#d33" :hint="au.alliance ? `盟友：${teamLabel(au.alliance)}` : '选择一个同样需要 ADUO 的盟友'" />
+      <Bar label="ADUO 推进" :value="au.aduoProgress" color="#d33" :hint="au.alliance ? '盟友：阿斯顿·马丁、梅赛德斯、法拉利' : '与三支车队组成 ADUO 联盟'" />
       <Bar label="政治支持" :value="au.politicalSupport" color="#555" />
-      <div v-if="!au.alliance" class="row"><button :disabled="store.busy" @click="act({ type: 'AUDI_ALLIANCE', partner: 'aston_martin' })">联合马丁</button><button :disabled="store.busy" @click="act({ type: 'AUDI_ALLIANCE', partner: 'mercedes' })">联合梅奔</button><button :disabled="store.busy" @click="act({ type: 'AUDI_ALLIANCE', partner: 'ferrari' })">联合法拉利</button></div>
+      <div v-if="!au.alliance" class="row"><button :disabled="store.busy" @click="act({ type: 'AUDI_ALLIANCE' })">组建四队 ADUO 联盟</button></div>
     </div>
 
     <div v-if="fia?.current" class="card stack-s fia-meeting">

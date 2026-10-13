@@ -15,7 +15,7 @@ export function initNextTeamSpecials(state: GameState, team: TeamState): void {
     alonsoFanAnger: 25, strollFavor: 65, lastActionRound: null, log: [],
   } : null;
   state.racingBulls = team.special === 'racing_bulls' ? { pendingRecall: null, activeRecall: null, log: [] } : null;
-  state.audi = team.special === 'audi' ? { turboFixed: false, aduoProgress: 0, alliance: null, politicalSupport: 35, lastActionRound: null, log: [] } : null;
+  state.audi = team.special === 'audi' ? { turboFixed: false, aduoProgress: 0, alliance: false, politicalSupport: 35, lastActionRound: null, log: [] } : null;
   state.fiaMeeting = { politicalCapital: state.rules.fiaMeeting.startPoliticalCapital, completed: 0, current: null, log: [] };
 }
 
@@ -153,15 +153,14 @@ function completeAudiTurbo(state: GameState): void {
   addNews(state, '研发', '奥迪获准使用 ADUO 解决涡轮问题，起步随机掉位风险已经消失。');
 }
 
-export function audiAlliance(state: GameState, partner: 'aston_martin' | 'mercedes' | 'ferrari'): { ok: boolean; message: string } {
+export function audiAlliance(state: GameState): { ok: boolean; message: string } {
   const a = state.audi;
   if (!a) return { ok: false, message: '当前车队没有奥迪联盟机制' };
-  if (a.alliance) return { ok: false, message: '奥迪已经选择了 ADUO 政治盟友' };
-  a.alliance = partner;
+  if (a.alliance) return { ok: false, message: '奥迪已经加入 ADUO 四队联盟' };
+  a.alliance = true;
   a.aduoProgress = Math.min(100, a.aduoProgress + state.rules.audi.allianceProgress);
   a.politicalSupport = round1(clamp(a.politicalSupport + 15, 0, 100));
-  const name = state.teams[partner]?.name ?? partner;
-  const text = `奥迪与${name}组成 ADUO 联盟，共同向 FIA 和其他车队施压。`;
+  const text = '奥迪与阿斯顿·马丁、梅赛德斯和法拉利组成 ADUO 四队联盟，共同向 FIA 和其他车队施压。';
   append(state, a, text); addNews(state, '政治', text); completeAudiTurbo(state);
   return { ok: true, message: text };
 }
@@ -209,7 +208,6 @@ export function fiaDebate(state: GameState, stance: 'support' | 'oppose' | 'comp
   team.mediaReputation = round1(clamp(team.mediaReputation + (success ? 2 : -2), 0, 100));
   if (current.issue === 'aduo' && stance !== 'oppose' && success) {
     if (state.astonMartin) { state.astonMartin.aduoProgress = Math.min(100, state.astonMartin.aduoProgress + 22); completeAstonAduo(state); }
-    if (state.audi) { state.audi.aduoProgress = Math.min(100, state.audi.aduoProgress + 25); completeAudiTurbo(state); }
     if (state.mercedes && !state.mercedes.aduoApproved) state.mercedes.aduoProgress = Math.min(100, state.mercedes.aduoProgress + 20);
   }
   const text = `${ISSUE_LABELS[current.issue]}辩论${success ? '取得优势' : '未能说服多数领队'}。政治资本变为 ${meeting.politicalCapital}。`;

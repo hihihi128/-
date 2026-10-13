@@ -1050,7 +1050,7 @@ export interface RacingBullsState {
 export interface AudiState {
   turboFixed: boolean;
   aduoProgress: number;
-  alliance: 'aston_martin' | 'mercedes' | 'ferrari' | null;
+  alliance: boolean;
   politicalSupport: number;
   lastActionRound: string | null;
   log: Array<{ at: string; text: string }>;
@@ -1249,7 +1249,7 @@ export type Action =
   | { type: 'RED_BULL_RETAIN_GP' }
   | { type: 'ASTON_CRISIS'; strategy: 'pressure_honda' | 'mediate' | 'push_newey' }
   | { type: 'RACING_BULLS_SELECT_RESERVE'; driverId: string }
-  | { type: 'AUDI_ALLIANCE'; partner: 'aston_martin' | 'mercedes' | 'ferrari' }
+  | { type: 'AUDI_ALLIANCE' }
   | { type: 'FIA_DEBATE'; stance: 'support' | 'oppose' | 'compromise' }
   | { type: 'SWAP_DRIVER'; slot: number; driverId: string }
   | { type: 'CLEAR_NARRATION' };

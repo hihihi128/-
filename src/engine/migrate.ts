@@ -37,6 +37,7 @@ export function migrateState(state: GameState): GameState {
   if (state.astonMartin === undefined) state.astonMartin = null;
   if (state.racingBulls === undefined) state.racingBulls = null;
   if (state.audi === undefined) state.audi = null;
+  if (state.audi && typeof state.audi.alliance !== 'boolean') state.audi.alliance = state.audi.alliance !== null;
   state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, log: [] };
   if (state.mclaren) state.mclaren.weeksTotal ??= state.mclaren.weeksLeft;
   state.rules.astonMartin ??= deepClone(DEFAULT_RULES.astonMartin);

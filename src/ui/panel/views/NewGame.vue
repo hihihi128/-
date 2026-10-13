@@ -151,7 +151,7 @@ onMounted(load);
     <div v-else-if="special === 'audi'" class="card notice special-team small stack-s">
       <b>奥迪 · 涡轮与 ADUO 联盟</b>
       <div>比诺托负责技术，玩家作为副领队处理围场政治。</div>
-      <ul class="tiny"><li>修复涡轮前，两台车起步会随机丢失 {{ report?.specialRules?.audi.startDropMin ?? 2 }}–{{ report?.specialRules?.audi.startDropMax ?? 3 }} 个位置。</li><li>可与马丁、梅奔或法拉利结盟，共同向 FIA 争取 ADUO。</li></ul>
+      <ul class="tiny"><li>修复涡轮前，两台车起步会随机丢失 {{ report?.specialRules?.audi.startDropMin ?? 2 }}–{{ report?.specialRules?.audi.startDropMax ?? 3 }} 个位置。</li><li>可与马丁、梅奔和法拉利组成四队联盟，共同向 FIA 争取 ADUO。</li></ul>
     </div>
     <div v-else-if="selectedTeam?.id === 'cadillac'" class="card notice special-team small stack-s">
       <b>凯迪拉克 · 从零开始</b>
