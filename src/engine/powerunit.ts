@@ -56,6 +56,14 @@ export function recordPuFit(
   if (!driver) return '';
   ensure(driver, partType);
   const pool = driver.puPool![partType];
+  const car = driver.teamId ? state.teams[driver.teamId]?.cars.find(candidate => candidate.driverId === driverId) : undefined;
+  if ((partType === 'power_unit' || partType === 'ers') && car) {
+    car.puWear ??= {};
+    car.puWearPool ??= {};
+    const wearPool = car.puWearPool[partType] ??= {};
+    if (opts.fresh) wearPool[specId] = 0;
+    car.puWear[partType] = { specId, wear: wearPool[specId] ?? 0 };
+  }
   if (opts.replaced) {
     const i = pool.indexOf(opts.replaced);
     if (i >= 0) pool.splice(i, 1);

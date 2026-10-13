@@ -238,10 +238,19 @@ function finalizeLiveRace(state: GameState, rng: Rng): Outcome {
     const car = state.teams[liveCar.teamId]?.cars.find(candidate => candidate.slot === liveCar.slot);
     if (!car) continue;
     car.puWear ??= {};
+    car.puWearPool ??= {};
     const iceSpecId = car.fitted.power_unit;
     const ersSpecId = car.fitted.ers;
-    if (iceSpecId) car.puWear.power_unit = { specId: iceSpecId, wear: Math.max(0, 100 - (liveCar.iceHealth ?? 100)) };
-    if (ersSpecId) car.puWear.ers = { specId: ersSpecId, wear: Math.max(0, 100 - (liveCar.electricalHealth ?? 100)) };
+    if (iceSpecId) {
+      const wear = Math.max(0, 100 - (liveCar.iceHealth ?? 100));
+      car.puWear.power_unit = { specId: iceSpecId, wear };
+      (car.puWearPool.power_unit ??= {})[iceSpecId] = wear;
+    }
+    if (ersSpecId) {
+      const wear = Math.max(0, 100 - (liveCar.electricalHealth ?? 100));
+      car.puWear.ers = { specId: ersSpecId, wear };
+      (car.puWearPool.ers ??= {})[ersSpecId] = wear;
+    }
   }
   const { result, extras } = completed;
   applyRaceOutcome(state, result, extras, live.expectedPositions, rng);
@@ -700,7 +709,13 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
         specs: [{ id, type: pt, version: 1, perf, rel: round1(clamp((best?.rel ?? 80) + 2, 1, 99)), verified: true, expected: null, introduced: `S${state.season.number}` }],
         stock: { [id]: pt === 'front_wing' ? 2 : 1 },
       };
-      for (const car of team.cars) car.fitted[pt] = id;
+      for (const car of team.cars) {
+        car.fitted[pt] = id;
+        if (pt === 'power_unit' || pt === 'ers') {
+          car.puWear = {};
+          car.puWearPool = {};
+        }
+      }
     }
     const cancelled = team.projects.filter(p => p.kind === 'design' || p.kind === 'manufacture');
     team.projects = team.projects.filter(p => !(p.kind === 'design' || p.kind === 'manufacture'));

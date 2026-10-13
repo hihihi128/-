@@ -76,6 +76,20 @@ describe('2026 规则', () => {
     expect(driver.puPool!.power_unit).toEqual(['legacy-first']);
   });
 
+  it('动力单元磨损随物理规格保存，新件和新赛季会重置', () => {
+    const s = newTestGame();
+    const car = s.teams.team_c.cars.find(car => car.driverId === 'c1')!;
+    const original = car.fitted.power_unit;
+    car.puWear = { power_unit: { specId: original, wear: 24 } };
+    car.puWearPool = { power_unit: { [original]: 24, alternate: 7 } };
+    recordPuFit(s, 'c1', 'power_unit', 'alternate');
+    expect(car.puWear.power_unit).toEqual({ specId: 'alternate', wear: 7 });
+    recordPuFit(s, 'c1', 'power_unit', original);
+    expect(car.puWear.power_unit).toEqual({ specId: original, wear: 24 });
+    recordPuFit(s, 'c1', 'power_unit', original, { fresh: true, replaced: original });
+    expect(car.puWear.power_unit).toEqual({ specId: original, wear: 0 });
+  });
+
   it('排位后的配额罚退留到下一站', () => {
     const s = advanceUntil(newTestGame(12), x => x.season.phase === 'post_race');
     s.drivers.c2.puUsed!.ers = 3;
@@ -86,8 +100,14 @@ describe('2026 规则', () => {
   it('新赛季重置配额', () => {
     let s: GameState = advanceUntil(newTestGame(77), x => x.season.phase === 'season_end');
     s.drivers.c1.puUsed!.power_unit = 9;
+    const car = s.teams.team_c.cars.find(car => car.driverId === 'c1')!;
+    car.puWear = { power_unit: { specId: car.fitted.power_unit, wear: 40 } };
+    car.puWearPool = { power_unit: { [car.fitted.power_unit]: 40 } };
     s = advanceUntil(s, x => x.season.phase === 'preseason');
     expect(s.drivers.c1.puUsed!.power_unit).toBe(1);
+    const nextCar = s.teams.team_c.cars.find(car => car.driverId === 'c1')!;
+    expect(nextCar.puWear).toEqual({});
+    expect(nextCar.puWearPool).toEqual({});
   });
 });
 

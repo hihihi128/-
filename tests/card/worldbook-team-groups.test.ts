@@ -30,10 +30,10 @@ const expectedReserves: Record<string, string[]> = {
   red_bull: ['角田裕毅'],
   ferrari: ['安东尼奥·乔维纳兹'],
   williams: ['卢克·布朗宁'],
-  racing_bulls: [], // 角田由红牛持有，资料中仅说明共享职责，不能重复建档。
+  racing_bulls: ['岩佐步梦'],
   aston_martin: ['杰克·克劳福德'],
   haas: ['杰克·杜汉', '平川亮'],
-  audi: [], // 官方替补尚未确认（TBC），不能用虚构人选填充。
+  audi: ['泰奥·普尔谢尔'],
   alpine: ['保罗·阿隆'],
   cadillac: ['周冠宇'],
 };
@@ -130,12 +130,12 @@ describe('车队策略组与技术赛道核心组世界书', () => {
     expect(ferrari).toContain('恩里科·瓜尔蒂耶里');
   });
 
-  it('按 2026 已知名单配置替补，并把奥迪的官方 TBC 例外写入资料', () => {
+  it('每支 2026 车队都有可用储备车手和对应人物资料', () => {
     for (const team of teams) {
       const reserves = drivers.filter(driver => driver.team === team.id && driver.role === 'reserve').map(driver => driver.name);
       expect(reserves, team.id).toEqual(expectedReserves[team.id]);
     }
-    expect(source('lore-staff-audi.md')).toContain('TBC');
+    expect(source('lore-staff-audi.md')).toContain('泰奥·普尔谢尔');
     expect(source('lore-staff-racing-bulls.md')).toContain('角田裕毅');
   });
 });

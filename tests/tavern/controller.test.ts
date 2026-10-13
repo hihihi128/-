@@ -254,6 +254,8 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds + 2);
     expect(optionsSeen[0]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
     expect(optionsSeen[1]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
+    await eventEnv.deleteFrom(eventEnv.lastMessageId());
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ id: event.id, status: 'awaiting_player' });
   });
 
   it('过期的聊天消息不会结算另一条随机事件', async () => {

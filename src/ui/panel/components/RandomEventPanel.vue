@@ -67,7 +67,7 @@ function effectLabel(effect: NonNullable<typeof event.value>['effects'][number])
     <section ref="dialog" class="event-modal stack" role="dialog" aria-modal="true" aria-label="随机事件" tabindex="-1" @keydown.esc="(event.status !== 'awaiting_player' || !!event.generationError) && (store.randomEventOpen = false)">
       <div class="spread"><div><div class="tiny muted">主聊天叙述 · 副 API 判定</div><h2>{{ event.title }}</h2></div><button v-if="event.status !== 'awaiting_player' || event.generationError" aria-label="关闭" @click="store.randomEventOpen = false">×</button></div>
       <div v-if="!event.id.startsWith('legacy-random-event-') || event.status === 'awaiting_player'" class="notice warn">{{ event.prompt }}</div>
-      <div v-if="event.generationError" class="tiny muted">随机事件剧情或副 API 判定失败：{{ event.generationError }}</div>
+      <div v-if="event.generationError" class="tiny muted">随机事件准备、剧情或副 API 判定失败：{{ event.generationError }}</div>
 
       <template v-if="event.status === 'awaiting_player'">
         <div v-if="event.answerOptions.length" class="row wrap">

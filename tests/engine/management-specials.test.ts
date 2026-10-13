@@ -38,6 +38,22 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     expect(williams.narration.at(-1)?.title).toContain('交接年');
   });
 
+  it('间隔周执行过管理行动后，比赛周不会误判为整站未行动', () => {
+    let alpine = game('alpine');
+    alpine = dispatch(alpine, { type: 'ALPINE_MANAGEMENT', strategy: 'back_colapinto' }, { now: 1 }).state;
+    const alpineSatisfaction = alpine.alpine!.briatoreSatisfaction;
+    alpine.season.week += 2;
+    afterManagementRace(alpine);
+    expect(alpine.alpine!.briatoreSatisfaction).toBe(alpineSatisfaction);
+
+    let williams = game('williams');
+    williams = dispatch(williams, { type: 'WILLIAMS_BUDGET_FOCUS', focus: 'reserve' }, { now: 1 }).state;
+    const confidence = williams.williams!.vowlesConfidence;
+    williams.season.week += 2;
+    afterManagementRace(williams);
+    expect(williams.williams!.vowlesConfidence).toBe(confidence + 1);
+  });
+
   it('阿尔派只能遵守布里亚托利研发方向，并在三种管理取舍中每站选择一次', () => {
     let state = game('alpine');
     expect(run(state, { type: 'START_PROJECT', partType: 'floor', ambition: 'standard' }).message).toContain('布里亚托利');

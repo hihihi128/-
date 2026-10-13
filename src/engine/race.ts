@@ -130,6 +130,8 @@ function ersFactor(team: TeamState, car: CarState, rules: GameState['rules']): n
 }
 
 function puWear(car: CarState, type: 'power_unit' | 'ers', specId: string | undefined): number {
+  const pooled = specId ? car.puWearPool?.[type]?.[specId] : undefined;
+  if (pooled !== undefined) return clamp(pooled, 0, 85);
   const stored = car.puWear?.[type];
   return stored && stored.specId === specId ? clamp(stored.wear, 0, 85) : 0;
 }

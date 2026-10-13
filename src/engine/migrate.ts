@@ -52,6 +52,26 @@ export function migrateState(state: GameState): GameState {
   if (state.alpine && state.alpine.penalizedPowerSpecs === undefined) state.alpine.penalizedPowerSpecs = {};
   if (state.haas === undefined) state.haas = null;
   if (state.williams === undefined) state.williams = null;
+  const currentRaceKey = state.season ? `${state.season.number}-${state.season.roundIndex}` : null;
+  const currentWeekKey = state.season ? `${state.season.number}-w${state.season.week}` : null;
+  const alpineRaceKey = state.alpine?.lastActionRound?.includes('-w') ? null : state.alpine?.lastActionRound;
+  const haasRaceKey = state.haas?.lastActionRound?.includes('-w') ? null : state.haas?.lastActionRound;
+  const williamsRaceKey = state.williams?.focusRound?.includes('-w') ? null : state.williams?.focusRound;
+  for (const special of [state.mercedes, state.redBull, state.astonMartin, state.alpine, state.haas]) {
+    if (special && currentRaceKey && currentWeekKey && special.lastActionRound === currentRaceKey) special.lastActionRound = currentWeekKey;
+  }
+  if (state.alpine) {
+    state.alpine.lastActionRace ??= alpineRaceKey;
+    if (state.alpine.lastActionRace === currentRaceKey && currentWeekKey) state.alpine.lastActionRound = currentWeekKey;
+  }
+  if (state.haas) {
+    state.haas.lastActionRace ??= haasRaceKey;
+    if (state.haas.lastActionRace === currentRaceKey && currentWeekKey) state.haas.lastActionRound = currentWeekKey;
+  }
+  if (state.williams) {
+    state.williams.focusRace ??= williamsRaceKey;
+    if (state.williams.focusRace === currentRaceKey && currentWeekKey) state.williams.focusRound = currentWeekKey;
+  }
   state.randomEvents ??= { lastRoundKey: null, current: null, history: [] };
   for (let index = 0; index < state.randomEvents.history.length; index++) {
     const record = state.randomEvents.history[index];

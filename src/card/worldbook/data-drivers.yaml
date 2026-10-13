@@ -344,6 +344,23 @@ drivers:
     traits: [新秀, 速度快, 经验不足]
     description: 红牛青训的新星，2026 年以 18 岁的年龄完成 F1 首秀。
 
+  - id: iwasa
+    name: 岩佐步梦
+    short: IWA
+    number: 15
+    nationality: 日本
+    age: 25
+    team: racing_bulls
+    role: reserve
+    attrs: { pace: 80, racecraft: 79, consistency: 80, tyre: 79, wet: 81, feedback: 82 }
+    potential: 86
+    morale: 68
+    ego: 34
+    salary: 0.9
+    contractEnd: 2026
+    traits: [红牛青训, Super Formula, 模拟器]
+    description: 红牛体系的测试与储备人选，熟悉本田动力和日本赛道；表达克制，但技术反馈结构清楚。
+
   # ── 阿斯顿·马丁（2026） ──
   - id: alonso
     name: 费尔南多·阿隆索
@@ -500,6 +517,24 @@ drivers:
     contractEnd: 2026
     traits: [F2 冠军, 稳定, 进步神速]
     description: 2024 年 F2 冠军，2025 年在索伯完成新秀赛季，与车队一起迎来奥迪时代。
+
+  - id: pourchaire
+    name: 泰奥·普尔谢尔
+    short: POU
+    number: 98
+    nationality: 法国
+    age: 22
+    team: audi
+    role: reserve
+    series: WEC
+    attrs: { pace: 81, racecraft: 80, consistency: 81, tyre: 80, wet: 79, feedback: 82 }
+    potential: 87
+    morale: 67
+    ego: 40
+    salary: 1.1
+    contractEnd: 2026
+    traits: [F2 冠军, WEC, 模拟器]
+    description: 前索伯青训与 F2 冠军，结合单座和耐力赛经验支援奥迪模拟器；等待官方长期席位安排。
 
   # ── 阿尔派（2026） ──
   - id: gasly

@@ -338,7 +338,7 @@ function applyPersonnelMorale(state: GameState, window: MarketWindow, beforeByTe
     ].filter(Boolean).join('；');
     const detail = `${team.name} 的合同市场人员变动已生效（${movement}）。磨合与交接使员工士气下降 ${penalty} 点。`;
     addNews(state, '人员变动', detail);
-    addNarration(state, 'market_personnel_morale', '阵容变动的磨合期', detail);
+    if (team.isPlayer) addNarration(state, 'market_personnel_morale', '阵容变动的磨合期', detail);
   }
 }
 

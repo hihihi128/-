@@ -267,6 +267,7 @@ export class F1Controller {
   private leadershipSyncQueue: Promise<void> = Promise.resolve();
   private specialNegotiation: ActiveNegotiation | null = null;
   private pendingRandomEventNarration: PendingRandomEventNarration | null = null;
+  private adjudicatingRandomEventId: string | null = null;
   /** 「继续生成」开始时被续写楼层的原文（用于只结算新续写的部分） */
   private continuing: { floor: number; text: string } | null = null;
   private listeners = new Set<(reason: string) => void>();
@@ -288,7 +289,8 @@ export class F1Controller {
     this.env.on(e.GENERATION_AFTER_COMMANDS, (type: string, _opts: unknown, dryRun: boolean) => this.onGenerationStart(type, dryRun));
     this.env.on(e.MESSAGE_EDITED, (id: number) => void this.onMessageEdited(Number(id)));
     this.env.on(e.CHAT_CHANGED, () => this.onChatChanged());
-    for (const ev of [e.MESSAGE_SWIPED, e.MESSAGE_DELETED, e.MESSAGE_SENT, e.MESSAGE_UPDATED]) {
+    this.env.on(e.MESSAGE_DELETED, () => this.onMessageDeleted());
+    for (const ev of [e.MESSAGE_SWIPED, e.MESSAGE_SENT, e.MESSAGE_UPDATED]) {
       this.env.on(ev, () => this.notify('chat'));
     }
     this.env.registerMacro(/\{\{f1m_state\}\}/gi, () => this.promptForLatest() ?? '');
@@ -812,6 +814,7 @@ export class F1Controller {
   }
 
   private randomEventNarrationCurrent(pending: PendingRandomEventNarration, assistantFloor: number): { state: GameState; event: RandomEventRecord } | null {
+    if (this.pendingRandomEventNarration !== pending) return null;
     if (this.env.chatId() !== pending.chatId || this.latestFloor() !== assistantFloor || assistantFloor !== pending.userFloor + 1) return null;
     const current = this.store.resolve(assistantFloor);
     const event = current?.state.randomEvents?.current;
@@ -843,6 +846,8 @@ export class F1Controller {
       this.restoreRandomEventForRetry(pending.eventId, '主 API 事件叙述超过 16 KiB', mainReply);
       return;
     }
+    if (this.adjudicatingRandomEventId === pending.eventId) return;
+    this.adjudicatingRandomEventId = pending.eventId;
     try {
       const resolutionRaw = await withTimeout(
         this.env.generateText(randomEventResolutionPrompt(current.state, current.event, pending.answer, mainReply), this.secondaryApiOptions()),
@@ -852,7 +857,11 @@ export class F1Controller {
       if (new TextEncoder().encode(resolutionRaw).byteLength > 16 * 1024) throw new Error('副 API 事件判定超过 16 KiB');
       const resolution = parseRandomEventResolution(resolutionRaw, pending.eventId);
       const latest = this.randomEventNarrationCurrent(pending, id);
-      if (!latest) return;
+      const visibleReply = stripAiCommands(stripHud(this.env.getMessage(id)?.message ?? '')).trim();
+      if (!latest || visibleReply !== mainReply) {
+        this.restoreRandomEventForRetry(pending.eventId, '副 API 判定期间聊天内容发生变化；旧判定已安全丢弃，请重新提交。', mainReply);
+        return;
+      }
       const next = deepClone(latest.state);
       const nextEvent = next.randomEvents?.current;
       if (!nextEvent || nextEvent.id !== pending.eventId) return;
@@ -864,6 +873,7 @@ export class F1Controller {
     } catch (error) {
       this.restoreRandomEventForRetry(pending.eventId, error instanceof Error ? error.message : '副 API 事件判定失败', mainReply);
     } finally {
+      if (this.adjudicatingRandomEventId === pending.eventId) this.adjudicatingRandomEventId = null;
       if (this.pendingRandomEventNarration === pending) this.pendingRandomEventNarration = null;
     }
   }
@@ -1331,10 +1341,21 @@ export class F1Controller {
     this.continuing = null;
     this.specialNegotiation = null;
     this.pendingRandomEventNarration = null;
+    this.adjudicatingRandomEventId = null;
     this.recoverInterruptedRandomEvent();
     this.env.uninject(INJECT_ID);
     void this.syncLeadershipWorldbook();
     this.notify('chat_changed');
+  }
+
+  private onMessageDeleted(): void {
+    const pending = this.pendingRandomEventNarration;
+    if (pending && !this.randomEventNarrationCurrent(pending, this.latestFloor())) {
+      this.pendingRandomEventNarration = null;
+      this.adjudicatingRandomEventId = null;
+    }
+    this.recoverInterruptedRandomEvent();
+    this.notify('chat');
   }
 
   onGenerationStart(type: string, dryRun?: boolean): void {
@@ -1361,12 +1382,23 @@ export class F1Controller {
   async onGenerationEnded(): Promise<void> {
     const last = this.latestFloor();
     const msg = this.env.getMessage(last);
-    if (msg?.role === 'assistant') await this.processAssistantMessage(last, { fallback: true, ignoreCommands: this.isPendingRandomEventNarrationMessage(last) });
+    if (msg?.role === 'assistant') {
+      const randomEventNarration = this.isPendingRandomEventNarrationMessage(last);
+      await this.processAssistantMessage(last, { fallback: true, ignoreCommands: randomEventNarration });
+      if (randomEventNarration) await this.settleRandomEventNarration(last);
+    }
   }
 
   async onMessageReceived(id: number, type?: string): Promise<void> {
     if (type === 'impersonate' || type === 'quiet' || type === 'first_message') return;
-    await this.processAssistantMessage(id, { type, ignoreCommands: this.isPendingRandomEventNarrationMessage(id) });
+    const pendingNarration = this.isPendingRandomEventNarrationMessage(id);
+    const orphanedEvent = !this.pendingRandomEventNarration && this.store.resolve(id)?.state.randomEvents?.current?.status === 'awaiting_narration';
+    if (orphanedEvent) {
+      const event = this.store.resolve(id)?.state.randomEvents?.current;
+      if (event) this.restoreRandomEventForRetry(event.id, '主 API 剧情被重新生成、切换或删除；请重新提交处理方案。', stripAiCommands(stripHud(this.env.getMessage(id)?.message ?? '')).trim() || null);
+    }
+    await this.processAssistantMessage(id, { type, ignoreCommands: pendingNarration || orphanedEvent });
+    if (orphanedEvent) return;
     await this.settleRandomEventNarration(id);
   }
 

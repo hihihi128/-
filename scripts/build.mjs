@@ -199,10 +199,10 @@ const staffLore = [
   { id: 75, team: 'red_bull', slug: 'red-bull', name: '红牛技术与赛道核心组', keys: ['詹皮耶罗·兰比亚塞', '兰比亚塞', '理查德·伍德', '角田裕毅'] },
   { id: 76, team: 'ferrari', slug: 'ferrari', name: '法拉利技术与赛道核心组', keys: ['法拉利核心组', '洛伊克·塞拉', '迭戈·通迪', '恩里科·瓜尔蒂耶里', '马泰奥·托尼纳利', '卡洛·桑蒂', '布莱恩·博齐', '安东尼奥·乔维纳兹'] },
   { id: 77, team: 'williams', slug: 'williams', name: '威廉姆斯技术与赛道核心组', keys: ['威廉姆斯核心组', '詹姆斯·厄文', '加埃唐·热戈', '卢克·布朗宁'] },
-  { id: 78, team: 'racing_bulls', slug: 'racing-bulls', name: '小红牛技术与赛道核心组', keys: ['小红牛核心组', '亚历山大·伊利奥普洛斯', '皮埃尔·哈梅林'] },
+  { id: 78, team: 'racing_bulls', slug: 'racing-bulls', name: '小红牛技术与赛道核心组', keys: ['小红牛核心组', '亚历山大·伊利奥普洛斯', '皮埃尔·哈梅林', '岩佐步梦'] },
   { id: 79, team: 'aston_martin', slug: 'aston-martin', name: '阿斯顿·马丁技术与赛道核心组', keys: ['阿斯顿·马丁核心组', '恩里科·卡尔迪莱', '克里斯·克罗宁', '加里·甘农', '杰克·克劳福德'] },
   { id: 80, team: 'haas', slug: 'haas', name: '哈斯技术与赛道核心组', keys: ['哈斯核心组', '安德烈亚·德佐尔多', '劳拉·穆勒', '罗南·奥黑尔', '杰克·杜汉', '平川亮'] },
-  { id: 81, team: 'audi', slug: 'audi', name: '奥迪技术与赛道核心组', keys: ['奥迪核心组', '史蒂文·佩特里克', '何塞·曼努埃尔·洛佩斯'] },
+  { id: 81, team: 'audi', slug: 'audi', name: '奥迪技术与赛道核心组', keys: ['奥迪核心组', '史蒂文·佩特里克', '何塞·曼努埃尔·洛佩斯', '泰奥·普尔谢尔'] },
   { id: 82, team: 'alpine', slug: 'alpine', name: '阿尔派技术与赛道核心组', keys: ['阿尔派核心组', '乔什·佩克特', '斯图尔特·巴洛', '保罗·阿隆'] },
   { id: 83, team: 'cadillac', slug: 'cadillac', name: '凯迪拉克技术与赛道核心组', keys: ['凯迪拉克核心组', '约翰·霍华德', '卡洛·帕塞蒂', '周冠宇'] },
 ];
@@ -221,6 +221,7 @@ const book = {
     ...leadershipLore.map((lore, index) => entry(lore.id, `[F1M管理层] [${lore.team}:${lore.role}] ${lore.name}`, readCard(`${wb}/lore-leadership-${lore.slug}.md`), { keys: lore.keys, order: 260 + index })),
     ...strategyLore.map((lore, index) => entry(lore.id, `[F1M策略组] [${lore.team}] ${lore.name}`, readCard(`${wb}/lore-strategy-${lore.slug}.md`), { keys: lore.keys, order: 300 + index })),
     ...staffLore.map((lore, index) => entry(lore.id, `[F1M核心组] [${lore.team}] ${lore.name}`, readCard(`${wb}/lore-staff-${lore.slug}.md`), { keys: lore.keys, order: 320 + index })),
+    entry(84, '[F1M资料] IndyCar 与 WEC 自由市场候选人', readCard(`${wb}/lore-market-candidates.md`), { keys: ['亚历克斯·帕洛', '约瑟夫·纽加登', '科尔顿·赫塔', '安东尼奥·福科', '厄尔·班伯', '迈克尔·坎农', '莉娜·加德', '凯尔·莫耶', '乌尔斯·库拉特勒'], order: 340 }),
   ],
 };
 

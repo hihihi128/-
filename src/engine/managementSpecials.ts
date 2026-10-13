@@ -4,6 +4,7 @@ import { clamp, pushCapped, round1, round2, stamp } from './util';
 
 const CAP = 12;
 const weekKey = (state: GameState) => `${state.season.number}-w${state.season.week}`;
+const raceKey = (state: GameState) => `${state.season.number}-${state.season.roundIndex}`;
 const append = (state: GameState, target: { log: Array<{ at: string; text: string }> }, text: string) => pushCapped(target.log, { at: stamp(state), text }, CAP);
 const DIRECTIONS: PartType[][] = [
   ['chassis', 'sidepods'],
@@ -47,6 +48,7 @@ export function initManagementSpecials(state: GameState, team: TeamState): void 
     penalizedPowerSpecs: {},
     rndDirection: [...DIRECTIONS[0]],
     lastActionRound: null,
+    lastActionRace: null,
     gaslyLeaving: false,
     dismissed: null,
     log: [],
@@ -61,6 +63,7 @@ export function initManagementSpecials(state: GameState, team: TeamState): void 
     fundingProvided: 0,
     preferredParts: [...DIRECTIONS[1]],
     lastActionRound: null,
+    lastActionRace: null,
     partnershipWithdrawn: false,
     dismissed: null,
     log: [],
@@ -70,6 +73,7 @@ export function initManagementSpecials(state: GameState, team: TeamState): void 
     successionReadiness: r.williams.startSuccessionReadiness,
     focus: null,
     focusRound: null,
+    focusRace: null,
     facilityInvestment: 0,
     developmentInvestment: 0,
     vowlesDeparted: false,
@@ -84,6 +88,7 @@ export function alpineManagement(state: GameState, strategy: 'back_colapinto' | 
   if (!a) return { ok: false, message: '当前车队没有阿尔派管理机制' };
   if (a.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能执行一次阿尔派管理行动' };
   a.lastActionRound = weekKey(state);
+  a.lastActionRace = raceKey(state);
   let text: string;
   if (strategy === 'back_colapinto') {
     a.fanPressure = round1(clamp(a.fanPressure - 14, 0, 100));
@@ -130,6 +135,7 @@ export function haasBalance(state: GameState, strategy: 'protect_independence' |
   if (!h) return { ok: false, message: '当前车队没有哈斯股东平衡机制' };
   if (h.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能执行一次哈斯股东行动' };
   h.lastActionRound = weekKey(state);
+  h.lastActionRace = raceKey(state);
   const team = playerTeam(state);
   let text: string;
   if (strategy === 'protect_independence') {
@@ -161,7 +167,7 @@ export function williamsBudgetFocus(state: GameState, focus: 'facilities' | 'dev
   if (!w) return { ok: false, message: '当前车队没有威廉姆斯接班机制' };
   const key = weekKey(state);
   if (w.focusRound === key) return { ok: false, message: '本周预算方向已经确定' };
-  w.focus = focus; w.focusRound = key;
+  w.focus = focus; w.focusRound = key; w.focusRace = raceKey(state);
   const label = focus === 'facilities' ? '设施更新' : focus === 'development' ? '赛车升级' : '保留现金';
   const text = `玩家把本周有限预算的优先级设为${label}。`;
   append(state, w, text); addNews(state, '预算', text);
@@ -194,10 +200,10 @@ export function recordManagementInvestment(state: GameState, action: Action, ok:
 }
 
 export function afterManagementRace(state: GameState): void {
-  const key = weekKey(state);
+  const key = raceKey(state);
   if (state.alpine) {
     const a = state.alpine;
-    if (a.lastActionRound !== key) { a.briatoreSatisfaction -= 5; a.fanPressure += 5; a.gaslyCommitment -= 4; }
+    if (a.lastActionRace !== key) { a.briatoreSatisfaction -= 5; a.fanPressure += 5; a.gaslyCommitment -= 4; }
     if (a.fanPressure > 70) a.briatoreSatisfaction -= 3;
     if (a.gaslyCommitment < 25) a.gaslyCommitment -= 3;
     a.briatoreSatisfaction = round1(clamp(a.briatoreSatisfaction, 0, 100));
@@ -211,7 +217,7 @@ export function afterManagementRace(state: GameState): void {
     const h = state.haas;
     const team = playerTeam(state);
     h.toyotaInfluence = round1(clamp(h.toyotaInfluence + state.rules.haas.influencePerRace, 0, 100));
-    if (h.lastActionRound !== key) { h.geneSupport -= 4; h.toyotaSupport -= 4; }
+    if (h.lastActionRace !== key) { h.geneSupport -= 4; h.toyotaSupport -= 4; }
     if (!h.partnershipWithdrawn && h.toyotaSupport > 20) {
       const grant = round2(0.3 + h.toyotaInfluence / 100);
       team.funds = round2(team.funds + grant); h.fundingProvided = round2(h.fundingProvided + grant);
@@ -223,7 +229,7 @@ export function afterManagementRace(state: GameState): void {
   }
   if (state.williams) {
     const w = state.williams;
-    if (w.focusRound !== key) { w.vowlesConfidence -= 4; w.successionReadiness -= 2; }
+    if (w.focusRace !== key) { w.vowlesConfidence -= 4; w.successionReadiness -= 2; }
     else if (w.focus === 'reserve') { w.vowlesConfidence += 1; w.successionReadiness += 1; }
     w.vowlesConfidence = round1(clamp(w.vowlesConfidence, 0, 100)); w.successionReadiness = round1(clamp(w.successionReadiness, 0, 100));
   }

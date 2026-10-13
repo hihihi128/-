@@ -555,6 +555,8 @@ export interface CarState {
   fitted: Record<PartType, string>;
   /** 动力单元实体磨损；更换为不同规格时从新件开始。旧存档没有该字段。 */
   puWear?: Partial<Record<'power_unit' | 'ers', { specId: string; wear: number }>>;
+  /** 按规格保存可再次装回的动力单元磨损。 */
+  puWearPool?: Partial<Record<'power_unit' | 'ers', Record<string, number>>>;
 }
 
 export type ProjectKind = 'design' | 'manufacture' | 'facility' | 'pit_training' | 'driver_training';
@@ -1173,6 +1175,8 @@ export interface AlpineState {
   penalizedPowerSpecs: Record<string, { partType: PartType; specId: string; perfAfter: number; relAfter: number }>;
   rndDirection: PartType[];
   lastActionRound: string | null;
+  /** 最近一次至少执行过管理行动的比赛轮次。 */
+  lastActionRace?: string | null;
   gaslyLeaving: boolean;
   dismissed: string | null;
   log: Array<{ at: string; text: string }>;
@@ -1185,6 +1189,8 @@ export interface HaasState {
   fundingProvided: number;
   preferredParts: PartType[];
   lastActionRound: string | null;
+  /** 最近一次至少执行过股东行动的比赛轮次。 */
+  lastActionRace?: string | null;
   partnershipWithdrawn: boolean;
   dismissed: string | null;
   log: Array<{ at: string; text: string }>;
@@ -1195,6 +1201,8 @@ export interface WilliamsState {
   successionReadiness: number;
   focus: 'facilities' | 'development' | 'reserve' | null;
   focusRound: string | null;
+  /** 最近一次设置预算方向的比赛轮次。 */
+  focusRace?: string | null;
   facilityInvestment: number;
   developmentInvestment: number;
   vowlesDeparted: boolean;
