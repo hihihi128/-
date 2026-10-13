@@ -238,8 +238,6 @@ export function afterNextTeamRace(state: GameState): void {
 }
 
 export function specialDecisionBlocker(state: GameState, actionType: string | undefined): string | null {
-  const event = state.randomEvents?.current;
-  if (['awaiting_player', 'awaiting_narration'].includes(event?.status ?? '') && !event?.generationError && actionType !== 'CLEAR_NARRATION') return '本站随机事件正在等待处理或剧情叙述完成。请先完成或跳过事件。';
   if (state.racingBulls?.pendingRecall && actionType !== 'RACING_BULLS_SELECT_RESERVE' && actionType !== 'CLEAR_NARRATION') return '红牛已经调走一名正式车手。请先选择本周末替补车手。';
   if (state.fiaMeeting?.current && actionType !== 'FIA_DEBATE' && actionType !== 'CLEAR_NARRATION') return 'FIA 领队座谈会正在等待你的立场。请先完成辩论。';
   return null;

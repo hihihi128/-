@@ -216,7 +216,7 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 91 })).ok).toBe(true);
     const save = JSON.parse(eventCtrl.exportSave()!);
     save.state.season.phase = 'pre_race';
-    save.state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0 };
+    save.state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 3, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
     expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
     eventCtrl.updateSettings({ engineerProxyPreset: '随机事件副线', engineerModel: 'event-model' });
     const optionsSeen: unknown[] = [];
@@ -230,13 +230,11 @@ describe('后端控制器（模拟酒馆环境）', () => {
       return '{"eventId":"' + eventCtrl.stateAt()!.randomEvents!.current!.id + '","outcome":"resolved","summary":"医疗复查及时完成，赞助商认可车队的处理。","effects":[{"op":"funds","targetId":null,"delta":2,"reason":"赞助商提供健康计划支持"}]}';
     };
 
-    const started = await eventCtrl.dispatch({ type: 'START_WEEKEND' });
-    expect(started.ok).toBe(true);
+    await eventEnv.userSays('聊聊本周安排。');
+    await eventEnv.aiReplies('车队开始普通的一周。');
+    await new Promise(resolve => setTimeout(resolve, 0));
     const event = eventCtrl.stateAt()!.randomEvents!.current!;
     expect(event).toMatchObject({ status: 'awaiting_player', title: '车手训练冲突' });
-    const blocked = await eventCtrl.dispatch({ type: 'RUN_PRACTICE' });
-    expect(blocked).toMatchObject({ ok: false });
-    expect(blocked.message).toContain('随机事件');
     const funds = eventCtrl.stateAt()!.teams.haas.funds;
     const result = await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '先复查，再按医疗建议降低负荷。', expectedRevisionId: eventCtrl.status().revisionId! });
     expect(result).toMatchObject({ ok: true, event: { status: 'awaiting_narration', playerAnswer: '先复查，再按医疗建议降低负荷。' } });
@@ -246,9 +244,15 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(call).toBe(1); // 主 API 不走 generateText / generateRaw
     await eventEnv.aiReplies('医疗主管立即安排复查，并把训练强度降到安全范围。\n' + update(['{"op":"funds","delta":5,"reason":"不应送入随机事件判定"}']));
     await new Promise(resolve => setTimeout(resolve, 0));
-    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ status: 'resolved', mainReply: '医疗主管立即安排复查，并把训练强度降到安全范围。' });
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ status: 'awaiting_player', completedDialogueTurns: 1 });
+    const second = await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '我再与车手确认恢复感受。', expectedRevisionId: eventCtrl.status().revisionId! });
+    expect(second.ok).toBe(true);
+    await eventEnv.aiReplies('车手确认状态稳定，医疗主管完成最后记录。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ status: 'resolved', mainReply: '车手确认状态稳定，医疗主管完成最后记录。', completedDialogueTurns: 2 });
     expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds + 2);
     expect(resolutionPrompt).toContain('医疗主管立即安排复查，并把训练强度降到安全范围。');
+    expect(resolutionPrompt).toContain('车手确认状态稳定，医疗主管完成最后记录。');
     expect(resolutionPrompt).not.toContain('不应送入随机事件判定');
     await eventEnv.fire(eventEnv.events.MESSAGE_RECEIVED, eventEnv.lastMessageId(), 'normal');
     expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds + 2);
@@ -266,7 +270,7 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 93 })).ok).toBe(true);
     const save = JSON.parse(eventCtrl.exportSave()!);
     save.state.season.phase = 'pre_race';
-    save.state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0 };
+    save.state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 3, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
     expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
     eventCtrl.updateSettings({ engineerProxyPreset: '随机事件副线', engineerModel: 'event-model' });
     let calls = 0;
@@ -276,7 +280,9 @@ describe('后端控制器（模拟酒馆环境）', () => {
         ? '{"title":"训练冲突","prompt":"车手需要降低训练负荷。","answerOptions":["安排复查","继续训练"]}'
         : '{"eventId":"unexpected","outcome":"resolved","summary":"不应结算","effects":[]}';
     };
-    expect((await eventCtrl.dispatch({ type: 'START_WEEKEND' })).ok).toBe(true);
+    await eventEnv.userSays('开始普通对话。');
+    await eventEnv.aiReplies('车队正在准备。');
+    await new Promise(resolve => setTimeout(resolve, 0));
     const event = eventCtrl.stateAt()!.randomEvents!.current!;
     expect((await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '安排复查。', expectedRevisionId: eventCtrl.status().revisionId! })).ok).toBe(true);
     await eventEnv.userSays('这是一条与随机事件无关的新消息。');
@@ -294,10 +300,11 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 92 })).ok).toBe(true);
     const save = JSON.parse(eventCtrl.exportSave()!);
     save.state.season.phase = 'pre_race';
-    save.state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 1, partIssueWeight: 0 };
+    save.state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 3, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 1, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
     expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
-    const started = await eventCtrl.dispatch({ type: 'START_WEEKEND' });
-    expect(started.ok).toBe(true);
+    await eventEnv.userSays('开始普通对话。');
+    await eventEnv.aiReplies('车队正在准备。');
+    await new Promise(resolve => setTimeout(resolve, 0));
     const event = eventCtrl.stateAt()!.randomEvents!.current!;
     expect(event).toMatchObject({ status: 'awaiting_player' });
     expect(event.generationError).toContain('副 API');

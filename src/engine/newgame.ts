@@ -120,7 +120,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
       sponsorIncome: def.sponsorIncome,
       operatingCost: def.operatingCost,
       facilities: { ...def.facilities },
-      staff: deepClone(def.staff),
+      staff: Object.fromEntries(Object.entries(deepClone(def.staff)).map(([role, staff]) => [role, { ...staff, affinity: isPlayer ? 50 : 50 }])) as TeamState['staff'],
       pitCrewTraining: { speed: def.staff.pitCrew.skill, consistency: def.staff.pitCrew.skill, error_control: def.staff.pitCrew.skill },
       tyreInventory: {},
       parts,
@@ -143,6 +143,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     drivers[d.id] = {
       ...deepClone(d),
       trust: d.teamId === opts.playerTeamId ? 55 : 50,
+      affinity: 50,
       form: 0,
       stats: { starts: 0, wins: 0, podiums: 0, poles: 0, points: 0, dnfs: 0 },
     };

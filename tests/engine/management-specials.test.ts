@@ -4,7 +4,7 @@ import { supplyCustomers } from '../../src/engine/aduo';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
 import { afterManagementRace, applyAlpinePuPenalty, completeAlpineDriverExit, completeWilliamsHandover } from '../../src/engine/managementSpecials';
-import { applyRandomEventResolution, setRandomEventContent, triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
+import { applyRandomEventResolution, beginRandomEventWeek, setRandomEventContent, triggerNextWeeklyRandomEvent, triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
 import { Rng } from '../../src/engine/rng';
 import type { Action, GameState } from '../../src/engine/types';
 import { buildView } from '../../src/engine/view';
@@ -139,23 +139,40 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     expect(delayed.narration.at(-1)?.title).toContain('延长');
   });
 
-  it('每个比赛周只触发一次随机事件，包括无事发生和负面事件', () => {
+  it('每周建立 3–4 个事件配额，并允许依次触发多个事件', () => {
     const state = game('haas');
-    state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0 };
+    state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 4, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 3 };
     const before = state.teams.haas.cars.map(car => state.drivers[car.driverId!].fitness);
-    triggerWeekendRandomEvent(state, new Rng(9));
+    const rng = new Rng(9);
+    beginRandomEventWeek(state, rng);
+    triggerNextWeeklyRandomEvent(state, rng);
     expect(state.randomEvents?.current?.kind).toBe('driver_injury');
     expect(state.randomEvents?.current?.status).toBe('pending_generation');
     expect(state.randomEvents?.history).toHaveLength(1);
+    expect(state.randomEvents?.weeklyQuota).toBeGreaterThanOrEqual(3);
+    expect(state.randomEvents?.weeklyQuota).toBeLessThanOrEqual(4);
+    expect(state.randomEvents?.current?.totalDialogueTurns).toBeGreaterThanOrEqual(2);
+    expect(state.randomEvents?.current?.totalDialogueTurns).toBeLessThanOrEqual(3);
     expect(state.teams.haas.cars.map(car => state.drivers[car.driverId!].fitness)).toEqual(before);
-    triggerWeekendRandomEvent(state, new Rng(10));
+    triggerNextWeeklyRandomEvent(state, rng);
     expect(state.randomEvents?.history).toHaveLength(1);
-
-    state.season.roundIndex += 1;
-    state.rules.randomEvents = { noneWeight: 1, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0 };
-    triggerWeekendRandomEvent(state, new Rng(11));
-    expect(state.randomEvents?.current?.kind).toBe('none');
+    const event = state.randomEvents!.current!;
+    setRandomEventContent(state, event.id, { title: event.title, prompt: event.prompt, answerOptions: ['处理', '跳过'] });
+    applyRandomEventResolution(state, event.id, 'resolved', '问题已处理。', []);
+    triggerNextWeeklyRandomEvent(state, rng);
     expect(state.randomEvents?.history).toHaveLength(2);
+  });
+
+  it('日常事件只允许一次 0.05–0.1 的个人好感度变化', () => {
+    const state = game('haas');
+    state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 3, routineWeight: 1, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    const event = triggerNextWeeklyRandomEvent(state, new Rng(27))!;
+    setRandomEventContent(state, event.id, { title: '工程师晚餐', prompt: '工程师邀请领队吃饭。', answerOptions: ['接受', '婉拒'] });
+    const staff = Object.values(state.teams.haas.staff)[0];
+    const before = staff.affinity ?? 50;
+    expect(applyRandomEventResolution(state, event.id, 'resolved', '双方轻松聊了近况。', [{ op: 'funds', targetId: null, delta: 1, reason: '不应允许' }]).ok).toBe(false);
+    expect(applyRandomEventResolution(state, event.id, 'resolved', '双方轻松聊了近况。', [{ op: 'affinity', targetId: staff.id!, delta: 0.05, reason: '交流增进了解' }]).ok).toBe(true);
+    expect(staff.affinity).toBeCloseTo(before + 0.05, 5);
   });
 
   it('风洞事件只有在双 API 判定后才改变项目，并保留已完成的进度', () => {
@@ -164,7 +181,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     const project = state.teams.haas.projects.at(-1)!;
     project.weeksLeft -= 2;
     const before = { weeksLeft: project.weeksLeft, weeksTotal: project.weeksTotal, elapsed: project.weeksTotal - project.weeksLeft };
-    state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 1, partIssueWeight: 0 };
+    state.rules.randomEvents = { routineWeight: 0, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 1, partIssueWeight: 0 };
 
     triggerWeekendRandomEvent(state, new Rng(12));
     expect(state.randomEvents?.current?.kind).toBe('wind_tunnel_data');

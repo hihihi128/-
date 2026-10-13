@@ -282,10 +282,17 @@ export interface WilliamsRules {
   dismissVowlesConfidence: number;
 }
 export interface RandomEventRules {
+  /** 每个游戏周安排的事件数量。 */
+  minPerWeek?: number;
+  maxPerWeek?: number;
+  /** 日常事件约占全部事件的比例权重。 */
+  routineWeight?: number;
   noneWeight: number;
   driverInjuryWeight: number;
   windTunnelWeight: number;
   partIssueWeight: number;
+  minDialogueTurns?: number;
+  maxDialogueTurns?: number;
 }
 
 export interface Rules {
@@ -440,6 +447,8 @@ export interface StaffMember {
   series?: string;
   /** 候选人简介，供人员市场展示。 */
   description?: string;
+  /** 对玩家领队的个人好感度 0~100。 */
+  affinity?: number;
 }
 
 export interface CandidatePreference {
@@ -657,6 +666,8 @@ export interface DriverState {
   fitness: number;
   /** 对玩家领队的信任 0~100（仅玩家车队车手有意义） */
   trust: number;
+  /** 对玩家领队的个人好感度 0~100。 */
+  affinity: number;
   /** 近期状态 -10~10 */
   form: number;
   ego: number;
@@ -1210,9 +1221,10 @@ export interface WilliamsState {
   log: Array<{ at: string; text: string }>;
 }
 
-export type RandomEventKind = 'none' | 'driver_injury' | 'wind_tunnel_data' | 'part_issue';
+export type RandomEventKind = 'none' | 'routine_social' | 'routine_factory' | 'routine_team' | 'driver_injury' | 'wind_tunnel_data' | 'part_issue';
+export type RandomEventCategory = 'routine' | 'problem';
 export type RandomEventStatus = 'none' | 'pending_generation' | 'awaiting_player' | 'awaiting_narration' | 'resolved' | 'unresolved';
-export type RandomEventEffectOp = 'driver_fitness' | 'driver_morale' | 'funds' | 'project_weeks' | 'part_reliability' | 'staff_skill' | 'aero_hours';
+export type RandomEventEffectOp = 'driver_fitness' | 'driver_morale' | 'funds' | 'project_weeks' | 'part_reliability' | 'staff_skill' | 'aero_hours' | 'affinity';
 export interface RandomEventEffect {
   op: RandomEventEffectOp;
   targetId: string | null;
@@ -1223,6 +1235,7 @@ export interface RandomEventRecord {
   id: string;
   roundKey: string;
   kind: RandomEventKind;
+  category: RandomEventCategory;
   status: RandomEventStatus;
   title: string;
   detail: string;
@@ -1233,9 +1246,17 @@ export interface RandomEventRecord {
   outcomeSummary: string | null;
   effects: RandomEventEffect[];
   generationError: string | null;
+  /** 本事件需要完成的玩家-AI 对话轮数。 */
+  totalDialogueTurns: number;
+  /** 已收到有效主 API 回复的轮数。 */
+  completedDialogueTurns: number;
+  dialogue: Array<{ player: string; assistant: string }>;
 }
 export interface RandomEventState {
   lastRoundKey: string | null;
+  weekKey: string | null;
+  weeklyQuota: number;
+  weeklyStarted: number;
   current: RandomEventRecord | null;
   history: RandomEventRecord[];
 }

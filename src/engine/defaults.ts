@@ -278,7 +278,17 @@ export const DEFAULT_RULES: Rules = {
     successionThreshold: 55,
     dismissVowlesConfidence: 20,
   },
-  randomEvents: { noneWeight: 52, driverInjuryWeight: 14, windTunnelWeight: 17, partIssueWeight: 17 },
+  randomEvents: {
+    minPerWeek: 3,
+    maxPerWeek: 4,
+    routineWeight: 80,
+    noneWeight: 0,
+    driverInjuryWeight: 7,
+    windTunnelWeight: 6,
+    partIssueWeight: 7,
+    minDialogueTurns: 2,
+    maxDialogueTurns: 3,
+  },
 };
 
 export const DEFAULT_PLAN: DriverPlan = {

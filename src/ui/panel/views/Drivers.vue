@@ -81,6 +81,7 @@ async function setPriority(id: string | null) {
           <Bar label="综合" :value="d.overall" :mark="d.potential" hint="白线 = 潜力上限" color="#c8ccd6" />
           <Bar label="心态" :value="d.morale" :color="d.morale >= 60 ? 'var(--green)' : d.morale >= 35 ? 'var(--yellow)' : 'var(--red)'" />
           <Bar label="信任" :value="d.trust" color="#6aa6ff" hint="对你（领队）的信任，影响是否服从车队指令" />
+          <Bar label="好感" :value="d.affinity" color="#c58cff" hint="与玩家领队的个人关系，由日常随机事件缓慢变化" />
           <Bar label="体能" :value="d.fitness" color="#4fd1c5" />
           <Bar label="自尊心" :value="d.ego" color="#b58cff" hint="越高越在意升级件分配与车队指令" />
           <div class="small">状态 <b :class="d.form >= 0 ? 'pos' : 'neg'">{{ signed(d.form) }}</b> · {{ d.moraleLabel }}</div>

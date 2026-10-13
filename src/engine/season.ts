@@ -12,7 +12,7 @@ import { ferrariAfterRace, ferrariMediaDelta, ferrariOnAllocation, ferrariOnBenc
 import { afterSpecialRace } from './teamSpecials';
 import { afterNextTeamRace, maybeTriggerRacingBullsRecall } from './nextTeamSpecials';
 import { afterManagementRace, completeAlpineDriverExit, completeWilliamsHandover } from './managementSpecials';
-import { closeUnansweredRandomEvent, triggerWeekendRandomEvent } from './randomEvents';
+import { closeUnansweredRandomEvent } from './randomEvents';
 import { resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
@@ -95,6 +95,7 @@ export function advanceCalendarWeek(state: GameState, rng: Rng): Outcome {
   if (state.season.phase !== 'pre_race') return fail('只有比赛间隔可以逐周推进');
   const remaining = state.season.weeksUntilRound ?? 0;
   if (remaining <= 0) return fail('下一站比赛周末已经可以开始');
+  closeUnansweredRandomEvent(state, '本周结束前没有完成该事件，因此没有产生额外效果。');
   advanceWeeks(state, 1, rng);
   state.season.weeksUntilRound = remaining - 1;
   const track = currentTrack(state);
@@ -124,7 +125,6 @@ export function startWeekend(state: GameState, rng: Rng): Outcome {
   if ((state.season.weeksUntilRound ?? 0) > 0) return fail(`距比赛周末还有 ${state.season.weeksUntilRound} 周`);
   state.weekend = createWeekend(state, rng);
   maybeTriggerRacingBullsRecall(state, rng);
-  triggerWeekendRandomEvent(state, rng);
   state.season.phase = 'practice';
   const track = currentTrack(state);
   const w = state.weekend;

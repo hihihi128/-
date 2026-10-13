@@ -80,7 +80,7 @@ export function initManagementSpecials(state: GameState, team: TeamState): void 
     confirmedSuccessor: false,
     log: [],
   } : null;
-  state.randomEvents = { lastRoundKey: null, current: null, history: [] };
+  state.randomEvents = { lastRoundKey: null, weekKey: null, weeklyQuota: 0, weeklyStarted: 0, current: null, history: [] };
 }
 
 export function alpineManagement(state: GameState, strategy: 'back_colapinto' | 'reassure_gasly' | 'integrate_power_unit'): { ok: boolean; message: string } {

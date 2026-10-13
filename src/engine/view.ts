@@ -109,6 +109,7 @@ export interface DriverView {
   moraleLabel: string;
   fitness: number;
   trust: number;
+  affinity: number;
   form: number;
   ego: number;
   salary: number;
@@ -378,6 +379,7 @@ function driverView(state: GameState, d: DriverState, positions: Map<string, num
     moraleLabel: moraleLabel(d.morale),
     fitness: d.fitness,
     trust: d.trust,
+    affinity: d.affinity,
     form: d.form,
     ego: d.ego,
     salary: d.salary,

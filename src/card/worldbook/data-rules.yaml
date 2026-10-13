@@ -184,8 +184,13 @@ rules:
   #   startSuccessionReadiness: 25
   #   successionThreshold: 55
   #   dismissVowlesConfidence: 20
-  # randomEvents:              # 每个比赛周触发一次；权重可以自由调整
-  #   noneWeight: 52
-  #   driverInjuryWeight: 14
-  #   windTunnelWeight: 17
-  #   partIssueWeight: 17
+  # randomEvents:              # 每周 3–4 次；约 80% 是日常小事；每次持续 2–3 轮对话
+  #   minPerWeek: 3
+  #   maxPerWeek: 4
+  #   routineWeight: 80
+  #   noneWeight: 0            # 仅保留旧存档兼容
+  #   driverInjuryWeight: 7
+  #   windTunnelWeight: 6
+  #   partIssueWeight: 7
+  #   minDialogueTurns: 2
+  #   maxDialogueTurns: 3

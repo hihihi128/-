@@ -97,7 +97,7 @@ function ensureFallbackDrivers(state: GameState): void {
     state.drivers[id] = {
       id, name: `虚构自由车手 ${String(i + 1).padStart(2, '0')}`, short: `FD${i + 1}`, number: 801 + i, nationality: '虚构', age: 22 + i,
       teamId: null, role: 'reserve', attrs: { pace: base, racecraft: base - 1, consistency: base + 1, tyre: base, wet: base - 2, feedback: base + 2 },
-      potential: base + 8, morale: 60, fitness: 100, trust: 50, form: 0, ego: 45, salary: round2(base / 22), contractStart: 0, contractEnd: 0,
+      potential: base + 8, morale: 60, fitness: 100, trust: 50, affinity: 50, form: 0, ego: 45, salary: round2(base / 22), contractStart: 0, contractEnd: 0,
       preference: preference(id, base / 22, true), traits: ['虚构候选人'], description: '系统为自定义世界生成的虚构自由车手。', stats: { starts: 0, wins: 0, podiums: 0, poles: 0, points: 0, dnfs: 0 },
     };
   }

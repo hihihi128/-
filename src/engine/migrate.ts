@@ -72,7 +72,11 @@ export function migrateState(state: GameState): GameState {
     state.williams.focusRace ??= williamsRaceKey;
     if (state.williams.focusRace === currentRaceKey && currentWeekKey) state.williams.focusRound = currentWeekKey;
   }
-  state.randomEvents ??= { lastRoundKey: null, current: null, history: [] };
+  state.randomEvents ??= { lastRoundKey: null, weekKey: null, weeklyQuota: 0, weeklyStarted: 0, current: null, history: [] };
+  state.randomEvents.weekKey ??= null;
+  state.randomEvents.weeklyQuota ??= 0;
+  state.randomEvents.weeklyStarted ??= 0;
+  const hadRoutineEventWeight = state.rules.randomEvents?.routineWeight !== undefined;
   for (let index = 0; index < state.randomEvents.history.length; index++) {
     const record = state.randomEvents.history[index];
     record.id ??= `legacy-random-event-${record.roundKey}-${index}`;
@@ -84,6 +88,10 @@ export function migrateState(state: GameState): GameState {
     record.outcomeSummary ??= record.status === 'resolved' ? record.detail : null;
     record.effects ??= [];
     record.generationError ??= null;
+    record.category ??= record.kind.startsWith('routine_') ? 'routine' : 'problem';
+    record.totalDialogueTurns ??= 2;
+    record.completedDialogueTurns ??= record.mainReply ? 1 : 0;
+    record.dialogue ??= record.playerAnswer && record.mainReply ? [{ player: record.playerAnswer, assistant: record.mainReply }] : [];
   }
   if (state.randomEvents.current) {
     const record = state.randomEvents.current;
@@ -97,6 +105,14 @@ export function migrateState(state: GameState): GameState {
     record.outcomeSummary ??= record.status === 'resolved' ? record.detail : null;
     record.effects ??= [];
     record.generationError ??= null;
+    record.category ??= record.kind.startsWith('routine_') ? 'routine' : 'problem';
+    record.totalDialogueTurns ??= 2;
+    record.completedDialogueTurns ??= record.mainReply ? 1 : 0;
+    record.dialogue ??= record.playerAnswer && record.mainReply ? [{ player: record.playerAnswer, assistant: record.mainReply }] : [];
+  }
+  for (const driver of Object.values(state.drivers ?? {})) driver.affinity ??= 50;
+  for (const team of Object.values(state.teams)) {
+    for (const staff of Object.values(team.staff)) staff.affinity ??= 50;
   }
   if (state.audi) state.audi.alliance = Boolean(state.audi.alliance);
   state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, log: [] };
@@ -118,6 +134,11 @@ export function migrateState(state: GameState): GameState {
   fillMissing(state.rules.haas as unknown as Record<string, unknown>, DEFAULT_RULES.haas as unknown as Record<string, unknown>);
   fillMissing(state.rules.williams as unknown as Record<string, unknown>, DEFAULT_RULES.williams as unknown as Record<string, unknown>);
   fillMissing(state.rules.randomEvents as unknown as Record<string, unknown>, DEFAULT_RULES.randomEvents as unknown as Record<string, unknown>);
+  if (!hadRoutineEventWeight) {
+    const randomRules = state.rules.randomEvents;
+    const problemWeight = randomRules.driverInjuryWeight + randomRules.windTunnelWeight + randomRules.partIssueWeight;
+    randomRules.routineWeight = problemWeight > 0 ? problemWeight * 4 : 80;
+  }
   // Market rules are a closed map, unlike parts/tyres. Modern saves take the
   // puAllocation fast path below, so fill this before that return.
   state.rules.market ??= deepClone(DEFAULT_RULES.market);

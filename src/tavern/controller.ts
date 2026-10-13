@@ -24,7 +24,8 @@ import { previewContractOffer } from '../engine/market';
 import { buildStatePrompt } from '../engine/prompt';
 import { applyAiCommands, describeLog, parseAiCommands, stripAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
-import { applyRandomEventResolution, setRandomEventContent } from '../engine/randomEvents';
+import { applyRandomEventResolution, setRandomEventContent, triggerNextWeeklyRandomEvent } from '../engine/randomEvents';
+import { Rng } from '../engine/rng';
 import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
 import { strategyOptions } from '../engine/strategy';
 import { applySupernaturalCommands, effectiveSetup, parseSupernaturalCommands, SUPERNATURAL_LIMITS } from '../engine/supernatural';
@@ -268,6 +269,7 @@ export class F1Controller {
   private specialNegotiation: ActiveNegotiation | null = null;
   private pendingRandomEventNarration: PendingRandomEventNarration | null = null;
   private adjudicatingRandomEventId: string | null = null;
+  private preparingWeeklyRandomEvent = false;
   /** 「继续生成」开始时被续写楼层的原文（用于只结算新续写的部分） */
   private continuing: { floor: number; text: string } | null = null;
   private listeners = new Set<(reason: string) => void>();
@@ -846,6 +848,23 @@ export class F1Controller {
       this.restoreRandomEventForRetry(pending.eventId, '主 API 事件叙述超过 16 KiB', mainReply);
       return;
     }
+    if (current.event.completedDialogueTurns + 1 < current.event.totalDialogueTurns) {
+      const next = deepClone(current.state);
+      const nextEvent = next.randomEvents?.current;
+      if (!nextEvent || nextEvent.id !== pending.eventId) return;
+      nextEvent.dialogue.push({ player: pending.answer, assistant: mainReply });
+      nextEvent.completedDialogueTurns += 1;
+      nextEvent.status = 'awaiting_player';
+      nextEvent.playerAnswer = null;
+      nextEvent.mainReply = mainReply;
+      nextEvent.generationError = null;
+      const history = next.randomEvents?.history.find(record => record.id === nextEvent.id);
+      if (history && history !== nextEvent) Object.assign(history, deepClone(nextEvent));
+      this.store.commit(next, { floor: Math.max(0, id), kind: 'ui', label: `${current.event.title}：完成第 ${nextEvent.completedDialogueTurns}/${nextEvent.totalDialogueTurns} 轮` });
+      this.pendingRandomEventNarration = null;
+      this.notify('random_event');
+      return;
+    }
     if (this.adjudicatingRandomEventId === pending.eventId) return;
     this.adjudicatingRandomEventId = pending.eventId;
     try {
@@ -878,6 +897,8 @@ export class F1Controller {
       const next = deepClone(latest.state);
       const nextEvent = next.randomEvents?.current;
       if (!nextEvent || nextEvent.id !== pending.eventId) return;
+      nextEvent.dialogue.push({ player: pending.answer, assistant: mainReply });
+      nextEvent.completedDialogueTurns += 1;
       nextEvent.mainReply = mainReply;
       const applied = applyRandomEventResolution(next, pending.eventId, resolution.outcome, resolution.summary, resolution.effects);
       if (!applied.ok) throw new Error(applied.message);
@@ -1411,6 +1432,7 @@ export class F1Controller {
           }
         } else await this.settleRandomEventNarration(last);
       }
+      if (!randomEventNarration) await this.maybeStartRandomEventAfterChat(last);
     }
   }
 
@@ -1425,6 +1447,31 @@ export class F1Controller {
     await this.processAssistantMessage(id, { type, ignoreCommands: pendingNarration || orphanedEvent });
     if (orphanedEvent) return;
     await this.settleRandomEventNarration(id);
+    if (!pendingNarration) await this.maybeStartRandomEventAfterChat(id);
+  }
+
+  private async maybeStartRandomEventAfterChat(id: number): Promise<void> {
+    if (this.preparingWeeklyRandomEvent || this.busy || this.env.isGenerating() || id !== this.latestFloor()) return;
+    const current = this.store.resolve(id);
+    if (!current || current.state.season.phase === 'preseason' || current.state.season.phase === 'season_end') return;
+    const active = current.state.randomEvents?.current;
+    if (active && !['none', 'resolved', 'unresolved'].includes(active.status)) return;
+    const next = deepClone(current.state);
+    const rng = new Rng(next.rng);
+    const event = triggerNextWeeklyRandomEvent(next, rng);
+    next.rng = rng.state;
+    if (!event) return;
+    const guard = { chatId: this.env.chatId(), revisionData: current.rev.data, floor: id };
+    this.preparingWeeklyRandomEvent = true;
+    try {
+      await this.prepareRandomEventContent(next, event);
+      const latest = this.store.resolve(this.latestFloor());
+      if (this.env.chatId() !== guard.chatId || this.latestFloor() !== guard.floor || !latest || latest.rev.data !== guard.revisionData) return;
+      this.store.commit(next, { floor: Math.max(0, id), kind: 'ui', label: `本周随机事件 ${next.randomEvents!.weeklyStarted}/${next.randomEvents!.weeklyQuota}：${event.title}` });
+      this.notify('random_event');
+    } finally {
+      this.preparingWeeklyRandomEvent = false;
+    }
   }
 
   async onMessageEdited(id: number): Promise<void> {
