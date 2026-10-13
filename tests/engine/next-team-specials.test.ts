@@ -169,4 +169,29 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     migrateState(state);
     expect(state.audi?.alliance).toBe(true);
   });
+
+  it('把旧奥迪空盟友和缺失盟友字段迁移为未结盟', () => {
+    const empty = game('audi');
+    (empty.audi as unknown as { alliance: null }).alliance = null;
+    migrateState(empty);
+    expect(empty.audi?.alliance).toBe(false);
+
+    const missing = game('audi');
+    delete (missing.audi as unknown as { alliance?: boolean }).alliance;
+    migrateState(missing);
+    expect(missing.audi?.alliance).toBe(false);
+  });
+
+  it('FIA 座谈会辩论不再推进奥迪联盟进度', () => {
+    const state = game('audi');
+    state.season.roundIndex = 2;
+    state.teams.audi.boardConfidence = 100;
+    state.teams.audi.mediaReputation = 100;
+    state.fiaMeeting!.politicalCapital = 100;
+    afterNextTeamRace(state);
+    expect(state.fiaMeeting!.current?.issue).toBe('aduo');
+    const before = state.audi!.aduoProgress;
+    expect(fiaDebate(state, 'support').ok).toBe(true);
+    expect(state.audi!.aduoProgress).toBe(before);
+  });
 });
