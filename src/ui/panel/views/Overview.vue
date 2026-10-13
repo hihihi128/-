@@ -21,6 +21,7 @@ const au = computed(() => v.value.audi);
 const fia = computed(() => v.value.fiaMeeting);
 const fiaIssue: Record<string, string> = { aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
 const driverLabel = (id?: string) => v.value.drivers.find((driver: any) => driver.id === id)?.name ?? id ?? '-';
+const teamLabel = (id?: string) => v.value.teams.find((team: any) => team.id === id)?.name ?? id ?? '-';
 const demandLabels: Record<string, string> = { downforce: '下压力', efficiency: '气动效率', power: '动力', mechanical: '机械抓地' };
 
 function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
@@ -91,7 +92,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
     </div>
 
     <div v-if="am" class="card stack-s special-card">
-      <div class="spread"><h3>阿斯顿·马丁 · 本田振动危机</h3><span class="badge" :class="am.aduoEngineArrived ? 'ok' : 'bad'">{{ am.aduoEngineArrived ? '首批 ADUO 已到货' : '每10圈 25% 保护性退赛' }}</span></div>
+      <div class="spread"><h3>阿斯顿·马丁 · 本田振动危机</h3><span class="badge" :class="am.aduoEngineArrived ? 'ok' : 'bad'">{{ am.aduoEngineArrived ? '首批 ADUO 已到货' : `每${v.nextSpecialRules.astonMartin.vibrationInterval}圈 ${Math.round(v.nextSpecialRules.astonMartin.vibrationRetireChance * 100)}% 保护性退赛` }}</span></div>
       <Bar label="ADUO 提前进度" :value="am.aduoProgress" color="#006f62" :hint="am.aduoEngineArrived ? '危险振动退赛检查已停止' : '公开车手安全数据可以加速到货'" />
       <Bar label="本田—纽维冲突" :value="am.hondaConflict" :color="am.hondaConflict > 70 ? '#ff5a5a' : '#ffb347'" hint="越高越难合作" />
       <Bar label="纽维适配车体" :value="am.neweyProgress" color="#56b4a9" :hint="am.chassisUpgradeReady ? '升级已经装车' : '完成后释放气动潜力'" />
@@ -108,17 +109,17 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
     </div>
 
     <div v-if="au" class="card stack-s special-card">
-      <div class="spread"><h3>奥迪 · 涡轮与 ADUO 联盟</h3><span class="badge" :class="au.turboFixed ? 'ok' : 'bad'">{{ au.turboFixed ? '涡轮问题已解决' : '起步随机掉 2–3 位' }}</span></div>
-      <Bar label="ADUO 推进" :value="au.aduoProgress" color="#d33" :hint="au.alliance ? `盟友：${au.alliance}` : '选择一个同样需要 ADUO 的盟友'" />
+      <div class="spread"><h3>奥迪 · 涡轮与 ADUO 联盟</h3><span class="badge" :class="au.turboFixed ? 'ok' : 'bad'">{{ au.turboFixed ? '涡轮问题已解决' : `起步随机掉 ${v.nextSpecialRules.audi.startDropMin}–${v.nextSpecialRules.audi.startDropMax} 位` }}</span></div>
+      <Bar label="ADUO 推进" :value="au.aduoProgress" color="#d33" :hint="au.alliance ? `盟友：${teamLabel(au.alliance)}` : '选择一个同样需要 ADUO 的盟友'" />
       <Bar label="政治支持" :value="au.politicalSupport" color="#555" />
-      <div v-if="!au.alliance" class="row"><button @click="act({ type: 'AUDI_ALLIANCE', partner: 'aston_martin' })">联合马丁</button><button @click="act({ type: 'AUDI_ALLIANCE', partner: 'mercedes' })">联合梅奔</button><button @click="act({ type: 'AUDI_ALLIANCE', partner: 'ferrari' })">联合法拉利</button></div>
+      <div v-if="!au.alliance" class="row"><button :disabled="store.busy" @click="act({ type: 'AUDI_ALLIANCE', partner: 'aston_martin' })">联合马丁</button><button :disabled="store.busy" @click="act({ type: 'AUDI_ALLIANCE', partner: 'mercedes' })">联合梅奔</button><button :disabled="store.busy" @click="act({ type: 'AUDI_ALLIANCE', partner: 'ferrari' })">联合法拉利</button></div>
     </div>
 
     <div v-if="fia?.current" class="card stack-s fia-meeting">
       <div class="spread"><h3>FIA 领队座谈会</h3><span class="badge warn">第 {{ fia.current.index }} 次会议</span></div>
-      <div class="notice warn small">议题：{{ fiaIssue[fia.current.issue] }}。对手：{{ fia.current.opponents.join('、') }}。</div>
+      <div class="notice warn small">议题：{{ fiaIssue[fia.current.issue] }}。对手：{{ fia.current.opponents.map(teamLabel).join('、') }}。</div>
       <Bar label="政治资本" :value="fia.politicalCapital" color="#355c8a" hint="董事会信心、媒体声望和政治资本共同决定说服检定" />
-      <div class="row"><button class="primary" @click="act({ type: 'FIA_DEBATE', stance: 'support' })">支持议题</button><button @click="act({ type: 'FIA_DEBATE', stance: 'oppose' })">反对议题</button><button @click="act({ type: 'FIA_DEBATE', stance: 'compromise' })">提出折中</button></div>
+      <div class="row"><button class="primary" :disabled="store.busy" @click="act({ type: 'FIA_DEBATE', stance: 'support' })">支持议题</button><button :disabled="store.busy" @click="act({ type: 'FIA_DEBATE', stance: 'oppose' })">反对议题</button><button :disabled="store.busy" @click="act({ type: 'FIA_DEBATE', stance: 'compromise' })">提出折中</button></div>
     </div>
 
     <div class="grid g2">

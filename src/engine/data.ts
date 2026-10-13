@@ -338,6 +338,9 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
     parts: sanitizeRuleMap(ctx, rawParts, GENERIC_PART, 'parts'),
     tyres: sanitizeRuleMap(ctx, rawTyres, GENERIC_TYRE, 'tyres'),
   } as Rules;
+  if (rules.audi.startDropMin > rules.audi.startDropMax) {
+    ctx.err('rules.audi.startDropMin', '奥迪起步掉位下限不能大于上限');
+  }
 
   for (const [key, def] of Object.entries(rules.parts)) {
     for (const [attr, w] of Object.entries(def.weights)) {

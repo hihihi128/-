@@ -39,6 +39,14 @@ export function migrateState(state: GameState): GameState {
   if (state.audi === undefined) state.audi = null;
   state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, log: [] };
   if (state.mclaren) state.mclaren.weeksTotal ??= state.mclaren.weeksLeft;
+  state.rules.astonMartin ??= deepClone(DEFAULT_RULES.astonMartin);
+  state.rules.racingBulls ??= deepClone(DEFAULT_RULES.racingBulls);
+  state.rules.audi ??= deepClone(DEFAULT_RULES.audi);
+  state.rules.fiaMeeting ??= deepClone(DEFAULT_RULES.fiaMeeting);
+  fillMissing(state.rules.astonMartin as unknown as Record<string, unknown>, DEFAULT_RULES.astonMartin as unknown as Record<string, unknown>);
+  fillMissing(state.rules.racingBulls as unknown as Record<string, unknown>, DEFAULT_RULES.racingBulls as unknown as Record<string, unknown>);
+  fillMissing(state.rules.audi as unknown as Record<string, unknown>, DEFAULT_RULES.audi as unknown as Record<string, unknown>);
+  fillMissing(state.rules.fiaMeeting as unknown as Record<string, unknown>, DEFAULT_RULES.fiaMeeting as unknown as Record<string, unknown>);
   // Market rules are a closed map, unlike parts/tyres. Modern saves take the
   // puAllocation fast path below, so fill this before that return.
   state.rules.market ??= deepClone(DEFAULT_RULES.market);

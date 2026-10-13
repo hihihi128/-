@@ -49,19 +49,25 @@ export function astonCrisis(state: GameState, strategy: 'pressure_honda' | 'medi
   if (!a) return { ok: false, message: '当前车队没有阿斯顿·马丁危机机制' };
   if (a.lastActionRound === roundKey(state)) return { ok: false, message: '每站只能执行一次危机行动' };
   a.lastActionRound = roundKey(state);
+  const team = state.teams.aston_martin;
   let text: string;
   if (strategy === 'pressure_honda') {
-    a.aduoProgress = Math.min(100, a.aduoProgress + state.rules.astonMartin.aduoPressureGain);
+    const conflictMul = 1 - a.hondaConflict / 200;
+    const gain = Math.max(1, Math.round(state.rules.astonMartin.aduoPressureGain * conflictMul));
+    a.aduoProgress = Math.min(100, a.aduoProgress + gain);
     a.hondaConflict = round1(clamp(a.hondaConflict + 10, 0, 100));
-    a.mediaPressure = round1(clamp(a.mediaPressure - 4, 0, 100));
+    a.mediaPressure = round1(clamp(a.mediaPressure - 6, 0, 100));
+    team.boardConfidence = round1(clamp(team.boardConfidence + 1, 0, 100));
     text = `车队公开车手手部安全数据向本田与 FIA 施压，ADUO 提前进度达到 ${a.aduoProgress}%。`;
   } else if (strategy === 'mediate') {
     a.hondaConflict = round1(clamp(a.hondaConflict - state.rules.astonMartin.mediationGain, 0, 100));
-    a.mediaPressure = round1(clamp(a.mediaPressure - 3, 0, 100));
+    a.mediaPressure = round1(clamp(a.mediaPressure - 12, 0, 100));
+    team.boardConfidence = round1(clamp(team.boardConfidence + 3, 0, 100));
     text = '玩家安排纽维、本田和车手代表闭门调解，双方冲突明显下降。';
   } else {
     a.neweyProgress = Math.min(100, a.neweyProgress + state.rules.astonMartin.neweyProgressGain);
     a.hondaConflict = round1(clamp(a.hondaConflict + 4, 0, 100));
+    team.boardConfidence = round1(clamp(team.boardConfidence + 1, 0, 100));
     text = `玩家催促纽维交付动力单元适配车体，升级进度达到 ${a.neweyProgress}%。`;
   }
   completeAstonAduo(state); completeAstonChassis(state);
@@ -107,9 +113,16 @@ export function selectRacingBullsReserve(state: GameState, driverId: string): { 
   const replacement = state.drivers[driverId];
   const original = state.drivers[pending.driverId];
   if (!car || !replacement || !original) return { ok: false, message: '车手或赛车数据缺失' };
-  r.activeRecall = { driverId: original.id, replacementId: replacement.id, replacementTeamId: replacement.teamId };
+  r.activeRecall = {
+    driverId: original.id,
+    replacementId: replacement.id,
+    replacementTeamId: replacement.teamId,
+    replacementPuUsed: replacement.puUsed ? { ...replacement.puUsed } : undefined,
+    replacementPuPool: replacement.puPool ? Object.fromEntries(Object.entries(replacement.puPool).map(([key, value]) => [key, [...value]])) : undefined,
+  };
   car.driverId = replacement.id; original.role = 'reserve'; replacement.role = 'race'; replacement.teamId = 'racing_bulls';
   resetPuUsage(state, replacement, car);
+  state.standings.drivers[replacement.id] ??= { points: 0, wins: 0, podiums: 0, poles: 0, fastestLaps: 0, dnfs: 0, best: null, results: Array(state.calendar.length).fill(null), sprintPoints: 0 };
   r.pendingRecall = null;
   const text = `${replacement.name} 将顶替 ${original.name} 参加本周末，正赛车手将在赛后归队。`;
   append(state, r, text); addNews(state, '车手', text);
@@ -125,6 +138,8 @@ function restoreRacingBullsDriver(state: GameState): void {
   if (car && original && replacement) {
     car.driverId = original.id; original.role = 'race'; original.teamId = 'racing_bulls';
     replacement.role = 'reserve'; replacement.teamId = active.replacementTeamId;
+    replacement.puUsed = active.replacementPuUsed ? { ...active.replacementPuUsed } : undefined;
+    replacement.puPool = active.replacementPuPool ? Object.fromEntries(Object.entries(active.replacementPuPool).map(([key, value]) => [key, [...value]])) : undefined;
     for (const [partType, specId] of Object.entries(car.fitted)) if (original.puPool?.[partType] && !original.puPool[partType].includes(specId)) recordPuFit(state, original.id, partType, specId);
   }
   r.activeRecall = null;
@@ -207,8 +222,9 @@ export function afterNextTeamRace(state: GameState): void {
     const a = state.astonMartin, team = state.teams.aston_martin;
     const angerPenalty = Math.floor(a.alonsoFanAnger / 25);
     const patronPenalty = a.strollFavor < 35 ? 4 : 0;
-    team.boardConfidence = round1(clamp(team.boardConfidence - state.rules.astonMartin.mediaConfidenceLoss - patronPenalty, 0, 100));
-    team.mediaReputation = round1(clamp(team.mediaReputation - 2 - angerPenalty, 0, 100));
+    const confidenceLoss = .5 + state.rules.astonMartin.mediaConfidenceLoss * a.mediaPressure / 100;
+    team.boardConfidence = round1(clamp(team.boardConfidence - confidenceLoss - patronPenalty, 0, 100));
+    team.mediaReputation = round1(clamp(team.mediaReputation - 1 - angerPenalty, 0, 100));
     a.mediaPressure = round1(clamp(a.mediaPressure + 5 + angerPenalty, 0, 100));
     a.hondaConflict = round1(clamp(a.hondaConflict + 3, 0, 100));
     addNews(state, '媒体', `西班牙媒体继续声讨阿斯顿·马丁，董事会信心降至 ${team.boardConfidence}，媒体声望降至 ${team.mediaReputation}。`);

@@ -148,13 +148,13 @@ const book = {
       order: 206,
     }),
     entry(13, '[F1M资料] 阿斯顿·马丁车队（2026）', readCard(`${wb}/lore-aston-martin.md`), {
-      keys: ['阿斯顿·马丁', 'Aston Martin', 'AMR26', '劳伦斯·斯特罗尔', '本田', '纽维'], order: 207,
+      keys: ['阿斯顿·马丁', 'Aston Martin', 'AMR26', '劳伦斯·斯特罗尔'], order: 207,
     }),
     entry(14, '[F1M资料] 小红牛车队（2026）', readCard(`${wb}/lore-racing-bulls.md`), {
       keys: ['小红牛', 'Racing Bulls', 'VCARB', '佩尔曼'], order: 208,
     }),
     entry(15, '[F1M资料] 奥迪车队（2026）', readCard(`${wb}/lore-audi.md`), {
-      keys: ['奥迪', 'Audi', '比诺托', '涡轮'], order: 209,
+      keys: ['奥迪', 'Audi', '比诺托'], order: 209,
     }),
     entry(16, '[F1M资料] 凯迪拉克车队（2026）', readCard(`${wb}/lore-cadillac.md`), {
       keys: ['凯迪拉克', 'Cadillac'], order: 210,

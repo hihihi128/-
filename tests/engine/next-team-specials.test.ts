@@ -33,9 +33,19 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     expect(cadillac.narration.at(-1)?.title).toContain('凯迪拉克');
   });
 
+  it('拒绝奥迪起步掉位下限大于上限的规则', () => {
+    const sources = cardSources();
+    const rules = sources.find(source => source.name.includes('规则'))!.data as { rules: { audi?: { startDropMin: number; startDropMax: number } } };
+    rules.rules.audi = { startDropMin: 4, startDropMax: 2 };
+    const loaded = normalizeDatabase(sources);
+    expect(loaded.canStart).toBe(false);
+    expect(loaded.issues.some(issue => issue.path === 'rules.audi.startDropMin')).toBe(true);
+  });
+
   it('马丁危机行动推进 ADUO、调解冲突和纽维适配', () => {
     let state = game('aston_martin');
     state.rules.astonMartin.aduoPressureGain = 100;
+    state.astonMartin!.hondaConflict = 0;
     expect(astonCrisis(state, 'pressure_honda').ok).toBe(true);
     expect(state.astonMartin).toMatchObject({ aduoEngineArrived: true, aduoProgress: 100 });
 
@@ -81,11 +91,15 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     expect(dispatch(state, { type: 'ADVANCE' }).ok).toBe(false);
     const pending = state.racingBulls!.pendingRecall!;
     const reserve = pending.candidateIds[0];
+    const originalPuUsed = structuredClone(state.drivers[reserve].puUsed);
+    const originalPuPool = structuredClone(state.drivers[reserve].puPool);
     expect(selectRacingBullsReserve(state, reserve).ok).toBe(true);
     expect(state.teams.racing_bulls.cars.some(car => car.driverId === reserve)).toBe(true);
     afterNextTeamRace(state);
     expect(state.teams.racing_bulls.cars.some(car => car.driverId === pending.driverId)).toBe(true);
     expect(state.drivers[reserve].role).toBe('reserve');
+    expect(state.drivers[reserve].puUsed).toEqual(originalPuUsed);
+    expect(state.drivers[reserve].puPool).toEqual(originalPuPool);
   });
 
   it('奥迪涡轮让起步随机掉位，联盟持续推进 ADUO', () => {
@@ -130,10 +144,22 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     delete (state as Partial<GameState>).astonMartin;
     delete (state as Partial<GameState>).racingBulls;
     delete (state as Partial<GameState>).audi;
+    delete (state.rules as Partial<GameState['rules']>).astonMartin;
+    delete (state.rules as Partial<GameState['rules']>).racingBulls;
+    delete (state.rules as Partial<GameState['rules']>).audi;
+    delete (state.rules as Partial<GameState['rules']>).fiaMeeting;
     migrateState(state);
     expect(state.astonMartin).toBeNull();
     expect(state.racingBulls).toBeNull();
     expect(state.audi).toBeNull();
     expect(state.fiaMeeting).toMatchObject({ completed: 0, current: null });
+    expect(state.rules.fiaMeeting.interval).toBeGreaterThan(0);
+    expect(state.rules.astonMartin.vibrationRetireChance).toBe(.25);
+
+    let legacyRace = atRace('cadillac');
+    delete (legacyRace.rules as Partial<GameState['rules']>).fiaMeeting;
+    migrateState(legacyRace);
+    legacyRace = advanceUntil(legacyRace, value => value.season.phase === 'post_race');
+    expect(legacyRace.season.phase).toBe('post_race');
   });
 });

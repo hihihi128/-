@@ -1043,7 +1043,7 @@ export interface AstonMartinState {
 
 export interface RacingBullsState {
   pendingRecall: { driverId: string; candidateIds: string[] } | null;
-  activeRecall: { driverId: string; replacementId: string; replacementTeamId: string | null } | null;
+  activeRecall: { driverId: string; replacementId: string; replacementTeamId: string | null; replacementPuUsed?: Record<PartType, number>; replacementPuPool?: Record<PartType, string[]> } | null;
   log: Array<{ at: string; text: string }>;
 }
 
