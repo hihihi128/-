@@ -10,6 +10,7 @@ const revisions = ref<RevisionInfo[]>([]);
 const settings = ref<Settings | null>(null);
 const importText = ref('');
 const promptPreview = ref('');
+const showApiKey = ref(false);
 
 function load() {
   revisions.value = peek(a => a.listRevisions()) ?? [];
@@ -148,14 +149,22 @@ function kb(n: number) {
         <label class="row small" title="模拟练习赛/排位/正赛后自动发送一条消息让 AI 叙述"><input v-model="settings.autoNarrate" type="checkbox" />模拟后自动请求 AI 叙述</label>
       </div>
       <label class="field">「让 AI 叙述」时发送的消息<input v-model="settings.narrationText" type="text" /></label>
-      <div class="grid g3">
+      <div class="grid g2 api-settings">
         <label class="field">车队工程师默认 API
           <select v-model="settings.engineerApi"><option value="main">主 API</option><option value="secondary">副 API</option></select>
         </label>
-        <label class="field">副 API 代理预设名称<input v-model="settings.engineerProxyPreset" type="text" placeholder="proxy_preset" /></label>
+        <label class="field">副 API 站点（OpenAI 兼容）<input v-model="settings.engineerApiUrl" type="url" inputmode="url" placeholder="https://api.example.com/v1" /></label>
+        <label class="field">副 API Key
+          <span class="api-key-row">
+            <input v-model="settings.engineerApiKey" :type="showApiKey ? 'text' : 'password'" autocomplete="new-password" placeholder="sk-…" />
+            <button type="button" class="small ghost" @click="showApiKey = !showApiKey">{{ showApiKey ? '隐藏' : '显示' }}</button>
+          </span>
+        </label>
         <label class="field">副 API 模型<input v-model="settings.engineerModel" type="text" placeholder="例如 gpt-4o-mini" /></label>
+        <label class="field">代理预设名称（可选，高级）<input v-model="settings.engineerProxyPreset" type="text" placeholder="留空则使用上面的站点和 Key" /></label>
       </div>
-      <div class="tiny muted">车队工程师默认使用主 API。副 API 通过酒馆助手中已有的代理预设调用。</div>
+      <div class="tiny muted">副 API 可直接填写 OpenAI 兼容站点、Key 和模型。若填写代理预设，酒馆助手会优先使用该预设。</div>
+      <div class="tiny muted">Key 保存在本角色脚本变量中，不会写入游戏存档或导出的存档文件。请勿在共享设备保存 Key。</div>
       <div class="row" style="justify-content: flex-end"><button class="primary small" @click="save">保存设置</button></div>
     </div>
 
@@ -186,5 +195,13 @@ function kb(n: number) {
 }
 .log.bad {
   color: #ff9a9a;
+}
+.api-key-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px;
+}
+.api-key-row input {
+  min-width: 0;
 }
 </style>

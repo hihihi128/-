@@ -31,7 +31,7 @@ import { dismissalReason } from '../engine/teamSpecials';
 import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, StaffRole } from '../engine/types';
 import { hashString, money, round1 } from '../engine/util';
 import { buildView, supernaturalAvailability, type GameView } from '../engine/view';
-import type { TavernEnv } from './env';
+import type { TavernEnv, TextGenerationOptions } from './env';
 import { AI_PTR, GAME_PTR, PTR, SaveStore, type RevisionInfo } from './store';
 
 export const HUD_TAG = '<F1M_HUD/>';
@@ -91,6 +91,8 @@ export interface Settings {
   autoNarrate: boolean;
   engineerApi: 'main' | 'secondary';
   engineerProxyPreset: string;
+  engineerApiUrl: string;
+  engineerApiKey: string;
   engineerModel: string;
 }
 
@@ -106,6 +108,8 @@ export const DEFAULT_SETTINGS: Settings = {
   autoNarrate: false,
   engineerApi: 'main',
   engineerProxyPreset: '',
+  engineerApiUrl: '',
+  engineerApiKey: '',
   engineerModel: '',
 };
 
@@ -218,6 +222,8 @@ export class F1Controller {
     if (!['system', 'user', 'assistant'].includes(next.injectRole)) next.injectRole = 'system';
     if (!['main', 'secondary'].includes(next.engineerApi)) next.engineerApi = 'main';
     next.engineerProxyPreset = String(next.engineerProxyPreset ?? '').trim();
+    next.engineerApiUrl = String(next.engineerApiUrl ?? '').trim();
+    next.engineerApiKey = String(next.engineerApiKey ?? '').trim();
     next.engineerModel = String(next.engineerModel ?? '').trim();
     this.settings = next;
     this.store.opts.maxRevisions = next.maxRevisions;
@@ -226,6 +232,28 @@ export class F1Controller {
     if (!next.inject) this.env.uninject(INJECT_ID);
     this.notify('settings');
     return next;
+  }
+
+  private secondaryApiError(): string | null {
+    if (this.settings.engineerProxyPreset) return null;
+    if (!this.settings.engineerApiUrl) return '请先在设置中填写副 API 站点，或填写代理预设名称';
+    try {
+      const url = new URL(this.settings.engineerApiUrl);
+      if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('protocol');
+    } catch {
+      return '副 API 站点必须是有效的 http:// 或 https:// 地址';
+    }
+    if (!this.settings.engineerModel) return '使用副 API 站点时必须填写模型名称';
+    return null;
+  }
+
+  private secondaryApiOptions(): TextGenerationOptions {
+    return {
+      ...(this.settings.engineerProxyPreset ? { proxyPreset: this.settings.engineerProxyPreset } : {}),
+      ...(this.settings.engineerApiUrl ? { apiUrl: this.settings.engineerApiUrl } : {}),
+      ...(this.settings.engineerApiKey ? { apiKey: this.settings.engineerApiKey } : {}),
+      ...(this.settings.engineerModel ? { model: this.settings.engineerModel } : {}),
+    };
   }
 
   subscribe(fn: (reason: string) => void): () => void {
@@ -275,7 +303,7 @@ export class F1Controller {
       fallback: resolved?.fallback ?? false,
       revisions: this.store.revisionCount,
       storeSize: this.store.totalSize,
-      settings: this.settings,
+      settings: { ...this.settings, engineerApiKey: '' },
       data: this.data
         ? {
             canStart: this.data.canStart,
@@ -599,10 +627,10 @@ export class F1Controller {
     ].join('\n');
 
     const api = this.settings.engineerApi;
-    if (api === 'secondary' && !this.settings.engineerProxyPreset) return { plans: {}, generated: 0, fallback: expected };
+    if (api === 'secondary' && this.secondaryApiError()) return { plans: {}, generated: 0, fallback: expected };
     try {
       const generated = await withTimeout(
-        this.env.generateText(prompt, api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined),
+        this.env.generateText(prompt, api === 'secondary' ? this.secondaryApiOptions() : undefined),
         25_000,
       );
       const parsed = parseJsonObject(generated) as { strategies?: unknown };
@@ -719,7 +747,8 @@ export class F1Controller {
       scReaction: level < 4,
     };
     const api = requestedApi ?? this.settings.engineerApi;
-    if (api === 'secondary' && !this.settings.engineerProxyPreset) return { ok: false, message: '请先在设置中填写副 API 的代理预设名称' };
+    const secondaryError = api === 'secondary' ? this.secondaryApiError() : null;
+    if (secondaryError) return { ok: false, message: secondaryError };
     const compounds = option.compounds.map(compound => state.rules.tyres[compound]?.name ?? compound).join(' → ');
     const gridContext = gridPosition === null ? '发车位尚未确定' : `从 P${gridPosition} 发车`;
     const weatherResponse = rainWindow
@@ -743,7 +772,7 @@ export class F1Controller {
     try {
       const generated = await this.env.generateText(
         prompt,
-        api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined,
+        api === 'secondary' ? this.secondaryApiOptions() : undefined,
       );
       const explanation = safeWeatherAdvice(generated, rainWindow !== null) ? generated : fallback;
       const applied = await this.dispatch({ type: 'SET_PLAN', driverId, plan });
@@ -773,7 +802,8 @@ export class F1Controller {
     if (typeof request.description !== 'string' || !request.description.trim() || request.description.trim().length > 1000) return fail('干预描述必须为 1–1000 个非空字符');
     if (typeof request.expectedRevisionId !== 'string' || !request.expectedRevisionId) return fail('缺少当前存档版本号');
     if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
-    if (api === 'secondary' && !this.settings.engineerProxyPreset) return fail('请先在设置中填写副 API 的代理预设名称');
+    const secondaryError = api === 'secondary' ? this.secondaryApiError() : null;
+    if (secondaryError) return fail(secondaryError);
     const floor = this.latestFloor();
     const current = this.store.resolve(floor);
     if (!current) return fail('还没有开局');
@@ -814,7 +844,7 @@ export class F1Controller {
     this.busy = true;
     try {
       const generated = await withTimeout(
-        this.env.generateText(prompt, api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined),
+        this.env.generateText(prompt, api === 'secondary' ? this.secondaryApiOptions() : undefined),
         60_000,
       );
       if (new TextEncoder().encode(generated).byteLength > 16 * 1024) return fail('API 返回超过 16 KiB，未保存任何改动');

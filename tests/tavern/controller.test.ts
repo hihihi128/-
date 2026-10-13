@@ -75,6 +75,13 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(secondary.api).toBe('secondary');
     expect(env.generated.at(-1)?.options).toEqual({ proxyPreset: '策略副线', model: 'test-model' });
 
+    ctrl.updateSettings({ engineerProxyPreset: '', engineerApiUrl: 'https://api.example.com/v1', engineerApiKey: 'secret-key', engineerModel: 'direct-model' });
+    const direct = await ctrl.requestEngineerStrategy('c1');
+    expect(direct.ok).toBe(true);
+    expect(env.generated.at(-1)?.options).toEqual({ apiUrl: 'https://api.example.com/v1', apiKey: 'secret-key', model: 'direct-model' });
+    expect(ctrl.status().settings.engineerApiKey).toBe('');
+    expect(ctrl.settings.engineerApiKey).toBe('secret-key');
+
     const contextual = ctrl.stateAt()!;
     contextual.weekend!.forecast.race = 0.72;
     contextual.weekend!.forecast.raceRainWindow = [10, 14];
@@ -112,6 +119,15 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect((await ctrl.importSave(JSON.stringify(contextual))).ok).toBe(true);
     const legacyForecast = await ctrl.requestEngineerStrategy('c1', 'main');
     expect(legacyForecast.weatherResponse).toBe('目前没有明确降雨窗口，按干地基础方案执行');
+  });
+
+  it('validates direct secondary API settings before generation', async () => {
+    for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
+    ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: '', engineerApiUrl: 'not-a-url', engineerModel: 'test-model' });
+    expect((await ctrl.requestEngineerStrategy('c1')).message).toContain('有效的 http:// 或 https:// 地址');
+
+    ctrl.updateSettings({ engineerApiUrl: 'https://api.example.com/v1', engineerModel: '' });
+    expect((await ctrl.requestEngineerStrategy('c1')).message).toContain('必须填写模型名称');
   });
 
   it('工程师 API 失败时仍自动应用基础策略', async () => {

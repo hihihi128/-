@@ -20,6 +20,8 @@ export interface WorldbookText {
 
 export interface TextGenerationOptions {
   proxyPreset?: string;
+  apiUrl?: string;
+  apiKey?: string;
   model?: string;
 }
 
@@ -141,8 +143,13 @@ export function createTavernEnv(): TavernEnv {
     },
     generateText: async (prompt, options) => {
       if (typeof generateRaw !== 'function') throw new Error('当前酒馆助手版本不支持独立生成');
-      const customApi = options?.proxyPreset
-        ? { proxy_preset: options.proxyPreset, ...(options.model ? { model: options.model } : {}) }
+      const customApi = options && (options.proxyPreset || options.apiUrl || options.apiKey || options.model)
+        ? {
+            ...(options.proxyPreset ? { proxy_preset: options.proxyPreset } : {}),
+            ...(options.apiUrl ? { apiurl: options.apiUrl, source: 'openai' } : {}),
+            ...(options.apiKey ? { key: options.apiKey } : {}),
+            ...(options.model ? { model: options.model } : {}),
+          }
         : undefined;
       return String(await generateRaw({
         user_input: '请给出策略建议。',
