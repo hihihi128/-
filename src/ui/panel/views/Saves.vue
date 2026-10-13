@@ -30,8 +30,10 @@ async function save() {
   if (!settings.value) return;
   const patch: SettingsPatch = { ...settings.value };
   const saved = await call(a => a.setSettings(patch), false);
-  if (saved) toast('ok', '设置已保存');
-  load();
+  if (saved) {
+    toast('ok', '设置已保存');
+    load();
+  }
 }
 
 async function clearApiKey() {
@@ -171,8 +173,8 @@ function kb(n: number) {
         <label class="field">副 API 模型<input v-model="settings.engineerModel" type="text" placeholder="例如 gpt-4o-mini" /></label>
         <label class="field">代理预设名称（可选，高级）<input v-model="settings.engineerProxyPreset" type="text" placeholder="留空则使用上面的站点和 Key" /></label>
       </div>
-      <div class="tiny muted">副 API 可直接填写 OpenAI 兼容站点、Key 和模型。若填写代理预设，酒馆助手会优先使用该预设。</div>
-      <div class="tiny muted">Key 仅保存在本设备浏览器中，不会写入角色卡、游戏存档或导出的存档文件。其他同源脚本仍可能访问浏览器数据，请勿在共享设备保存 Key。</div>
+      <div class="tiny muted">副 API 可直接填写 OpenAI 兼容站点、Key 和模型。填写代理预设后将只使用该预设。</div>
+      <div class="tiny muted">Key 由同一浏览器配置中的所有 F1 卡共用，不会写入角色卡、游戏存档或导出的存档文件。其他同源脚本仍可能访问浏览器数据，请勿在共享设备保存 Key。</div>
       <div class="row" style="justify-content: flex-end"><button class="primary small" @click="save">保存设置</button></div>
     </div>
 

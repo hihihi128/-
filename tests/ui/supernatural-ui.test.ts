@@ -32,6 +32,7 @@ describe('超自然人设前端', () => {
     expect(saves).toContain('settings.engineerApiKey');
     expect(saves).toContain('settings.engineerModel');
     expect(saves).toContain(':type="showApiKey ? \'text\' : \'password\'"');
-    expect(saves).toContain('若填写代理预设，酒馆助手会优先使用该预设');
+    expect(saves).toContain('填写代理预设后将只使用该预设');
+    expect(saves).toContain('if (saved)');
   });
 });

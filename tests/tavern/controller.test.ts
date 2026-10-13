@@ -142,6 +142,17 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(legacyController.settingsView()).toMatchObject({ engineerApiKey: '', hasEngineerApiKey: true });
   });
 
+  it('keeps a saved device-local key on blank saves and clears it explicitly', () => {
+    ctrl.updateSettings({ engineerApiKey: 'device-secret' });
+    ctrl.updateSettings({ narrationText: '更新叙述文本', engineerApiKey: '' });
+    expect(env.localSecrets['secondary-api-key']).toBe('device-secret');
+    expect(ctrl.settingsView().hasEngineerApiKey).toBe(true);
+
+    ctrl.updateSettings({ clearEngineerApiKey: true });
+    expect(env.localSecrets['secondary-api-key']).toBeUndefined();
+    expect(ctrl.settingsView().hasEngineerApiKey).toBe(false);
+  });
+
   it('工程师 API 失败时仍自动应用基础策略', async () => {
     for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
     env.generateText = async () => { throw new Error('测试超时'); };

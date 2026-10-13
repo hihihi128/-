@@ -131,8 +131,12 @@ export function createTavernEnv(): TavernEnv {
       }
     },
     setLocalSecret: (name, value) => {
-      if (value) localStorage.setItem(`f1m:secret:${name}`, value);
-      else localStorage.removeItem(`f1m:secret:${name}`);
+      try {
+        if (value) localStorage.setItem(`f1m:secret:${name}`, value);
+        else localStorage.removeItem(`f1m:secret:${name}`);
+      } catch {
+        throw new Error('浏览器无法保存副 API Key，请检查站点存储权限或可用空间');
+      }
     },
     lastMessageId: () => {
       try {

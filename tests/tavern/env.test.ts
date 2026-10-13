@@ -40,4 +40,16 @@ describe('酒馆环境独立生成', () => {
       custom_api: { proxy_preset: '副线预设', model: 'test-model' },
     }));
   });
+
+  it('设备存储不可用时返回明确错误', () => {
+    vi.stubGlobal('localStorage', {
+      getItem: vi.fn(() => null),
+      setItem: vi.fn(() => { throw new Error('quota'); }),
+      removeItem: vi.fn(() => { throw new Error('blocked'); }),
+    });
+
+    const env = createTavernEnv();
+    expect(() => env.setLocalSecret('secondary-api-key', 'secret')).toThrow('浏览器无法保存副 API Key');
+    expect(() => env.setLocalSecret('secondary-api-key', '')).toThrow('浏览器无法保存副 API Key');
+  });
 });

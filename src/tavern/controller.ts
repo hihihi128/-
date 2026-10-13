@@ -224,13 +224,21 @@ export class F1Controller {
     const vars = this.env.getScriptVars() ?? {};
     const raw = vars.settings ?? {};
     this.engineerApiKey = this.env.getLocalSecret('secondary-api-key');
+    let canScrubLegacySecret = !!this.engineerApiKey;
     if (!this.engineerApiKey && typeof raw.engineerApiKey === 'string' && raw.engineerApiKey.trim()) {
       this.engineerApiKey = raw.engineerApiKey.trim();
-      this.env.setLocalSecret('secondary-api-key', this.engineerApiKey);
+      try {
+        this.env.setLocalSecret('secondary-api-key', this.engineerApiKey);
+        canScrubLegacySecret = true;
+      } catch {
+        // Keep the legacy value in script variables when device-local migration fails.
+      }
     }
     const { engineerApiKey: _legacyKey, hasEngineerApiKey: _legacyFlag, clearEngineerApiKey: _legacyClear, ...safeRaw } = raw;
     this.settings = { ...DEFAULT_SETTINGS, ...safeRaw };
-    if (_legacyKey !== undefined || _legacyFlag !== undefined || _legacyClear !== undefined) this.env.setScriptVars({ ...vars, settings: this.settings });
+    if ((canScrubLegacySecret && _legacyKey !== undefined) || _legacyFlag !== undefined || _legacyClear !== undefined) {
+      this.env.setScriptVars({ ...vars, settings: canScrubLegacySecret ? this.settings : { ...this.settings, engineerApiKey: _legacyKey } });
+    }
     this.store.opts.maxRevisions = this.settings.maxRevisions;
   }
 
@@ -244,14 +252,19 @@ export class F1Controller {
     next.engineerProxyPreset = String(next.engineerProxyPreset ?? '').trim();
     next.engineerApiUrl = String(next.engineerApiUrl ?? '').trim();
     next.engineerModel = String(next.engineerModel ?? '').trim();
-    const settingsError = next.engineerApi === 'secondary' ? this.secondaryApiError(next) : null;
+    const apiSettingsChanged = next.engineerApi !== this.settings.engineerApi
+      || next.engineerProxyPreset !== this.settings.engineerProxyPreset
+      || next.engineerApiUrl !== this.settings.engineerApiUrl
+      || next.engineerModel !== this.settings.engineerModel;
+    const settingsError = !clearEngineerApiKey && apiSettingsChanged && next.engineerApi === 'secondary' ? this.secondaryApiError(next) : null;
     if (settingsError) throw new Error(settingsError);
     if (clearEngineerApiKey) {
-      this.engineerApiKey = '';
       this.env.setLocalSecret('secondary-api-key', '');
+      this.engineerApiKey = '';
     } else if (typeof engineerApiKey === 'string' && engineerApiKey.trim()) {
-      this.engineerApiKey = engineerApiKey.trim();
-      this.env.setLocalSecret('secondary-api-key', this.engineerApiKey);
+      const nextKey = engineerApiKey.trim();
+      this.env.setLocalSecret('secondary-api-key', nextKey);
+      this.engineerApiKey = nextKey;
     }
     this.settings = next;
     this.store.opts.maxRevisions = next.maxRevisions;
