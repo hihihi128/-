@@ -573,11 +573,27 @@ function deployRedFlag(session: LiveRaceState, lap: number, rng: Rng, probabilit
   session.redFlags += 1;
   const restart = session.surface === 'wet' || session.wetness >= 0.45 ? 'rolling' : 'standing';
   session.redFlag = { active: true, triggerLap: lap, restart, restartPending: false };
+  liveEvent(session, lap, 'red_flag', `赛会出示红旗，比赛暂停；稍后将以${restart === 'standing' ? '静态' : '滚动'}方式重启`, [], true);
+  return true;
+}
+
+function compressRedFlagField(session: LiveRaceState): void {
   const running = liveCars(session).filter(car => car.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime);
   const leaderTime = running[0]?.cumulativeTime ?? 0;
   running.forEach((car, index) => { car.cumulativeTime = leaderTime + index * 0.25; });
-  liveEvent(session, lap, 'red_flag', `赛会出示红旗，比赛暂停；稍后将以${restart === 'standing' ? '静态' : '滚动'}方式重启`, [], true);
-  return true;
+}
+
+function freeRedFlagTyreChange(state: GameState, session: LiveRaceState, car: LiveRaceCar, compound: Compound): void {
+  const nextStint = car.stintIndex + 1;
+  car.plannedCompounds[nextStint] = compound;
+  car.stints[nextStint] = Math.max(1, session.totalLaps - session.completedLaps);
+  car.stintIndex = nextStint;
+  car.tyre = compound;
+  car.tyreAge = 0;
+  car.usedCompounds.push(compound);
+  car.pendingPit = null;
+  car.pendingCompound = null;
+  liveEvent(session, session.lap, 'pit', `${car.driverId} 在红旗暂停期间免费换上${state.rules.tyres[compound]?.name ?? compound}`, [car.driverId], car.player);
 }
 
 function playerCars(session: LiveRaceState): LiveRaceCar[] {
@@ -645,7 +661,6 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
       score: trackScore(ratings, track), skill: raceSkill(entry.driver, wet), consistency: entry.driver.attrs.consistency,
       racecraft: entry.driver.attrs.racecraft, trust: entry.driver.trust, ego: entry.driver.ego, reliability: ratings.reliability, wetSkill: entry.driver.attrs.wet,
       tyreFactor: factor, setupBonus: setup.confidence / 100 * 0.3, pitCrewSkill: entry.team.staff.pitCrew.skill,
-      raceEngineerSkill: raceEngineerFor(entry.team, entry.car.slot).skill,
       raceEngineerReaction: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'reaction'),
       raceEngineerWeather: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'weather'),
       plan, tyre: compounds[0], tyreAge: 0, usedCompounds: [compounds[0]], plannedCompounds: compounds,
@@ -661,7 +676,7 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
     totalLaps, completedLaps: 0, lap: 1, stage: 'grid', revision: 1, rngState: execution.state, weatherRngState: weatherRng.state,
     forecastRngState: forecastRng.state, strategistSkill: staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), expectedPositions, cars, order: grid, weatherTrajectory: trajectory, weatherHistory: [],
     rain: trajectory[0] ?? 0, wetness: startsWet ? 0.55 : 0, surface: startsWet ? 'wet' : 'dry',
-    forecast: createForecast(trajectory, 0, state.teams[state.meta.playerTeamId].staff.strategist.skill, forecastRng),
+    forecast: createForecast(trajectory, 0, staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), forecastRng),
     scLeft: 0, vscLeft: 0, safetyCars: 0, redFlags: 0, redFlag: null, fastestLap: null, events: [], lapChart, orderOutcomes: [], orderCooldown: {},
     teamOrders: { ...w.teamOrders }, pendingDecision: null, damageLedger: [],
   };
@@ -802,6 +817,9 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     session.forecast = createForecast(session.weatherTrajectory, session.completedLaps, session.strategistSkill, forecastRng);
     const scActive = session.scLeft > 0, vscActive = session.vscLeft > 0;
     const restartType = session.redFlag?.restartPending ? session.redFlag.restart : null;
+    // Consume the pending restart once at lap entry. A decision later in this
+    // lap cannot make the standing-start launch penalty happen twice.
+    if (restartType) session.redFlag = null;
     const field = liveCars(session).filter(c => c.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime);
     const incidentIds: string[] = [];
     for (const car of field) {
@@ -847,6 +865,9 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
         }
       }
     }
+    // Every car has now received this lap's time. Compressing earlier would
+    // leave cars later in the loop roughly one lap behind the leaders.
+    if (session.redFlag?.active && session.redFlag.triggerLap === lap) compressRedFlagField(session);
     // 2026 overtake mode is available only while dry enough and under green flag.
     // It is driven by the configured public gap/bonus rather than hidden weather truth.
     const passers = liveCars(session).filter(c => c.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime);
@@ -878,7 +899,10 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       session.damageLedger.push({ id: `${incidentId}:damage`, incidentId, driverId: victim.driverId, teamId: victim.teamId, slot: victim.slot, cause: 'collision', severity, affectedPartTypes: severity === 'minor' ? [] : ['front_wing'], repairedInRace: false });
       incidentIds.push(liveEvent(session, lap, severity === 'dnf' ? 'dnf' : 'error', `${behind.driverId} 与 ${ahead.driverId} 争位发生碰撞`, [ahead.driverId, behind.driverId], ahead.player || behind.player));
       if (severity === 'dnf' ? rng.chance(track.scChance) : severity === 'wing' && rng.chance(.28)) {
-        if (severity === 'dnf' && deployRedFlag(session, lap, rng, redFlagProbability('dnf', session.wetness, 2, track.scChance))) incidentIds.push(session.events[session.events.length - 1].id);
+        if (severity === 'dnf' && deployRedFlag(session, lap, rng, redFlagProbability('dnf', session.wetness, 2, track.scChance))) {
+          compressRedFlagField(session);
+          incidentIds.push(session.events[session.events.length - 1].id);
+        }
         else if (severity === 'dnf' && rng.chance(track.scChance)) { session.scLeft = rng.int(3, 5); session.safetyCars++; incidentIds.push(liveEvent(session, lap, 'sc', '安全车出动！', [], true)); }
         else { session.vscLeft = rng.int(1, 2); incidentIds.push(liveEvent(session, lap, 'vsc', '虚拟安全车（VSC）', [], true)); }
       }
@@ -926,12 +950,12 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       break;
     }
     if (session.redFlag?.active) {
+      for (const car of liveCars(session).filter(car => car.status === 'running')) freeRedFlagTyreChange(state, session, car, replacementCompound(state, session, car));
       session.redFlag.active = false;
       session.redFlag.restartPending = true;
       liveEvent(session, lap, 'restart', `${session.redFlag.restart === 'standing' ? '静态' : '滚动'}重启程序开始`, [], true);
     }
     for (const car of liveCars(session)) executePit(state, session, car, rng);
-    if (restartType && session.redFlag) session.redFlag = null;
     if (until === 'next_lap') break;
   }
   session.rngState = rng.state; session.forecastRngState = forecastRng.state;
@@ -978,7 +1002,7 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
     } else car.stayOutUntilLap = 0;
     if (choice.pit === 'box' && choice.compound) {
       car.pendingCompound = choice.compound;
-      car.plannedCompounds[car.stintIndex + 1] = choice.compound;
+      if (!window.reasons.includes('red_flag')) car.plannedCompounds[car.stintIndex + 1] = choice.compound;
     }
     if (choice.repairWing && car.repairPending) car.pendingPit = 'box';
     if (choice.paceMode && ['conserve', 'balanced', 'push'].includes(choice.paceMode)) car.plan.paceMode = choice.paceMode as import('./types').PaceMode;
@@ -991,14 +1015,11 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
   else if (window.reasons.includes('red_flag') && session.redFlag?.active) {
     for (const choice of drivers) {
       const car = session.cars[choice.driverId];
-      if (choice.pit === 'box' && choice.compound) {
-        car.tyre = choice.compound;
-        car.tyreAge = 0;
-        car.usedCompounds.push(choice.compound);
-        car.pendingPit = null;
-        car.pendingCompound = null;
-        liveEvent(session, session.lap, 'pit', `${car.driverId} 在红旗暂停期间免费换上${state.rules.tyres[choice.compound]?.name ?? choice.compound}`, [car.driverId], true);
-      }
+      if (choice.pit === 'box' && choice.compound) freeRedFlagTyreChange(state, session, car, choice.compound);
+    }
+    const interactive = new Set(playerControlledCars(session).map(car => car.driverId));
+    for (const car of liveCars(session).filter(car => car.status === 'running' && !interactive.has(car.driverId))) {
+      freeRedFlagTyreChange(state, session, car, replacementCompound(state, session, car));
     }
     session.redFlag.active = false;
     session.redFlag.restartPending = true;

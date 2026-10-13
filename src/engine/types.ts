@@ -754,7 +754,6 @@ export interface LiveRaceCar {
   tyreFactor: number;
   setupBonus: number;
   pitCrewSkill: number;
-  raceEngineerSkill: number;
   raceEngineerReaction: number;
   raceEngineerWeather: number;
   plan: DriverPlan;

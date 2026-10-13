@@ -2,7 +2,7 @@
  * 赛季流程：阶段推进、赛后结算（积分/财务/心态/零件损毁/车手成长）、赛季末与新赛季。
  */
 import { maybeEvaluateAduo, resetAduoSeason, syncCustomerPu } from './aduo';
-import { LABELS } from './defaults';
+import { LABELS, STAFF_ROLES } from './defaults';
 import { advanceWeeks, rankOfTeam, refreshAeroAllowance, type Outcome } from './development';
 import { charge, prizeFor, settleRace, income } from './finance';
 import { addNarration, addNews, driverName, playerTeam, teamName } from './log';
@@ -86,7 +86,7 @@ function retainUntouchedMarket(state: GameState): void {
     const roster = pendingMarket.projectedRosters[teamId];
     for (const car of team.cars) roster.raceSeats[String(car.slot)] = car.driverId;
     roster.reserveIds = Object.values(state.drivers).filter(d => d.teamId === teamId && d.role === 'reserve').map(d => d.id);
-    for (const role of ['technicalDirector', 'aeroChief', 'raceEngineer', 'pitCrew', 'strategist'] as const) roster.staff[role] = team.staff[role].id ?? `${teamId}-${role}`;
+    for (const role of STAFF_ROLES) roster.staff[role] = team.staff[role].id ?? `${teamId}-${role}`;
   }
   pendingMarket.aiResolved = true;
   pendingMarket.status = 'ai_resolved';

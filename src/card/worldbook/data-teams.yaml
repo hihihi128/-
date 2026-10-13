@@ -41,7 +41,7 @@
 #                   raceEngineer 一号车比赛工程师 / raceEngineer2 二号车比赛工程师 /
 #                   pitCrew 维修组 / strategist 首席策略师
 #                   每项可写 {name, skill(1~100), salary(年薪 M$)}，也可只写一个数字表示 skill
-#                   工程师可写 abilities: {setup, communication, reaction, weather, risk}；
+#                   工程师可写 abilities: {setup, communication, reaction, weather}；
 #                   首席策略师可写 abilities: {strategy, weather, reaction, risk}。旧数据缺失时回退到 skill。
 #   carBase         未单独填写的零件默认 {perf 性能, rel 可靠性}
 #   parts           各零件初始 {perf, rel}，键为零件类型：

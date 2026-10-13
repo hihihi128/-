@@ -91,7 +91,11 @@ function usePlayerStrategy(d: WeekendDriverView) {
 const strategyRiskTeam = computed(() => {
   const staff = v.value.player.staff;
   const strategist = staff.find(member => member.role === 'strategist');
-  return (strategist?.abilities?.strategy ?? strategist?.skill ?? 100) < 68 || (strategist?.abilities?.weather ?? strategist?.skill ?? 100) < 68;
+  const engineers = staff.filter(member => member.role === 'raceEngineer' || member.role === 'raceEngineer2');
+  return (strategist?.abilities?.strategy ?? strategist?.skill ?? 100) < 72
+    || (strategist?.abilities?.weather ?? strategist?.skill ?? 100) < 72
+    || (strategist?.abilities?.risk ?? 0) >= 82
+    || engineers.some(engineer => (engineer.abilities?.reaction ?? engineer.skill) < 74 || (engineer.abilities?.weather ?? engineer.skill) < 74);
 });
 
 function name(id: string): string {

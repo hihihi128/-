@@ -33,6 +33,10 @@ describe('resumable live race', () => {
     live.pendingDecision!.reasons = ['red_flag'];
     const playerCars = Object.values(live.cars).filter(car => car.player);
     const changed = playerCars[0];
+    const engineerControlled = playerCars[1];
+    engineerControlled.plan.strategySource = 'engineer';
+    engineerControlled.tyreAge = 9;
+    const engineerStint = engineerControlled.stintIndex;
     const freeCompound = state.rules.dryCompounds.at(-1)!;
     const oldPits = changed.pits;
     const oldTime = changed.cumulativeTime;
@@ -44,8 +48,42 @@ describe('resumable live race', () => {
     expect(resumed.cars[changed.driverId].tyre).toBe(freeCompound);
     expect(resumed.cars[changed.driverId].pits).toBe(oldPits);
     expect(resumed.cars[changed.driverId].cumulativeTime).toBe(oldTime);
+    expect(resumed.cars[changed.driverId].stintIndex).toBe(1);
+    expect(resumed.cars[engineerControlled.driverId].tyreAge).toBe(0);
+    expect(resumed.cars[engineerControlled.driverId].stintIndex).toBe(engineerStint + 1);
     expect(resumed.redFlag).toMatchObject({ active: false, restartPending: true, restart: 'standing' });
     expect(resumed.events.some(event => event.type === 'restart')).toBe(true);
+  });
+
+  it('compresses the field only after every car completes the red-flag trigger lap', () => {
+    let stopped: ReturnType<typeof newTestGame> | null = null;
+    for (let seed = 1; seed <= 30 && !stopped; seed++) {
+      let state = raceReady(seed);
+      const track = state.tracks[state.calendar[state.season.roundIndex].trackId];
+      track.scChance = 1;
+      for (const driver of Object.values(state.drivers)) driver.attrs.consistency = 1;
+      state = act(state, { type: 'START_RACE', kind: 'race' });
+      const grid = state.weekend!.liveRace!;
+      for (const car of Object.values(grid.cars)) car.reliability = 1;
+      grid.weatherTrajectory.fill(.8);
+      state = act(state, {
+        type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id,
+        drivers: Object.values(grid.cars).filter(car => car.player).map(car => ({ driverId: car.driverId, pit: 'auto' as const })),
+      });
+      for (let step = 0; step < 40 && state.weekend?.liveRace; step++) {
+        const live = state.weekend.liveRace;
+        if (live.pendingDecision?.reasons.includes('red_flag')) { stopped = state; break; }
+        if (live.pendingDecision) {
+          state = act(state, {
+            type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision.id,
+            drivers: Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => ({ driverId: car.driverId, pit: 'auto' as const })),
+          });
+        } else state = act(state, { type: 'ADVANCE_RACE', sessionId: live.id, expectedRevision: live.revision, until: 'next_decision' });
+      }
+    }
+    expect(stopped).not.toBeNull();
+    const running = Object.values(stopped!.weekend!.liveRace!.cars).filter(car => car.status === 'running').sort((a, b) => a.cumulativeTime - b.cumulativeTime);
+    expect(running.at(-1)!.cumulativeTime - running[0].cumulativeTime).toBeLessThan(8);
   });
 
   it('creates a JSON-safe grid checkpoint and hides private simulation inputs from the view', () => {

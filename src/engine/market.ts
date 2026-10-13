@@ -112,7 +112,7 @@ export function ensureMarket(state: GameState): MarketState {
   for (const [teamId, team] of Object.entries(state.teams)) {
     if (!team.staff.raceEngineer2) {
       const first = team.staff.raceEngineer;
-      team.staff.raceEngineer2 = { ...first, id: `${teamId}-raceEngineer2`, role: 'raceEngineer2', name: `${first.name || team.name}（二号车）`, abilities: first.abilities ? { ...first.abilities } : undefined };
+      team.staff.raceEngineer2 = { ...first, id: `${teamId}-raceEngineer2`, role: 'raceEngineer2', name: `${first.name || team.name}（二号车）`, abilities: first.abilities ? { ...first.abilities } : undefined, salary: 0, preference: first.preference ? { ...first.preference } : undefined };
     }
     for (const role of STAFF_ROLES) {
       const staff = team.staff[role];
@@ -247,7 +247,9 @@ export function previewContractOffer(state: GameState, teamId: string, terms: Co
     const pref = window.candidateProfiles[terms.personId] ?? profileForDriver(person as DriverState);
     if (terms.role === 'reserve' && !pref.acceptsReserve) blockers.push('该车手不接受替补合同');
   } else {
-    if (!staffRole || (person as StaffMember).role !== staffRole) blockers.push('员工岗位不匹配');
+    const personRole = (person as StaffMember).role;
+    const engineerMatch = (personRole === 'raceEngineer' || personRole === 'raceEngineer2') && (staffRole === 'raceEngineer' || staffRole === 'raceEngineer2');
+    if (!staffRole || (personRole !== staffRole && !engineerMatch)) blockers.push('员工岗位不匹配');
     else replaced = roster.staff[staffRole];
   }
   const fromTeamId = currentOwner(state, terms.personId, kind);

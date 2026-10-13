@@ -13,5 +13,5 @@ export function raceEngineerFor(team: Pick<TeamState, 'staff'>, slot: number): S
 
 export function strategyDecisionSkill(team: Pick<TeamState, 'staff'>, slot: number): number {
   const engineer = raceEngineerFor(team, slot);
-  return staffAbility(team.staff.strategist, 'strategy') * 0.6 + staffAbility(engineer, 'reaction') * 0.25 + staffAbility(engineer, 'communication') * 0.15;
+  return staffAbility(team.staff.strategist, 'strategy') * 0.5 + staffAbility(team.staff.strategist, 'reaction') * 0.2 + staffAbility(engineer, 'reaction') * 0.2 + staffAbility(engineer, 'communication') * 0.1;
 }

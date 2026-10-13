@@ -59,7 +59,6 @@ export function migrateState(state: GameState): GameState {
         car.pendingCompound ??= null;
         const team = state.teams[car.teamId];
         const engineer = car.slot === 2 ? (team?.staff.raceEngineer2 ?? team?.staff.raceEngineer) : team?.staff.raceEngineer;
-        car.raceEngineerSkill ??= engineer?.skill ?? 50;
         car.raceEngineerReaction ??= engineer?.abilities?.reaction ?? engineer?.skill ?? 50;
         car.raceEngineerWeather ??= engineer?.abilities?.weather ?? engineer?.skill ?? 50;
       }
@@ -71,7 +70,7 @@ export function migrateState(state: GameState): GameState {
   for (const team of Object.values(state.teams)) {
     if (!team.staff.raceEngineer2) {
       const first = team.staff.raceEngineer;
-      team.staff.raceEngineer2 = { ...deepClone(first), id: `${team.id}-raceEngineer2`, role: 'raceEngineer2', name: `${first.name || team.name}（二号车）` };
+      team.staff.raceEngineer2 = { ...deepClone(first), id: `${team.id}-raceEngineer2`, role: 'raceEngineer2', name: `${first.name || team.name}（二号车）`, salary: 0, preference: first.preference ? { ...first.preference } : undefined };
     }
     team.worksTeam ??= false;
     // 进行中的动力单元设计项目已经占用认证次数（取消时会返还）

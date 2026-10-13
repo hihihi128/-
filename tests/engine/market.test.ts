@@ -117,6 +117,17 @@ describe('确定性合同市场', () => {
     expect(quote.projectedCapRemaining).toBeGreaterThan(0);
   });
 
+  it('allows either race engineer to be hired into either car slot', () => {
+    const state = newTestGame();
+    const window = state.market!.window!;
+    const candidate = state.market!.freeStaff[Object.keys(state.market!.freeStaff).find(id => state.market!.freeStaff[id].role === 'raceEngineer')!];
+    const quote = previewContractOffer(state, 'team_c', {
+      windowId: window.id, marketRevision: state.market!.revision, personId: candidate.id!, annualSalary: 20, years: 2,
+    }, 'staff', 'raceEngineer2');
+    expect(quote.blockers).not.toContain('员工岗位不匹配');
+    expect(quote.replacedPersonId).toBe(window.projectedRosters.team_c.staff.raceEngineer2);
+  });
+
   it('creates a fresh market for each simulated offseason', () => {
     const { state, window } = nextWindow();
     state.season.phase = 'season_end';
