@@ -3,7 +3,7 @@ import { dispatch } from '../../src/engine/actions';
 import { supplyCustomers } from '../../src/engine/aduo';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
-import { afterManagementRace, completeAlpineDriverExit, completeWilliamsHandover } from '../../src/engine/managementSpecials';
+import { afterManagementRace, applyAlpinePuPenalty, completeAlpineDriverExit, completeWilliamsHandover } from '../../src/engine/managementSpecials';
 import { triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
 import { Rng } from '../../src/engine/rng';
 import type { Action, GameState } from '../../src/engine/types';
@@ -64,6 +64,24 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     expect(state.teams.alpine.parts.power_unit.specs[0].perf).toBe(state.teams.mercedes.parts.power_unit.specs[0].perf);
   });
 
+  it('阿尔派重新处理同一动力单元规格时会对更新后的供应商数值重新施加惩罚', () => {
+    const state = game('alpine');
+    const spec = state.teams.alpine.parts.power_unit.specs.at(-1)!;
+    const key = `power_unit:${spec.id}`;
+    expect(state.alpine!.penalizedPowerSpecs[key]).toBeDefined();
+
+    // 模拟供应商对同一规格编号重发校准后的基准数值。
+    spec.perf = 97;
+    spec.rel = 93;
+    applyAlpinePuPenalty(state, state.teams.alpine, 'power_unit', spec);
+    expect(spec).toMatchObject({ perf: 93, rel: 88 });
+    expect(state.alpine!.penalizedPowerSpecs[key]).toMatchObject({ perfAfter: 93, relAfter: 88 });
+
+    // 相同的已惩罚值不会被重复扣减。
+    applyAlpinePuPenalty(state, state.teams.alpine, 'power_unit', spec);
+    expect(spec).toMatchObject({ perf: 93, rel: 88 });
+  });
+
   it('哈斯接受丰田投入会增加资金和影响力，影响力过高后限制研发', () => {
     let state = game('haas');
     const funds = state.teams.haas.funds;
@@ -121,6 +139,20 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     triggerWeekendRandomEvent(state, new Rng(11));
     expect(state.randomEvents?.current?.kind).toBe('none');
     expect(state.randomEvents?.history).toHaveLength(2);
+  });
+
+  it('风洞数据异常会延长空气动力研发项目，并保留已完成的进度', () => {
+    let state = game('haas');
+    state = run(state, { type: 'START_PROJECT', partType: 'floor', ambition: 'standard' }).state;
+    const project = state.teams.haas.projects.at(-1)!;
+    project.weeksLeft -= 2;
+    const before = { weeksLeft: project.weeksLeft, weeksTotal: project.weeksTotal, elapsed: project.weeksTotal - project.weeksLeft };
+    state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 1, partIssueWeight: 0 };
+
+    triggerWeekendRandomEvent(state, new Rng(12));
+    expect(state.randomEvents?.current?.kind).toBe('wind_tunnel_data');
+    expect(project).toMatchObject({ weeksLeft: before.weeksLeft + 1, weeksTotal: before.weeksTotal + 1 });
+    expect(project.weeksTotal - project.weeksLeft).toBe(before.elapsed);
   });
 
   it('加斯利失去留队意愿后会在赛季末实际进入自由市场', () => {
