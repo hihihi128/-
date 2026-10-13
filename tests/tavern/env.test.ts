@@ -53,3 +53,36 @@ describe('酒馆环境独立生成', () => {
     expect(() => env.setLocalSecret('secondary-api-key', '')).toThrow('浏览器无法保存副 API Key');
   });
 });
+
+describe('酒馆环境世界书写入', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('按精确条目名恢复或禁用管理层条目，并保留完整条目数据', async () => {
+    const entries = [
+      { uid: 40, name: '[F1M管理层] [mercedes:principal] 托托·沃尔夫', content: 'a', enabled: false, extra: 'keep' },
+      { uid: 42, name: '[F1M管理层] [mclaren:principal] 安德里亚·斯特拉', content: 'b', enabled: true, extra: 'keep' },
+      { uid: 1, name: '[F1M数据] 规则', content: 'c', enabled: false },
+    ];
+    const replaceWorldbook = vi.fn(async () => undefined);
+    vi.stubGlobal('getCharWorldbookNames', () => ({ primary: 'F1 领队模拟器', additional: [] }));
+    vi.stubGlobal('getGlobalWorldbookNames', () => ['F1 领队模拟器']);
+    vi.stubGlobal('getWorldbook', async () => structuredClone(entries));
+    vi.stubGlobal('replaceWorldbook', replaceWorldbook);
+
+    const result = await createTavernEnv().syncWorldbookEntryStates('[F1M管理层]', [entries[1].name]);
+
+    expect(result).toEqual({ found: 2, changed: 2 });
+    expect(replaceWorldbook).toHaveBeenCalledTimes(1);
+    expect(replaceWorldbook).toHaveBeenCalledWith('F1 领队模拟器', [
+      { ...entries[0], enabled: true },
+      { ...entries[1], enabled: false },
+      entries[2],
+    ], { render: 'none' });
+  });
+
+  it('缺少世界书写入 API 时安全跳过', async () => {
+    vi.stubGlobal('getWorldbook', async () => []);
+    const result = await createTavernEnv().syncWorldbookEntryStates('[F1M管理层]', []);
+    expect(result).toEqual({ found: 0, changed: 0 });
+  });
+});

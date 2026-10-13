@@ -36,7 +36,7 @@
 | 助手宏 | `registerMacroLike`，以及内置的 `{{get_message_variable::…}}` | 注册 `{{f1m_state}}`，想手动摆放数据块的用户可以用 |
 | 聊天楼层 | `getChatMessages`、`setChatMessages`、`createChatMessages`、`deleteChatMessages` | 在 AI 回复末尾补状态条占位符；「AI叙述」按钮发送一条消息 |
 | 触发生成 | `generate`、`generateRaw`、`triggerSlash('/trigger')` | 「AI叙述」= 发送一条用户消息再触发生成 |
-| 世界书 / 预设 / 角色卡 / 正则 | `getWorldbook`、`getCharWorldbookNames`、`getPreset`、`getTavernRegexes` … | 从世界书读取 `[F1M数据]` 条目里的 YAML 数据 |
+| 世界书 / 预设 / 角色卡 / 正则 | `getWorldbook`、`replaceWorldbook`、`getCharWorldbookNames`、`getPreset`、`getTavernRegexes` … | 读取 `[F1M数据]`；按玩家实际职位同步 `[F1M管理层]` 条目的启用状态 |
 | 脚本按钮 | `getButtonEvent`、`appendInexistentScriptButtons` | 输入框附近的「F1管理面板」「AI叙述」两个按钮 |
 | 跨界面共享接口 | `initializeGlobal`、`waitGlobalInitialized` | 后端把 `F1Manager` 共享给状态条和面板 |
 | 操作酒馆页面 | 脚本里的 `$` 就是酒馆主页面的 jQuery | 在酒馆页面上创建可拖动、可缩放的悬浮面板 |
@@ -220,5 +220,6 @@ dev/            本地开发页
 - 合同续约、转会、车手市场和五类员工招聘已经实现。休赛期市场使用确定性报价，并支持自由人员、买断、解约与 AI 车队补缺。
 - 正赛与冲刺赛已经支持可恢复的逐圈模拟、隐藏动态天气、短期不确定预报，以及进站、天气、SC/VSC 和事故决策窗口。
 - 动力单元配额只按「内燃机 / 能量回收系统」两类计数，没有细分到涡轮、MGU-K、电池等单个元件。
-- 角色卡包含 11 支车队、2026 车手阵容、完整 24 站赛历，以及各特殊车队的世界书背景和管理机制。
+- 角色卡包含 11 支车队、22 名正式车手、22 名核心管理层、完整 24 站赛历，以及各特殊车队的世界书背景和管理机制。
+- 脚本会在开局、切换聊天和请求叙事时恢复管理层条目，再禁用被玩家实际取代的人物。副领队、接班人和共同领队不会误删仍在剧情中的领队或老板。
 - 没有群聊支持；每个聊天文件一份存档。

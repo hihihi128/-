@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { continuationSuffix, F1Controller, HUD_TAG, INJECT_ID } from '../../src/tavern/controller';
+import { continuationSuffix, F1Controller, HUD_TAG, INJECT_ID, LEADERSHIP_PREFIX, PLAYER_REPLACED_LEADERSHIP } from '../../src/tavern/controller';
 import { PTR, STORE_KEY } from '../../src/tavern/store';
-import { FakeTavern } from './fakeEnv';
+import { cardWorldbook, FakeTavern } from './fakeEnv';
 
 const update = (lines: string[]) => `\n<F1M_UPDATE>\n${lines.join('\n')}\n</F1M_UPDATE>`;
 
@@ -471,6 +471,60 @@ describe('后端控制器（模拟酒馆环境）', () => {
     await env.fire(env.events.CHAT_CHANGED, 'other');
     expect(ctrl.status().hasGame).toBe(false);
     expect(env.injected.has(INJECT_ID)).toBe(false);
+  });
+});
+
+describe('管理层世界书同步', () => {
+  const stella = `${LEADERSHIP_PREFIX} [mclaren:principal] 安德里亚·斯特拉`;
+  const wolff = `${LEADERSHIP_PREFIX} [mercedes:principal] 托托·沃尔夫`;
+
+  it('显式覆盖 11 支车队，并只标记实际由玩家替代的人物', () => {
+    expect(Object.keys(PLAYER_REPLACED_LEADERSHIP).sort()).toEqual([
+      'alpine', 'aston_martin', 'audi', 'cadillac', 'ferrari', 'haas', 'mclaren', 'mercedes', 'racing_bulls', 'red_bull', 'williams',
+    ]);
+    expect(PLAYER_REPLACED_LEADERSHIP.mclaren).toEqual([stella]);
+    expect(PLAYER_REPLACED_LEADERSHIP.mercedes).toEqual([]);
+    expect(PLAYER_REPLACED_LEADERSHIP.audi).toEqual([]);
+    expect(PLAYER_REPLACED_LEADERSHIP.alpine).toEqual([]);
+  });
+
+  it('迈凯伦开局禁用斯特拉，换队开局恢复旧条目并保留仍在任的领队', async () => {
+    const env = new FakeTavern(cardWorldbook());
+    env.worldbook.push(
+      { name: stella, content: '', book: 'F1 领队模拟器', enabled: true },
+      { name: wolff, content: '', book: 'F1 领队模拟器', enabled: true },
+    );
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+
+    expect((await ctrl.newGame({ playerTeamId: 'mclaren', seed: 7 })).ok).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
+    expect(env.worldbook.find(entry => entry.name === wolff)?.enabled).toBe(true);
+    const mclarenSave = ctrl.exportSave()!;
+
+    expect((await ctrl.newGame({ playerTeamId: 'mercedes', seed: 8 })).ok).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === wolff)?.enabled).toBe(true);
+
+    expect((await ctrl.importSave(mclarenSave)).ok).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
+  });
+
+  it('生成叙事前重新同步，且写入接口失败不会阻止开局', async () => {
+    const env = new FakeTavern(cardWorldbook());
+    env.worldbook.push({ name: stella, content: '', book: 'F1 领队模拟器', enabled: true });
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+    expect((await ctrl.newGame({ playerTeamId: 'mclaren', seed: 9 })).ok).toBe(true);
+    env.worldbook.find(entry => entry.name === stella)!.enabled = true;
+    expect((await ctrl.requestNarration()).ok).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
+
+    const oldEnv = new FakeTavern(cardWorldbook());
+    oldEnv.syncWorldbookEntryStates = async () => { throw new Error('unsupported'); };
+    const oldCtrl = new F1Controller(oldEnv);
+    oldCtrl.init();
+    expect((await oldCtrl.newGame({ playerTeamId: 'mclaren', seed: 10 })).ok).toBe(true);
   });
 });
 

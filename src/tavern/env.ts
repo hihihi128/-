@@ -16,6 +16,7 @@ export interface WorldbookText {
   name: string;
   content: string;
   book: string;
+  enabled?: boolean;
 }
 
 export interface TextGenerationOptions {
@@ -52,6 +53,8 @@ export interface TavernEnv {
   registerMacro(regex: RegExp, fn: () => string): void;
   /** 读取名字以 prefix 开头的世界书条目（角色卡绑定的世界书 → 全局世界书 → 角色卡内嵌世界书） */
   readWorldbookEntries(prefix: string): Promise<{ entries: WorldbookText[]; origin: string }>;
+  /** 恢复 prefix 下的所有条目，再禁用 disabledNames 中的精确条目名。缺少写入 API 时安全跳过。 */
+  syncWorldbookEntryStates(prefix: string, disabledNames: string[]): Promise<{ found: number; changed: number }>;
   parseYaml(text: string): unknown;
   on(event: string, fn: (...args: any[]) => void): void;
   emit(event: string, ...args: any[]): void;
@@ -87,7 +90,9 @@ declare const uninjectPrompts: (ids: string[]) => void;
 declare const registerMacroLike: (re: RegExp, fn: (...a: any[]) => string) => unknown;
 declare const getCharWorldbookNames: (c: string) => { primary: string | null; additional: string[] };
 declare const getGlobalWorldbookNames: () => string[];
-declare const getWorldbook: (name: string) => Promise<Array<{ name: string; content: string; enabled: boolean }>>;
+type WorldbookEntry = { uid?: number; name: string; content: string; enabled: boolean; [key: string]: unknown };
+declare const getWorldbook: (name: string) => Promise<WorldbookEntry[]>;
+declare const replaceWorldbook: (name: string, entries: WorldbookEntry[], options?: { render?: 'none' | 'debounced' | 'immediate' }) => Promise<void>;
 declare const eventOn: (e: string, fn: (...a: any[]) => void) => unknown;
 declare const eventEmit: (e: string, ...a: any[]) => Promise<void>;
 declare const getButtonEvent: (name: string) => string;
@@ -242,6 +247,45 @@ export function createTavernEnv(): TavernEnv {
         /* 忽略 */
       }
       return { entries: out, origin: out.length ? '角色卡内嵌世界书' : '未找到' };
+    },
+    syncWorldbookEntryStates: async (prefix, disabledNames) => {
+      if (typeof getWorldbook !== 'function' || typeof replaceWorldbook !== 'function') return { found: 0, changed: 0 };
+      const disabled = new Set(disabledNames.map(name => name.trim()));
+      const books: string[] = [];
+      try {
+        const cw = getCharWorldbookNames('current');
+        if (cw.primary) books.push(cw.primary);
+        for (const name of cw.additional) if (!books.includes(name)) books.push(name);
+      } catch {
+        /* 没有打开角色卡 */
+      }
+      try {
+        for (const name of getGlobalWorldbookNames()) if (!books.includes(name)) books.push(name);
+      } catch {
+        /* 忽略 */
+      }
+      let found = 0;
+      let changed = 0;
+      for (const book of books) {
+        try {
+          const entries = await getWorldbook(book);
+          let bookChanged = false;
+          for (const entry of entries) {
+            const name = entry.name?.trim() ?? '';
+            if (!name.startsWith(prefix)) continue;
+            found++;
+            const enabled = !disabled.has(name);
+            if (entry.enabled === enabled) continue;
+            entry.enabled = enabled;
+            changed++;
+            bookChanged = true;
+          }
+          if (bookChanged) await replaceWorldbook(book, entries, { render: 'none' });
+        } catch {
+          /* 世界书不存在、只读或当前助手版本不支持写入 */
+        }
+      }
+      return { found, changed };
     },
     parseYaml: text => YAML.parse(text),
     on: (e, fn) => {

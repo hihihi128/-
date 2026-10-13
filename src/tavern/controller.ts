@@ -36,11 +36,31 @@ import { AI_PTR, GAME_PTR, PTR, SaveStore, type RevisionInfo } from './store';
 
 export const HUD_TAG = '<F1M_HUD/>';
 export const DATA_PREFIX = '[F1M数据]';
+export const LEADERSHIP_PREFIX = '[F1M管理层]';
 export const INJECT_ID = 'f1m_state';
 export const CHANGE_EVENT = 'f1m_changed';
 export const VERSION = '0.1.0';
 /** 酒馆流式生成开始时 AI 楼层的占位文本 */
 const STREAM_PLACEHOLDER = '...';
+
+/**
+ * Only people whose actual job is occupied by the player belong here.
+ * Retained principals, owners, and technical leaders stay enabled even when
+ * the player works for their team as a deputy, successor, or co-principal.
+ */
+export const PLAYER_REPLACED_LEADERSHIP: Readonly<Record<string, readonly string[]>> = {
+  mercedes: [],
+  mclaren: [`${LEADERSHIP_PREFIX} [mclaren:principal] 安德里亚·斯特拉`],
+  red_bull: [],
+  ferrari: [],
+  williams: [],
+  racing_bulls: [],
+  aston_martin: [],
+  haas: [],
+  audi: [],
+  alpine: [],
+  cadillac: [],
+};
 
 interface ProcessOptions {
   type?: string;
@@ -195,6 +215,7 @@ export class F1Controller {
   private engineerApiKey = '';
   data: (NormalizeResult & { canStart: boolean; origin: string; entries: string[] }) | null = null;
   private busy = false;
+  private leadershipSyncQueue: Promise<void> = Promise.resolve();
   /** 「继续生成」开始时被续写楼层的原文（用于只结算新续写的部分） */
   private continuing: { floor: number; text: string } | null = null;
   private listeners = new Set<(reason: string) => void>();
@@ -208,6 +229,7 @@ export class F1Controller {
   init(): void {
     this.loadSettings();
     this.store.load();
+    void this.syncLeadershipWorldbook();
     const e = this.env.events;
     this.env.on(e.MESSAGE_RECEIVED, (id: number, type?: string) => void this.onMessageReceived(Number(id), type));
     this.env.on(e.GENERATION_ENDED, () => void this.onGenerationEnded());
@@ -218,6 +240,20 @@ export class F1Controller {
       this.env.on(ev, () => this.notify('chat'));
     }
     this.env.registerMacro(/\{\{f1m_state\}\}/gi, () => this.promptForLatest() ?? '');
+  }
+
+  private syncLeadershipWorldbook(state: GameState | null = this.stateAt()): Promise<void> {
+    const disabled = state ? PLAYER_REPLACED_LEADERSHIP[state.meta.playerTeamId] ?? [] : [];
+    this.leadershipSyncQueue = this.leadershipSyncQueue
+      .catch(() => undefined)
+      .then(async () => {
+        try {
+          await this.env.syncWorldbookEntryStates(LEADERSHIP_PREFIX, [...disabled]);
+        } catch {
+          // Older Tavern Helper versions and embedded-only character books can be read-only.
+        }
+      });
+    return this.leadershipSyncQueue;
   }
 
   loadSettings(): void {
@@ -573,6 +609,7 @@ export class F1Controller {
     this.store.reset(state.gameId);
     const floor = Math.max(0, this.latestFloor());
     this.store.commit(state, { floor, kind: 'new', label: `新开局：${state.teams[state.meta.playerTeamId].name}`, parent: null });
+    await this.syncLeadershipWorldbook(state);
     this.notify('new_game');
     const role = state.ferrari ? '过渡领队' : state.mclaren || state.astonMartin ? '临时领队' : state.mercedes || state.racingBulls || state.audi || state.alpine ? '副领队' : state.haas ? '共同领队' : state.williams ? '接班人' : state.redBull ? '助理领队' : '领队';
     return { ok: true, message: `已开局：你现在是 ${state.teams[state.meta.playerTeamId].name} 的${role}` };
@@ -718,6 +755,7 @@ export class F1Controller {
     if (!rev) return { ok: false, message: '找不到该存档版本' };
     const state = this.store.stateOf(rev);
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'restore', label: `读档：${rev.label}` });
+    await this.syncLeadershipWorldbook(state);
     this.notify('restore');
     return { ok: true, message: `已读取版本「${rev.label}」并挂到最新楼层` };
   }
@@ -742,6 +780,7 @@ export class F1Controller {
     migrateState(state);
     this.store.reset(state.gameId);
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'import', label: '导入存档', parent: null });
+    await this.syncLeadershipWorldbook(state);
     this.notify('import');
     return { ok: true, message: '存档已导入' };
   }
@@ -922,6 +961,7 @@ export class F1Controller {
     if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成中' };
     const s = this.stateAt();
     if (!s) return { ok: false, message: '还没有开局' };
+    await this.syncLeadershipWorldbook(s);
     await this.env.createUserMessage((text ?? this.settings.narrationText).trim() || DEFAULT_SETTINGS.narrationText);
     await this.env.triggerGeneration();
     return { ok: true, message: '已请求 AI 叙述' };
@@ -934,6 +974,7 @@ export class F1Controller {
     this.data = null;
     this.continuing = null;
     this.env.uninject(INJECT_ID);
+    void this.syncLeadershipWorldbook();
     this.notify('chat_changed');
   }
 

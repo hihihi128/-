@@ -156,6 +156,30 @@ const driverLore = [
   { id: 38, slug: 'bottas', name: '瓦尔特利·博塔斯', keys: ['瓦尔特利·博塔斯', '博塔斯', 'Valtteri Bottas', 'Bottas'] },
   { id: 39, slug: 'perez', name: '塞尔吉奥·佩雷斯', keys: ['塞尔吉奥·佩雷斯', '佩雷斯', 'Sergio Perez', 'Sergio Pérez', 'Perez', 'Pérez'] },
 ];
+const leadershipLore = [
+  { id: 40, team: 'mercedes', role: 'principal', slug: 'mercedes-toto-wolff', name: '托托·沃尔夫', keys: ['托托·沃尔夫', '托托', 'Toto Wolff'] },
+  { id: 41, team: 'mercedes', role: 'technical', slug: 'mercedes-james-allison', name: '詹姆斯·艾利森', keys: ['詹姆斯·艾利森', 'James Allison'] },
+  { id: 42, team: 'mclaren', role: 'principal', slug: 'mclaren-andrea-stella', name: '安德里亚·斯特拉', keys: ['安德里亚·斯特拉', '斯特拉', 'Andrea Stella'] },
+  { id: 43, team: 'mclaren', role: 'owner', slug: 'mclaren-zak-brown', name: '扎克·布朗', keys: ['扎克·布朗', 'Zak Brown'] },
+  { id: 44, team: 'red_bull', role: 'principal', slug: 'red-bull-laurent-mekies', name: '洛朗·梅基斯', keys: ['洛朗·梅基斯', '梅基斯', 'Laurent Mekies'] },
+  { id: 45, team: 'red_bull', role: 'technical', slug: 'red-bull-pierre-wache', name: '皮埃尔·瓦谢', keys: ['皮埃尔·瓦谢', 'Pierre Waché', 'Pierre Wache'] },
+  { id: 46, team: 'ferrari', role: 'owner', slug: 'ferrari-john-elkann', name: '约翰·埃尔坎', keys: ['约翰·埃尔坎', '埃尔坎', 'John Elkann'] },
+  { id: 47, team: 'ferrari', role: 'deputy', slug: 'ferrari-jerome-dambrosio', name: '热罗姆·丹布罗西奥', keys: ['热罗姆·丹布罗西奥', '丹布罗西奥', "Jérôme d'Ambrosio", "Jerome d'Ambrosio"] },
+  { id: 48, team: 'williams', role: 'principal', slug: 'williams-james-vowles', name: '詹姆斯·沃尔斯', keys: ['詹姆斯·沃尔斯', '沃尔斯', 'James Vowles'] },
+  { id: 49, team: 'williams', role: 'technical', slug: 'williams-pat-fry', name: '帕特·弗莱', keys: ['帕特·弗莱', 'Pat Fry'] },
+  { id: 50, team: 'racing_bulls', role: 'principal', slug: 'racing-bulls-alan-permane', name: '艾伦·佩尔曼', keys: ['艾伦·佩尔曼', '佩尔曼', 'Alan Permane'] },
+  { id: 51, team: 'racing_bulls', role: 'technical', slug: 'racing-bulls-tim-goss', name: '蒂姆·戈斯', keys: ['蒂姆·戈斯', 'Tim Goss'] },
+  { id: 52, team: 'aston_martin', role: 'principal', slug: 'aston-martin-adrian-newey', name: '阿德里安·纽维', keys: ['阿德里安·纽维', '纽维', 'Adrian Newey'] },
+  { id: 53, team: 'aston_martin', role: 'owner', slug: 'aston-martin-lawrence-stroll', name: '劳伦斯·斯特罗尔', keys: ['劳伦斯·斯特罗尔', 'Lawrence Stroll'] },
+  { id: 54, team: 'haas', role: 'principal', slug: 'haas-ayao-komatsu', name: '小松礼雄', keys: ['小松礼雄', 'Ayao Komatsu'] },
+  { id: 55, team: 'haas', role: 'owner', slug: 'haas-gene-haas', name: '吉恩·哈斯', keys: ['吉恩·哈斯', 'Gene Haas'] },
+  { id: 56, team: 'audi', role: 'principal', slug: 'audi-mattia-binotto', name: '马蒂亚·比诺托', keys: ['马蒂亚·比诺托', '比诺托', 'Mattia Binotto'] },
+  { id: 57, team: 'audi', role: 'technical', slug: 'audi-james-key', name: '詹姆斯·基', keys: ['詹姆斯·基', 'James Key'] },
+  { id: 58, team: 'alpine', role: 'principal', slug: 'alpine-flavio-briatore', name: '弗拉维奥·布里亚托利', keys: ['弗拉维奥·布里亚托利', '布里亚托利', 'Flavio Briatore'] },
+  { id: 59, team: 'alpine', role: 'technical', slug: 'alpine-david-sanchez', name: '大卫·桑切斯', keys: ['大卫·桑切斯', 'David Sanchez'] },
+  { id: 60, team: 'cadillac', role: 'principal', slug: 'cadillac-graeme-lowdon', name: '格雷姆·洛登', keys: ['格雷姆·洛登', '洛登', 'Graeme Lowdon'] },
+  { id: 61, team: 'cadillac', role: 'technical', slug: 'cadillac-nick-chester', name: '尼克·切斯特', keys: ['尼克·切斯特', 'Nick Chester'] },
+];
 const book = {
   name: BOOK_NAME,
   entries: [
@@ -168,6 +192,7 @@ const book = {
     entry(6, '[F1M资料] 车手资料模板（复制后使用）', readCard(`${wb}/lore-template.md`), { enabled: false, keys: ['填写车手名'], order: 200 }),
     ...teamLore.map((lore, index) => entry(lore.id, `[F1M资料] ${lore.name}`, readCard(`${wb}/lore-${lore.slug}.md`), { keys: lore.keys, order: 201 + index })),
     ...driverLore.map((lore, index) => entry(lore.id, `[F1M资料] ${lore.name}`, readCard(`${wb}/lore-driver-${lore.slug}.md`), { keys: lore.keys, order: 220 + index })),
+    ...leadershipLore.map((lore, index) => entry(lore.id, `[F1M管理层] [${lore.team}:${lore.role}] ${lore.name}`, readCard(`${wb}/lore-leadership-${lore.slug}.md`), { keys: lore.keys, order: 260 + index })),
   ],
 };
 

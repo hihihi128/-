@@ -121,13 +121,17 @@ function setupWindow() {
 }
 
 describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backend.js）', () => {
-  it('生成卡包含 11 支车队和 22 名正式车手的独立资料', () => {
+  it('生成卡包含 11 支车队、22 名正式车手和 22 名核心管理层的独立资料', () => {
     const card = JSON.parse(readFileSync(CARD, 'utf8'));
     const entries = card.data.character_book.entries as Array<{ comment: string; content: string; enabled: boolean; keys: string[] }>;
     const teams = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M资料]') && entry.comment.includes('车队（2026）'));
     const drivers = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M资料]') && entry.content.startsWith('<车手资料'));
+    const leaders = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M管理层]'));
     expect(teams).toHaveLength(11);
     expect(drivers).toHaveLength(22);
+    expect(leaders).toHaveLength(22);
+    expect(new Set(leaders.map(entry => entry.comment.match(/^\[F1M管理层\] \[([^:]+):/)?.[1])).size).toBe(11);
+    expect(leaders.every(entry => entry.content.startsWith('<管理层资料') && entry.keys.length >= 2)).toBe(true);
     expect(teams.every(entry => entry.content.includes('实时数据表明玩家执掌本队时生效'))).toBe(true);
     expect(teams.every(entry => entry.keys.length >= 2)).toBe(true);
     expect(drivers.every(entry => entry.keys.length >= 4)).toBe(true);
