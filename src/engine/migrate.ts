@@ -37,6 +37,10 @@ export function migrateState(state: GameState): GameState {
   if (state.astonMartin === undefined) state.astonMartin = null;
   if (state.racingBulls === undefined) state.racingBulls = null;
   if (state.audi === undefined) state.audi = null;
+  if (state.alpine === undefined) state.alpine = null;
+  if (state.haas === undefined) state.haas = null;
+  if (state.williams === undefined) state.williams = null;
+  state.randomEvents ??= { lastRoundKey: null, current: null, history: [] };
   if (state.audi) state.audi.alliance = Boolean(state.audi.alliance);
   state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, log: [] };
   if (state.mclaren) state.mclaren.weeksTotal ??= state.mclaren.weeksLeft;
@@ -44,10 +48,18 @@ export function migrateState(state: GameState): GameState {
   state.rules.racingBulls ??= deepClone(DEFAULT_RULES.racingBulls);
   state.rules.audi ??= deepClone(DEFAULT_RULES.audi);
   state.rules.fiaMeeting ??= deepClone(DEFAULT_RULES.fiaMeeting);
+  state.rules.alpine ??= deepClone(DEFAULT_RULES.alpine);
+  state.rules.haas ??= deepClone(DEFAULT_RULES.haas);
+  state.rules.williams ??= deepClone(DEFAULT_RULES.williams);
+  state.rules.randomEvents ??= deepClone(DEFAULT_RULES.randomEvents);
   fillMissing(state.rules.astonMartin as unknown as Record<string, unknown>, DEFAULT_RULES.astonMartin as unknown as Record<string, unknown>);
   fillMissing(state.rules.racingBulls as unknown as Record<string, unknown>, DEFAULT_RULES.racingBulls as unknown as Record<string, unknown>);
   fillMissing(state.rules.audi as unknown as Record<string, unknown>, DEFAULT_RULES.audi as unknown as Record<string, unknown>);
   fillMissing(state.rules.fiaMeeting as unknown as Record<string, unknown>, DEFAULT_RULES.fiaMeeting as unknown as Record<string, unknown>);
+  fillMissing(state.rules.alpine as unknown as Record<string, unknown>, DEFAULT_RULES.alpine as unknown as Record<string, unknown>);
+  fillMissing(state.rules.haas as unknown as Record<string, unknown>, DEFAULT_RULES.haas as unknown as Record<string, unknown>);
+  fillMissing(state.rules.williams as unknown as Record<string, unknown>, DEFAULT_RULES.williams as unknown as Record<string, unknown>);
+  fillMissing(state.rules.randomEvents as unknown as Record<string, unknown>, DEFAULT_RULES.randomEvents as unknown as Record<string, unknown>);
   // Market rules are a closed map, unlike parts/tyres. Modern saves take the
   // puAllocation fast path below, so fill this before that return.
   state.rules.market ??= deepClone(DEFAULT_RULES.market);

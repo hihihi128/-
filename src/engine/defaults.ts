@@ -253,6 +253,29 @@ export const DEFAULT_RULES: Rules = {
   racingBulls: { recallChance: 0.05 },
   audi: { startDropMin: 2, startDropMax: 3, allianceProgress: 34, progressPerRace: 10 },
   fiaMeeting: { interval: 3, startPoliticalCapital: 50 },
+  alpine: {
+    startBriatoreSatisfaction: 65,
+    dismissBriatoreSatisfaction: 20,
+    startFanPressure: 42,
+    startGaslyCommitment: 72,
+    startPuIntegration: 20,
+    integrationGain: 24,
+  },
+  haas: {
+    startGeneSupport: 62,
+    startToyotaSupport: 52,
+    startToyotaInfluence: 20,
+    influencePerRace: 5,
+    interferenceThreshold: 60,
+    dismissGeneSupport: 15,
+  },
+  williams: {
+    startVowlesConfidence: 65,
+    startSuccessionReadiness: 25,
+    successionThreshold: 55,
+    dismissVowlesConfidence: 20,
+  },
+  randomEvents: { noneWeight: 52, driverInjuryWeight: 14, windTunnelWeight: 17, partIssueWeight: 17 },
 };
 
 export const DEFAULT_PLAN: DriverPlan = {

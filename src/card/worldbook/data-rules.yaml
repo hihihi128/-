@@ -163,3 +163,27 @@ rules:
   # fiaMeeting:
   #   interval: 3
   #   startPoliticalCapital: 50
+  # alpine:                    # 布里亚托接班人、车手平衡与梅奔动力匹配
+  #   startBriatoreSatisfaction: 65
+  #   dismissBriatoreSatisfaction: 20
+  #   startFanPressure: 42
+  #   startGaslyCommitment: 72
+  #   startPuIntegration: 20
+  #   integrationGain: 24
+  # haas:                      # 吉恩·哈斯与丰田之间的权力平衡
+  #   startGeneSupport: 62
+  #   startToyotaSupport: 52
+  #   startToyotaInfluence: 20
+  #   influencePerRace: 5
+  #   interferenceThreshold: 60
+  #   dismissGeneSupport: 15
+  # williams:                  # 2026 全年接班培养与预算取舍
+  #   startVowlesConfidence: 65
+  #   startSuccessionReadiness: 25
+  #   successionThreshold: 55
+  #   dismissVowlesConfidence: 20
+  # randomEvents:              # 每个比赛周触发一次；权重可以自由调整
+  #   noneWeight: 52
+  #   driverInjuryWeight: 14
+  #   windTunnelWeight: 17
+  #   partIssueWeight: 17

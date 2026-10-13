@@ -199,17 +199,18 @@ teams:
 
   # ── 威廉姆斯：2025 年中游领头羊；季前底盘不如预期，但有顶级的梅赛德斯动力 ──
   - id: williams
+    special: williams
     name: 威廉姆斯车队
     short: WIL
     color: '#64c4ff'
     principal: 詹姆斯·沃尔斯
     engine: 梅赛德斯
     base: 英国·格罗夫
-    funds: 80
+    funds: 52
     sponsorIncome: 5.2
     operatingCost: 2.4
     targetPosition: 5
-    facilities: { windTunnel: 3, cfd: 4, simulator: 4, factory: 4 }
+    facilities: { windTunnel: 2, cfd: 3, simulator: 3, factory: 3 }
     staff:
       technicalDirector: { name: 帕特·弗莱, skill: 82, salary: 2.2 }
       aeroChief: { skill: 77, salary: 1.5 }
@@ -228,7 +229,7 @@ teams:
       floor: { perf: 47.9, rel: 82 }
       sidepods: { perf: 49.9, rel: 83 }
       suspension: { perf: 48.9, rel: 82 }
-    description: FW48 · 梅赛德斯动力单元。2025 年车队榜第 5（137 分），塞恩斯在阿塞拜疆站登上领奖台。季前长距离速度落后于奥迪。
+    description: FW48 · 梅赛德斯动力单元。James Vowles 将在 2026 年底返回梅赛德斯，玩家从赛季初开始接受接班培养。有限资金必须在落后设施与当季升级之间分配。
 
   # ── 小红牛：红牛二队，红牛-福特动力，阵容最年轻 ──
   - id: racing_bulls
@@ -302,17 +303,18 @@ teams:
 
   # ── 哈斯：法拉利客户车队，预算有限 ──
   - id: haas
+    special: haas
     name: 哈斯车队
     short: HAA
     color: '#b6babd'
     principal: 小松礼雄
     engine: 法拉利
     base: 美国·坎纳波利斯 / 英国·班伯里
-    funds: 60
+    funds: 45
     sponsorIncome: 4.6
     operatingCost: 2.3
     targetPosition: 8
-    facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 3 }
+    facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 2 }
     staff:
       technicalDirector: { name: 安德烈亚·德佐尔多, skill: 75, salary: 1.4 }
       aeroChief: { skill: 74, salary: 1.2 }
@@ -331,7 +333,7 @@ teams:
       floor: { perf: 54.8, rel: 81 }
       sidepods: { perf: 53.8, rel: 82 }
       suspension: { perf: 54.8, rel: 82 }
-    description: VF-26 · 法拉利动力单元。2025 年车队榜第 8（79 分）。2026 年由奥孔和贝尔曼出战，丰田是技术合作伙伴。
+    description: VF-26 · 法拉利动力单元。玩家与小松礼雄共同管理车队，在吉恩·哈斯和日益深入的丰田之间维持平衡。开局资金和生产能力不足，丰田会用更多干涉换取更多资金。
 
   # ── 奥迪：索伯改组为奥迪厂商车队，季前中游的惊喜 ──
   - id: audi
@@ -370,6 +372,7 @@ teams:
 
   # ── 阿尔派：改用梅赛德斯客户动力；2025 年垫底 ──
   - id: alpine
+    special: alpine
     name: 阿尔派车队
     short: ALP
     color: '#0093cc'
@@ -399,7 +402,7 @@ teams:
       floor: { perf: 63.5, rel: 82 }
       sidepods: { perf: 64.5, rel: 83 }
       suspension: { perf: 64.5, rel: 82 }
-    description: A526 · 梅赛德斯动力单元（放弃雷诺自研动力）。2025 年车队榜第 10（22 分），提前把研发重心放到 2026 新车。
+    description: A526 · 梅赛德斯动力单元。玩家作为布里亚托雷培养的副领队，必须服从其研发大方向，并在克拉平托粉丝与加斯利留队意愿之间平衡，同时解决新动力单元的匹配问题。
 
   # ── 凯迪拉克：新加入的第 11 支车队，法拉利客户动力；跑得多但下压力不足 ──
   - id: cadillac

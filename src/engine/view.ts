@@ -298,8 +298,12 @@ export interface GameView {
   astonMartin: GameState['astonMartin'];
   racingBulls: (GameState['racingBulls'] & { candidates?: Array<{ id: string; name: string }> }) | null;
   audi: GameState['audi'];
+  alpine: GameState['alpine'];
+  haas: GameState['haas'];
+  williams: GameState['williams'];
+  randomEvents: GameState['randomEvents'];
   fiaMeeting: GameState['fiaMeeting'];
-  nextSpecialRules: Pick<GameState['rules'], 'astonMartin' | 'racingBulls' | 'audi' | 'fiaMeeting'>;
+  nextSpecialRules: Pick<GameState['rules'], 'astonMartin' | 'racingBulls' | 'audi' | 'fiaMeeting' | 'alpine' | 'haas' | 'williams'>;
   aduo: AduoView;
   lastSeason: GameState['lastSeason'];
   labels: typeof LABELS & {
@@ -664,12 +668,19 @@ export function buildView(state: GameState): GameView {
       candidates: state.racingBulls.pendingRecall?.candidateIds.map(id => ({ id, name: state.drivers[id]?.name ?? id })) ?? [],
     } : null,
     audi: state.audi ?? null,
+    alpine: state.alpine ?? null,
+    haas: state.haas ?? null,
+    williams: state.williams ?? null,
+    randomEvents: state.randomEvents,
     fiaMeeting: state.fiaMeeting,
     nextSpecialRules: {
       astonMartin: { ...rules.astonMartin },
       racingBulls: { ...rules.racingBulls },
       audi: { ...rules.audi },
       fiaMeeting: { ...rules.fiaMeeting },
+      alpine: { ...rules.alpine },
+      haas: { ...rules.haas },
+      williams: { ...rules.williams },
     },
     aduo: aduoView(state),
     lastSeason: state.lastSeason,

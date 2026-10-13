@@ -159,6 +159,15 @@ const book = {
     entry(16, '[F1M资料] 凯迪拉克车队（2026）', readCard(`${wb}/lore-cadillac.md`), {
       keys: ['凯迪拉克', 'Cadillac'], order: 210,
     }),
+    entry(17, '[F1M资料] 阿尔派车队（2026）', readCard(`${wb}/lore-alpine.md`), {
+      keys: ['阿尔派', 'Alpine', '布里亚托利', '布里亚托雷', 'Gasly', '加斯利', 'Colapinto', '克拉平托'], order: 211,
+    }),
+    entry(18, '[F1M资料] 哈斯车队（2026）', readCard(`${wb}/lore-haas.md`), {
+      keys: ['哈斯', 'Haas', '丰田', 'Toyota Gazoo Racing', '小松礼雄', 'Gene Haas', '吉恩·哈斯'], order: 212,
+    }),
+    entry(19, '[F1M资料] 威廉姆斯车队（2026）', readCard(`${wb}/lore-williams.md`), {
+      keys: ['威廉姆斯', 'Williams', 'James Vowles', '沃尔斯', 'Albon', '阿尔本', 'Sainz', '塞恩斯'], order: 213,
+    }),
   ],
 };
 

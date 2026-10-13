@@ -12,6 +12,7 @@ import { aduoWeeksMul, countHomologation, puDesignBlock, supplyCustomers } from 
 import { AMBITIONS, LABELS, TRACK_DEMANDS } from './defaults';
 import { affordError, capRemaining, charge, income, payWeeklySalaries } from './finance';
 import { addNews, addNarration, driverName } from './log';
+import { managementActionBlocker } from './managementSpecials';
 import { recordPuFit } from './powerunit';
 import { advanceSpecialWeeks } from './teamSpecials';
 import { bestDisclosedPerf, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec } from './ratings';
@@ -159,6 +160,8 @@ export function previewProject(
   const money = affordError(team, cost, 'rnd', rules);
   if (money) blockers.push(money);
   if (state.season.phase === 'season_end') blockers.push('赛季已结束，请先开始新赛季');
+  const managementBlocker = teamId === state.meta.playerTeamId ? managementActionBlocker(state, { type: 'START_PROJECT', partType, ambition, rush }) : null;
+  if (managementBlocker) blockers.push(managementBlocker);
 
   return {
     ok: blockers.length === 0,
@@ -299,6 +302,8 @@ export function previewFacility(state: GameState, teamId: string, facility: Faci
     const money = affordError(team, cost, 'facility', state.rules);
     if (money) blockers.push(money);
   }
+  const managementBlocker = teamId === state.meta.playerTeamId ? managementActionBlocker(state, { type: 'UPGRADE_FACILITY', facility }) : null;
+  if (managementBlocker) blockers.push(managementBlocker);
   return { ok: blockers.length === 0, blockers, cost, weeks, label: `${def.name}升级至 ${nextLevel} 级`, nextLevel };
 }
 

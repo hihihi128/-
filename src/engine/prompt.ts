@@ -125,6 +125,20 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
     const a = state.audi;
     L.push(`【奥迪·副领队】比诺托负责技术，玩家处理围场政治。奥迪涡轮问题${a.turboFixed ? '已经通过 ADUO 解决' : `尚未解决，起步随机丢 ${rules.audi.startDropMin}–${rules.audi.startDropMax} 位`}。ADUO 进度 ${a.aduoProgress}% · 政治支持 ${a.politicalSupport}${a.alliance ? ' · 已与阿斯顿·马丁、梅赛德斯和法拉利结盟' : ' · 尚未组成四队联盟'}。`);
   }
+  if (state.alpine) {
+    const a = state.alpine;
+    L.push(`【阿尔派·布里亚托接班人】布里亚托满意度 ${a.briatoreSatisfaction} · 克拉平托粉丝压力 ${a.fanPressure} · 加斯利留队意愿 ${a.gaslyCommitment}${a.gaslyLeaving ? '（已经决定离队）' : ''} · 梅赛德斯动力单元匹配 ${a.puIntegration}% · 当前研发方向 ${a.rndDirection.map(type => rules.parts[type]?.name ?? type).join('、')}。玩家无权改变布里亚托决定的大方向。`);
+  }
+  if (state.haas) {
+    const h = state.haas;
+    L.push(`【哈斯·共同领队】吉恩·哈斯支持 ${h.geneSupport} · 丰田支持 ${h.toyotaSupport} · 丰田影响力 ${h.toyotaInfluence}% · 丰田累计投入 $${h.fundingProvided.toFixed(1)}M${h.partnershipWithdrawn ? ' · 丰田已冻结投入' : ''}。影响力达到 ${rules.haas.interferenceThreshold}% 后，丰田会限制研发方向。`);
+  }
+  if (state.williams) {
+    const w = state.williams;
+    const focus = w.focus === 'facilities' ? '设施' : w.focus === 'development' ? '赛车升级' : w.focus === 'reserve' ? '保留现金' : '尚未决定';
+    L.push(`【威廉姆斯·接班培养】沃尔斯信心 ${w.vowlesConfidence} · 接班准备度 ${w.successionReadiness}/${rules.williams.successionThreshold} · 本站预算方向 ${focus} · 设施累计投入 $${w.facilityInvestment.toFixed(1)}M · 升级累计投入 $${w.developmentInvestment.toFixed(1)}M${w.confirmedSuccessor ? ' · 已正式接任' : ''}。`);
+  }
+  if (state.randomEvents?.current) L.push(`【本站随机事件】${state.randomEvents.current.title}：${state.randomEvents.current.detail}`);
   if (state.meta.playerTeamId === 'cadillac') L.push('【凯迪拉克·新军】车队通过全球公开招募组建，没有额外特殊机制，但初始赛车性能很差，需要依靠研发和人才市场追赶。');
   if (state.fiaMeeting?.current) {
     const labels = { aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };

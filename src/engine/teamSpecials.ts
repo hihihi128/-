@@ -225,7 +225,7 @@ export function afterSpecialRace(state: GameState): void {
 }
 
 export function dismissalReason(state: GameState): string | null {
-  return state.ferrari?.dismissed ?? state.mercedes?.dismissed ?? null;
+  return state.ferrari?.dismissed ?? state.mercedes?.dismissed ?? state.alpine?.dismissed ?? state.haas?.dismissed ?? state.williams?.dismissed ?? null;
 }
 
 export function redBullCrashMultiplier(state: GameState, teamId: string): number {

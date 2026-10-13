@@ -18,6 +18,7 @@ import { ferrariOnPriority } from './ferrari';
 import { teammateRelationship, willDisobeyStrategy } from './driverBehavior';
 import { dismissalReason, mercedesPolitics, retainGp, startMcLarenFix } from './teamSpecials';
 import { astonCrisis, astonOnPriority, audiAlliance, fiaDebate, selectRacingBullsReserve, specialDecisionBlocker } from './nextTeamSpecials';
+import { alpineManagement, alpineOnPriority, haasBalance, managementActionBlocker, recordManagementInvestment, williamsBudgetFocus } from './managementSpecials';
 import { addNews, driverName } from './log';
 import { offerDriverContract, offerStaffContract, releasePerson } from './market';
 import { resolveAiMarket } from './market-ai';
@@ -122,6 +123,7 @@ function setPriority(state: GameState, driverId: string | null): Outcome {
   addNews(state, '车队', `${msg}。`);
   ferrariOnPriority(state, driverId);
   astonOnPriority(state, driverId);
+  alpineOnPriority(state, driverId);
   return ok(msg);
 }
 
@@ -147,6 +149,8 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
   }
   const specialBlocker = specialDecisionBlocker(state, action?.type);
   if (specialBlocker) return fail(specialBlocker);
+  const managementBlocker = managementActionBlocker(state, action);
+  if (managementBlocker) return fail(managementBlocker);
   switch (action.type) {
     case 'ADVANCE': {
       const next = nextActionFor(state);
@@ -244,17 +248,23 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
       return setTeamOrders(state, action.orders?.mode, action.orders?.favorDriverId ?? null);
     case 'SET_PRIORITY':
       return setPriority(state, action.driverId ?? null);
-    case 'START_PROJECT':
-      return startProject(state, tid, action.partType, action.ambition, !!action.rush, rng);
+    case 'START_PROJECT': {
+      const result = startProject(state, tid, action.partType, action.ambition, !!action.rush, rng);
+      recordManagementInvestment(state, action, result.ok);
+      return result;
+    }
     case 'CANCEL_PROJECT':
       return cancelProject(state, tid, action.projectId);
     case 'ORDER_UNITS':
       return orderUnits(state, tid, action.partType, action.specId, action.qty);
     case 'FIT_PART':
       return fitPart(state, tid, action.slot, action.partType, action.specId);
-    case 'UPGRADE_FACILITY':
+    case 'UPGRADE_FACILITY': {
       if (!FACILITIES.includes(action.facility)) return fail('未知设施');
-      return upgradeFacility(state, tid, action.facility);
+      const result = upgradeFacility(state, tid, action.facility);
+      recordManagementInvestment(state, action, result.ok);
+      return result;
+    }
     case 'TRAIN_PIT_CREW':
       return startPitTraining(state, tid);
     case 'TRAIN_DRIVER':
@@ -280,6 +290,15 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
       return selectRacingBullsReserve(state, action.driverId);
     case 'AUDI_ALLIANCE':
       return audiAlliance(state);
+    case 'ALPINE_MANAGEMENT':
+      if (!['back_colapinto', 'reassure_gasly', 'integrate_power_unit'].includes(action.strategy)) return fail('未知的阿尔派管理行动');
+      return alpineManagement(state, action.strategy);
+    case 'HAAS_BALANCE':
+      if (!['protect_independence', 'accept_toyota', 'compromise'].includes(action.strategy)) return fail('未知的哈斯股东行动');
+      return haasBalance(state, action.strategy);
+    case 'WILLIAMS_BUDGET_FOCUS':
+      if (!['facilities', 'development', 'reserve'].includes(action.focus)) return fail('未知的威廉姆斯预算方向');
+      return williamsBudgetFocus(state, action.focus);
     case 'FIA_DEBATE':
       if (!['support', 'oppose', 'compromise'].includes(action.stance)) return fail('未知的 FIA 辩论立场');
       return fiaDebate(state, action.stance);

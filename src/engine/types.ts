@@ -258,6 +258,34 @@ export interface AstonMartinRules {
 export interface RacingBullsRules { recallChance: number }
 export interface AudiRules { startDropMin: number; startDropMax: number; allianceProgress: number; progressPerRace: number }
 export interface FiaMeetingRules { interval: number; startPoliticalCapital: number }
+export interface AlpineRules {
+  startBriatoreSatisfaction: number;
+  dismissBriatoreSatisfaction: number;
+  startFanPressure: number;
+  startGaslyCommitment: number;
+  startPuIntegration: number;
+  integrationGain: number;
+}
+export interface HaasRules {
+  startGeneSupport: number;
+  startToyotaSupport: number;
+  startToyotaInfluence: number;
+  influencePerRace: number;
+  interferenceThreshold: number;
+  dismissGeneSupport: number;
+}
+export interface WilliamsRules {
+  startVowlesConfidence: number;
+  startSuccessionReadiness: number;
+  successionThreshold: number;
+  dismissVowlesConfidence: number;
+}
+export interface RandomEventRules {
+  noneWeight: number;
+  driverInjuryWeight: number;
+  windTunnelWeight: number;
+  partIssueWeight: number;
+}
 
 export interface Rules {
   seasonYear: number;
@@ -335,6 +363,10 @@ export interface Rules {
   racingBulls: RacingBullsRules;
   audi: AudiRules;
   fiaMeeting: FiaMeetingRules;
+  alpine: AlpineRules;
+  haas: HaasRules;
+  williams: WilliamsRules;
+  randomEvents: RandomEventRules;
   /** ADUO 动力单元追赶机制 */
   aduo: AduoRules;
 }
@@ -1056,6 +1088,57 @@ export interface AudiState {
   log: Array<{ at: string; text: string }>;
 }
 
+export interface AlpineState {
+  briatoreSatisfaction: number;
+  fanPressure: number;
+  gaslyCommitment: number;
+  puIntegration: number;
+  integrationPenaltyActive: boolean;
+  rndDirection: PartType[];
+  lastActionRound: string | null;
+  gaslyLeaving: boolean;
+  dismissed: string | null;
+  log: Array<{ at: string; text: string }>;
+}
+
+export interface HaasState {
+  geneSupport: number;
+  toyotaSupport: number;
+  toyotaInfluence: number;
+  fundingProvided: number;
+  preferredParts: PartType[];
+  lastActionRound: string | null;
+  partnershipWithdrawn: boolean;
+  dismissed: string | null;
+  log: Array<{ at: string; text: string }>;
+}
+
+export interface WilliamsState {
+  vowlesConfidence: number;
+  successionReadiness: number;
+  focus: 'facilities' | 'development' | 'reserve' | null;
+  focusRound: string | null;
+  facilityInvestment: number;
+  developmentInvestment: number;
+  vowlesDeparted: boolean;
+  confirmedSuccessor: boolean;
+  dismissed: string | null;
+  log: Array<{ at: string; text: string }>;
+}
+
+export type RandomEventKind = 'none' | 'driver_injury' | 'wind_tunnel_data' | 'part_issue';
+export interface RandomEventRecord {
+  roundKey: string;
+  kind: RandomEventKind;
+  title: string;
+  detail: string;
+}
+export interface RandomEventState {
+  lastRoundKey: string | null;
+  current: RandomEventRecord | null;
+  history: RandomEventRecord[];
+}
+
 export type FiaMeetingIssue = 'aduo' | 'driver_safety' | 'cost_cap';
 export interface FiaMeetingState {
   politicalCapital: number;
@@ -1110,6 +1193,10 @@ export interface GameState {
   astonMartin?: AstonMartinState | null;
   racingBulls?: RacingBullsState | null;
   audi?: AudiState | null;
+  alpine?: AlpineState | null;
+  haas?: HaasState | null;
+  williams?: WilliamsState | null;
+  randomEvents?: RandomEventState;
   fiaMeeting?: FiaMeetingState;
   /** ADUO 评估记录（旧存档缺省） */
   aduo?: AduoState | null;
@@ -1250,6 +1337,9 @@ export type Action =
   | { type: 'ASTON_CRISIS'; strategy: 'pressure_honda' | 'mediate' | 'push_newey' }
   | { type: 'RACING_BULLS_SELECT_RESERVE'; driverId: string }
   | { type: 'AUDI_ALLIANCE' }
+  | { type: 'ALPINE_MANAGEMENT'; strategy: 'back_colapinto' | 'reassure_gasly' | 'integrate_power_unit' }
+  | { type: 'HAAS_BALANCE'; strategy: 'protect_independence' | 'accept_toyota' | 'compromise' }
+  | { type: 'WILLIAMS_BUDGET_FOCUS'; focus: 'facilities' | 'development' | 'reserve' }
   | { type: 'FIA_DEBATE'; stance: 'support' | 'oppose' | 'compromise' }
   | { type: 'SWAP_DRIVER'; slot: number; driverId: string }
   | { type: 'CLEAR_NARRATION' };

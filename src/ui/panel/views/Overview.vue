@@ -18,6 +18,10 @@ const rb = computed(() => v.value.redBull);
 const am = computed(() => v.value.astonMartin);
 const vcarb = computed(() => v.value.racingBulls);
 const au = computed(() => v.value.audi);
+const alpine = computed(() => v.value.alpine);
+const haas = computed(() => v.value.haas);
+const williams = computed(() => v.value.williams);
+const randomEvent = computed(() => v.value.randomEvents?.current ?? null);
 const fia = computed(() => v.value.fiaMeeting);
 const fiaIssue: Record<string, string> = { aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
 const driverLabel = (id?: string) => v.value.drivers.find((driver: any) => driver.id === id)?.name ?? id ?? '-';
@@ -113,6 +117,40 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Bar label="ADUO 推进" :value="au.aduoProgress" color="#d33" :hint="au.alliance ? '盟友：阿斯顿·马丁、梅赛德斯、法拉利' : '与三支车队组成 ADUO 联盟'" />
       <Bar label="政治支持" :value="au.politicalSupport" color="#555" />
       <div v-if="!au.alliance" class="row"><button :disabled="store.busy" @click="act({ type: 'AUDI_ALLIANCE' })">组建四队 ADUO 联盟</button></div>
+    </div>
+
+    <div v-if="alpine" class="card stack-s special-card">
+      <div class="spread"><h3>阿尔派 · 布里亚托接班人</h3><span class="badge" :class="alpine.dismissed ? 'bad' : 'warn'">{{ alpine.dismissed ? '已撤职' : '副领队考核中' }}</span></div>
+      <Bar label="布里亚托满意度" :value="alpine.briatoreSatisfaction" :mark="v.nextSpecialRules.alpine.dismissBriatoreSatisfaction" color="#0093cc" :hint="`低于 ${v.nextSpecialRules.alpine.dismissBriatoreSatisfaction} 会被撤职`" />
+      <Bar label="克拉平托粉丝压力" :value="alpine.fanPressure" color="#f28ab2" hint="越高越危险" />
+      <Bar label="加斯利留队意愿" :value="alpine.gaslyCommitment" color="#2d5f8b" :hint="alpine.gaslyLeaving ? '加斯利已经决定赛季末离队' : '长期受到不公平待遇会离队'" />
+      <Bar label="梅奔动力单元匹配" :value="alpine.puIntegration" color="#00a19c" hint="达到 100% 后消除开局性能和可靠性损失" />
+      <div class="small muted">布里亚托当前只允许研发：{{ alpine.rndDirection.map((x) => v.labels.parts[x] ?? x).join('、') }}</div>
+      <div class="row"><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'back_colapinto' })">公开支持克拉平托</button><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'reassure_gasly' })">安抚加斯利</button><button :disabled="store.busy || alpine.puIntegration >= 100" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'integrate_power_unit' })">推进动力匹配</button></div>
+      <div class="tiny muted">每站只能执行一次。选择任何一方都会让另一方承担代价。</div>
+    </div>
+
+    <div v-if="haas" class="card stack-s special-card">
+      <div class="spread"><h3>哈斯 · 吉恩与丰田的平衡</h3><span class="badge" :class="haas.toyotaInfluence >= v.nextSpecialRules.haas.interferenceThreshold ? 'warn' : 'ok'">丰田影响 {{ Math.round(haas.toyotaInfluence) }}%</span></div>
+      <Bar label="吉恩·哈斯支持" :value="haas.geneSupport" :mark="v.nextSpecialRules.haas.dismissGeneSupport" color="#b6babd" hint="过低会解除玩家职务" />
+      <Bar label="丰田支持" :value="haas.toyotaSupport" color="#e60012" :hint="haas.partnershipWithdrawn ? '丰田已冻结投入' : '越高越愿意提供资金和技术'" />
+      <Bar label="丰田影响力" :value="haas.toyotaInfluence" :mark="v.nextSpecialRules.haas.interferenceThreshold" color="#e60012" :hint="`达到 ${v.nextSpecialRules.haas.interferenceThreshold}% 后会限制研发方向`" />
+      <div class="small">丰田累计投入：{{ money(haas.fundingProvided) }}。当前偏好：{{ haas.preferredParts.map((x) => v.labels.parts[x] ?? x).join('、') }}。</div>
+      <div class="row"><button :disabled="store.busy" @click="act({ type: 'HAAS_BALANCE', strategy: 'protect_independence' })">维护车队独立</button><button :disabled="store.busy || haas.partnershipWithdrawn" @click="act({ type: 'HAAS_BALANCE', strategy: 'accept_toyota' })">接受丰田追加投入</button><button :disabled="store.busy" @click="act({ type: 'HAAS_BALANCE', strategy: 'compromise' })">提出折中</button></div>
+    </div>
+
+    <div v-if="williams" class="card stack-s special-card">
+      <div class="spread"><h3>威廉姆斯 · 沃尔斯接班培养</h3><span class="badge" :class="williams.confirmedSuccessor ? 'ok' : williams.dismissed ? 'bad' : 'warn'">{{ williams.confirmedSuccessor ? '已正式接任' : williams.dismissed ? '接班失败' : '培养中' }}</span></div>
+      <Bar label="沃尔斯信心" :value="williams.vowlesConfidence" color="#64c4ff" />
+      <Bar label="接班准备度" :value="williams.successionReadiness" :mark="v.nextSpecialRules.williams.successionThreshold" color="#005aff" :hint="`2026 年底至少需要 ${v.nextSpecialRules.williams.successionThreshold}`" />
+      <div class="grid2 small"><div>设施累计投入：{{ money(williams.facilityInvestment) }}</div><div>赛车升级投入：{{ money(williams.developmentInvestment) }}</div></div>
+      <div class="row"><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'facilities' })">优先设施</button><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'development' })">优先赛车升级</button><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'reserve' })">保留现金</button></div>
+      <div class="tiny muted">每站只能确定一次预算方向。设施和研发动作必须符合本站方向。</div>
+    </div>
+
+    <div v-if="randomEvent" class="card stack-s special-card">
+      <div class="spread"><h3>本站随机事件</h3><span class="badge" :class="randomEvent.kind === 'none' ? 'ok' : 'warn'">{{ randomEvent.kind === 'none' ? '无事发生' : '已触发' }}</span></div>
+      <b>{{ randomEvent.title }}</b><div class="small">{{ randomEvent.detail }}</div>
     </div>
 
     <div v-if="fia?.current" class="card stack-s fia-meeting">

@@ -11,6 +11,8 @@ import { emptyStandings } from './newgame';
 import { ferrariAfterRace, ferrariMediaDelta, ferrariOnAllocation, ferrariOnBench, ferrariOnOrder } from './ferrari';
 import { afterSpecialRace } from './teamSpecials';
 import { afterNextTeamRace, maybeTriggerRacingBullsRecall } from './nextTeamSpecials';
+import { afterManagementRace, completeWilliamsHandover } from './managementSpecials';
+import { triggerWeekendRandomEvent } from './randomEvents';
 import { resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
@@ -98,6 +100,7 @@ export function startWeekend(state: GameState, rng: Rng): Outcome {
   if (state.season.phase !== 'pre_race') return fail('当前阶段不能进入比赛周末');
   state.weekend = createWeekend(state, rng);
   maybeTriggerRacingBullsRecall(state, rng);
+  triggerWeekendRandomEvent(state, rng);
   state.season.phase = 'practice';
   const track = currentTrack(state);
   const w = state.weekend;
@@ -447,6 +450,7 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
   ferrariAfterRace(state, result);
   if (!sprint) afterSpecialRace(state);
   if (!sprint) afterNextTeamRace(state);
+  if (!sprint) afterManagementRace(state);
 }
 
 /** 事故导致的零件损毁与维修 */
@@ -590,6 +594,7 @@ function seasonEnd(state: GameState): void {
     `${state.season.year} 赛季结束`,
     `车手冠军：${driverName(state, drivers[0])}；车队冠军：${teamName(state, teams[0])}。${pt.name} 最终排名第 ${pos}（目标第 ${pt.targetPosition}），${prizes.join('')}。董事会信心 ${pt.boardConfidence.toFixed(0)}。${fired ? '董事会对成绩极度不满，决定解除领队职务！' : ''}`,
   );
+  completeWilliamsHandover(state);
   openMarket(state, state.season.year + 1);
 }
 
