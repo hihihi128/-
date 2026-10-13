@@ -142,6 +142,12 @@ describe('后端控制器（模拟酒馆环境）', () => {
   it('正赛发车前只调用一次 API，并为全部 AI 赛车应用批量策略', async () => {
     const { state } = await prepareRace(ctrl);
     const aiIds = Object.values(state.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+    const playerIds = state.teams[state.meta.playerTeamId].cars.map(car => car.driverId).filter((id): id is string => !!id);
+    expect(Object.values(state.teams)).toHaveLength(11);
+    expect(aiIds).toHaveLength(20);
+    expect(playerIds).toHaveLength(2);
+    expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[0], plan: { tyrePlan: ['soft', 'medium'], paceMode: 'push', pitTiming: 'early', scReaction: false } })).ok).toBe(true);
+    expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[1], plan: { tyrePlan: ['hard', 'medium'], paceMode: 'conserve', pitTiming: 'late', scReaction: true } })).ok).toBe(true);
     let calls = 0;
     let capturedPrompt = '';
     env.generateText = async prompt => {
@@ -164,19 +170,79 @@ describe('后端控制器（模拟酒馆环境）', () => {
     const live = ctrl.stateAt()!.weekend!.liveRace!;
     expect(aiIds.every(id => live.cars[id].plan.strategySource === 'engineer' && live.cars[id].plan.tyrePlan !== 'auto')).toBe(true);
     expect(new Set(aiIds.map(id => `${live.cars[id].plan.paceMode}:${live.cars[id].plan.pitTiming}:${live.cars[id].plan.scReaction}`)).size).toBeGreaterThan(1);
-    expect(Object.values(live.cars).filter(car => car.player).every(car => car.plan.strategySource !== 'engineer')).toBe(true);
+    expect(live.cars[playerIds[0]].plan).toMatchObject({ tyrePlan: ['soft', 'medium'], paceMode: 'push', pitTiming: 'early', scReaction: false });
+    expect(live.cars[playerIds[1]].plan).toMatchObject({ tyrePlan: ['hard', 'medium'], paceMode: 'conserve', pitTiming: 'late', scReaction: true });
+    expect(capturedPrompt).not.toContain(`driverId=${playerIds[0]}；`);
+    expect(capturedPrompt).not.toContain(`driverId=${playerIds[1]}；`);
   });
 
   it('批量 API 部分缺失时只为缺失 AI 赛车使用本地策略', async () => {
     const { state } = await prepareRace(ctrl);
     const aiIds = Object.values(state.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
-    env.generateText = async () => JSON.stringify({ strategies: [{ driverId: aiIds[0], option: 0, paceMode: 'push', pitTiming: 'late', scReaction: false }] });
+    env.generateText = async () => JSON.stringify({ strategies: [
+      { driverId: aiIds[0], option: 0, paceMode: 'push', pitTiming: 'late', scReaction: false },
+      { driverId: aiIds[0], option: 1, paceMode: 'balanced', pitTiming: 'standard', scReaction: true },
+      { driverId: aiIds[1], option: 999, paceMode: 'push', pitTiming: 'early', scReaction: true },
+      { driverId: aiIds[2], option: 0, paceMode: 'invalid', pitTiming: 'early', scReaction: true },
+      null,
+    ] });
     const result = await ctrl.dispatch({ type: 'START_RACE', kind: 'race' });
     expect(result.ok).toBe(true);
     expect(result.message).toContain(`API 1 辆，本地补全 ${aiIds.length - 1} 辆`);
     const live = ctrl.stateAt()!.weekend!.liveRace!;
     expect(live.cars[aiIds[0]].plan).toMatchObject({ paceMode: 'push', pitTiming: 'late', scReaction: false });
     expect(aiIds.slice(1).every(id => live.cars[id].plan.strategySource === 'engineer' && live.cars[id].plan.tyrePlan !== 'auto')).toBe(true);
+  });
+
+  it('批量 API 报错或返回畸形内容时使用全部本地 AI 策略并继续发车', async () => {
+    const { state } = await prepareRace(ctrl);
+    const aiIds = Object.values(state.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+    env.generateText = async () => { throw new Error('策略服务不可用'); };
+    const rejected = await ctrl.dispatch({ type: 'START_RACE', kind: 'race' });
+    expect(rejected.ok).toBe(true);
+    expect(rejected.message).toContain(`API 0 辆，本地补全 ${aiIds.length} 辆`);
+    expect(aiIds.every(id => ctrl.stateAt()!.weekend!.liveRace!.cars[id].plan.tyrePlan !== 'auto')).toBe(true);
+
+    const restored = state;
+    restored.weekend!.liveRace = null;
+    expect((await ctrl.importSave(JSON.stringify(restored))).ok).toBe(true);
+    env.generateText = async () => 'not-json';
+    const malformed = await ctrl.dispatch({ type: 'START_RACE', kind: 'race' });
+    expect(malformed.ok).toBe(true);
+    expect(malformed.message).toContain(`API 0 辆，本地补全 ${aiIds.length} 辆`);
+  });
+
+  it('主开始正赛动作通过 ADVANCE 调用批量策略 API', async () => {
+    const { state } = await prepareRace(ctrl);
+    const aiIds = Object.values(state.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+    let calls = 0;
+    env.generateText = async prompt => {
+      calls++;
+      const ids = [...prompt.matchAll(/driverId=([^；\n]+)/g)].map(match => match[1]);
+      return JSON.stringify({ strategies: ids.map(driverId => ({ driverId, option: 0, paceMode: 'balanced', pitTiming: 'standard', scReaction: true })) });
+    };
+    const result = await ctrl.dispatch({ type: 'ADVANCE' });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(1);
+    expect(result.message).toContain(`API ${aiIds.length} 辆，本地补全 0 辆`);
+    expect(ctrl.stateAt()!.weekend!.race).toBeTruthy();
+  });
+
+  it('等待批量策略期间存档变化会中止旧比赛而不覆盖新存档', async () => {
+    const { state } = await prepareRace(ctrl);
+    let release!: (value: string) => void;
+    env.generateText = async () => new Promise<string>(resolve => { release = resolve; });
+    const pending = ctrl.dispatch({ type: 'START_RACE', kind: 'race' });
+    await Promise.resolve();
+    const replacement = JSON.parse(JSON.stringify(state));
+    replacement.gameId = 'replacement-game';
+    expect((await ctrl.importSave(JSON.stringify(replacement))).ok).toBe(true);
+    release('{"strategies":[]}');
+    const result = await pending;
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('比赛状态已变化');
+    expect(ctrl.stateAt()!.gameId).toBe('replacement-game');
+    expect(ctrl.stateAt()!.weekend!.liveRace).toBeNull();
   });
 
   it('生成前注入实时数据提示词', async () => {

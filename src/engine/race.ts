@@ -639,6 +639,7 @@ export function createRaceSession(
   expectedPositions = expectedLivePositions(state),
   aiPlans: Record<string, Partial<DriverPlan>> = {},
 ): LiveRaceState {
+  const suppliedAiPlans = aiPlans ?? {};
   const w = state.weekend!;
   const track = currentTrack(state);
   const rules = state.rules;
@@ -682,8 +683,8 @@ export function createRaceSession(
         pitTiming: decision >= 84 ? 'early' : decision < 65 ? 'late' : 'standard',
         scReaction: decision >= 68,
       };
-      const proposed = aiPlans[id];
-      const validTyres = proposed?.tyrePlan !== 'auto' && Array.isArray(proposed?.tyrePlan) && !validatePlan(rules, proposed.tyrePlan, false);
+      const proposed = suppliedAiPlans[id];
+      const validTyres = Array.isArray(proposed?.tyrePlan) && !validatePlan(rules, proposed.tyrePlan, false);
       const validPace = proposed?.paceMode === 'conserve' || proposed?.paceMode === 'balanced' || proposed?.paceMode === 'push';
       const validTiming = proposed?.pitTiming === 'early' || proposed?.pitTiming === 'standard' || proposed?.pitTiming === 'late';
       const validReaction = typeof proposed?.scReaction === 'boolean';
@@ -844,7 +845,8 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const targetMismatch = tyreMismatch(state.rules, { ...car, tyre: targetCompound }, session.wetness);
   const weatherStop = engineerOverride || (car.tyreAge >= 2 && targetCompound !== car.tyre && currentMismatch > 1.2 && targetMismatch + .35 < currentMismatch);
   const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
-  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || (planned && car.tyreAge >= pitTriggerLap(car))));
+  const neutralOpportunity = car.plan.scReaction && (session.scLeft > 0 || session.vscLeft > 0) && planned && car.tyreAge >= 2 && targetCompound !== car.tyre;
+  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || neutralOpportunity || (planned && car.tyreAge >= pitTriggerLap(car))));
   if (!shouldPit) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
   let stationary = 2.2 + (100 - car.pitCrewSkill) / 100 * 1.3 + rng.range(0, 0.4);

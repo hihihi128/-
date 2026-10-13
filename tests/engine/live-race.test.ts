@@ -6,7 +6,7 @@ import { Rng } from '../../src/engine/rng';
 import { createForecast, createWeatherTrajectory } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
 import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
-import { redFlagProbability } from '../../src/engine/race';
+import { advanceRaceSession, redFlagProbability } from '../../src/engine/race';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -40,6 +40,32 @@ describe('resumable live race', () => {
     expect(live.cars[generatedId].plan).toMatchObject({ tyrePlan: [dry[0], dry[1]], paceMode: 'push', pitTiming: 'late', scReaction: false });
     expect(live.cars[invalidId].plan.tyrePlan).not.toEqual(['not-a-tyre']);
     expect(live.cars[invalidId].plan.strategySource).toBe('engineer');
+  });
+
+  it('uses the AI safety-car reaction for an opportunistic live-race stop', () => {
+    const ready = raceReady();
+    const aiIds = Object.values(ready.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+    const dry = ready.rules.dryCompounds;
+    const state = act(ready, {
+      type: 'START_RACE', kind: 'race', aiPlans: {
+        [aiIds[0]]: { tyrePlan: [dry[0], dry[1]], paceMode: 'balanced', pitTiming: 'standard', scReaction: true },
+        [aiIds[1]]: { tyrePlan: [dry[0], dry[1]], paceMode: 'balanced', pitTiming: 'standard', scReaction: false },
+      },
+    });
+    const live = state.weekend!.liveRace!;
+    live.pendingDecision = null;
+    live.stage = 'ready';
+    live.scLeft = 2;
+    for (const id of aiIds.slice(0, 2)) {
+      live.cars[id].tyre = dry[0];
+      live.cars[id].plannedCompounds = [dry[0], dry[1]];
+      live.cars[id].stints = [20, live.totalLaps - 20];
+      live.cars[id].stintIndex = 0;
+      live.cars[id].tyreAge = 3;
+    }
+    advanceRaceSession(state, live, 'next_lap');
+    expect(live.cars[aiIds[0]].pits).toBe(1);
+    expect(live.cars[aiIds[1]].pits).toBe(0);
   });
 
   it('allows a free tyre change during a red flag and schedules the selected restart', () => {

@@ -155,7 +155,10 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
     case 'ADVANCE': {
       const next = nextActionFor(state);
       if (!next || depth > 0) return fail('没有可推进的步骤');
-      return run(state, next.action, rng, depth + 1);
+      const nextAction = next.action.type === 'RUN_RACE' && action.aiPlans
+        ? { ...next.action, aiPlans: action.aiPlans }
+        : next.action;
+      return run(state, nextAction, rng, depth + 1);
     }
     case 'START_SEASON':
       return startSeason(state, rng);
@@ -170,7 +173,7 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
     case 'RUN_QUALIFYING':
       return doQualifying(state, rng, 'qualifying');
     case 'RUN_RACE':
-      return doRace(state, rng, 'race');
+      return doRace(state, rng, 'race', action.aiPlans);
     case 'START_RACE':
       return startLiveRace(state, rng, action.kind, action.aiPlans);
     case 'ADVANCE_RACE':

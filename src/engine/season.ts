@@ -128,13 +128,13 @@ export function doQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 's
 }
 
 /** Compatibility automatic finish. It resumes any paused matching session instead of rerolling it. */
-export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'): Outcome {
+export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint', aiPlans?: Record<string, Partial<DriverPlan>>): Outcome {
   if (state.season.phase !== kind || !state.weekend) return fail(`当前不是${LABELS.phase[kind]}阶段`);
   let live = state.weekend.liveRace;
   if (live && live.kind !== kind) return fail('另一场比赛正在进行，不能重新发车');
   if (!live) {
     if (kind === 'race') applyAllocationFairness(state);
-    live = createRaceSession(state, rng, kind, expectedPositions(state));
+    live = createRaceSession(state, rng, kind, expectedPositions(state), aiPlans);
     state.weekend.liveRace = live;
   }
   while (live.stage !== 'finished') {

@@ -65,6 +65,18 @@ function parseJsonObject(text: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
+async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error('策略 API 请求超时')), ms); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
 export interface Settings {
   inject: boolean;
   injectDepth: number;
@@ -485,14 +497,22 @@ export class F1Controller {
     if (this.busy) return { ok: false, message: '上一个操作还在处理中' };
     if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成回复，请等待生成结束后再操作' };
     const floor = this.latestFloor();
-    const cur = this.store.resolve(floor);
+    let cur = this.store.resolve(floor);
     if (!cur) return { ok: false, message: '还没有开局' };
     this.busy = true;
     try {
       let preparedAction = action;
       let strategySummary = '';
-      if (action.type === 'START_RACE' && action.kind === 'race' && cur.state.season.phase === 'race' && cur.state.weekend && !cur.state.weekend.liveRace) {
+      const startsRace = (action.type === 'START_RACE' && action.kind === 'race') || action.type === 'RUN_RACE' || action.type === 'ADVANCE';
+      if (startsRace && cur.state.season.phase === 'race' && cur.state.weekend && !cur.state.weekend.liveRace) {
+        const guard = { chatId: this.env.chatId(), gameId: cur.state.gameId, revisionId: cur.rev.id, floor };
         const prepared = await this.prepareAiGridStrategies(cur.state);
+        const currentFloor = this.latestFloor();
+        const current = this.store.resolve(currentFloor);
+        if (this.env.chatId() !== guard.chatId || currentFloor !== guard.floor || !current || current.state.gameId !== guard.gameId || current.rev.id !== guard.revisionId || current.state.season.phase !== 'race' || current.state.weekend?.liveRace) {
+          return { ok: false, message: '等待策略 API 时比赛状态已变化，请重新开始正赛' };
+        }
+        cur = current;
         preparedAction = { ...action, aiPlans: prepared.plans };
         strategySummary = `；赛前策略：API ${prepared.generated} 辆，本地补全 ${prepared.fallback} 辆`;
       }
@@ -529,8 +549,8 @@ export class F1Controller {
     for (const entry of [...entries].sort((a, b) => trackScore(carRatings(b.team, b.car, state.rules, 'disclosed'), track) - trackScore(carRatings(a.team, a.car, state.rules, 'disclosed'), track))) {
       if (!grid.includes(entry.driver.id)) grid.push(entry.driver.id);
     }
-    const candidates: AiGridStrategyCandidate[] = entries
-      .filter(entry => !entry.team.isPlayer)
+    const aiEntries = entries.filter(entry => !entry.team.isPlayer);
+    const candidates: AiGridStrategyCandidate[] = aiEntries
       .map(entry => {
         const setup = weekend.setup[entry.driver.id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
         const ratings = carRatings(entry.team, entry.car, state.rules, 'disclosed');
@@ -548,7 +568,7 @@ export class F1Controller {
     const expected = candidates.length;
     if (!expected) return { plans: {}, generated: 0, fallback: 0 };
 
-    const rows = entries.filter(entry => !entry.team.isPlayer).map(entry => {
+    const rows = aiEntries.map(entry => {
       const candidate = byDriver.get(entry.driver.id)!;
       const engineer = raceEngineerFor(entry.team, entry.car.slot);
       const options = candidate.options.map((option, index) => `${index}:${option.compounds.join('-')}/${option.stops}停/${option.stints.join('-')}圈`).join('；');
@@ -572,7 +592,10 @@ export class F1Controller {
     const api = this.settings.engineerApi;
     if (api === 'secondary' && !this.settings.engineerProxyPreset) return { plans: {}, generated: 0, fallback: expected };
     try {
-      const generated = await this.env.generateText(prompt, api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined);
+      const generated = await withTimeout(
+        this.env.generateText(prompt, api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined),
+        25_000,
+      );
       const parsed = parseJsonObject(generated) as { strategies?: unknown };
       if (!Array.isArray(parsed.strategies)) return { plans: {}, generated: 0, fallback: expected };
       const plans: Record<string, Partial<DriverPlan>> = {};

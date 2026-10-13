@@ -1302,14 +1302,14 @@ export interface ContractQuote {
 // ───────────────────────────── 动作 ─────────────────────────────
 
 export type Action =
-  | { type: 'ADVANCE' }
+  | { type: 'ADVANCE'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'START_SEASON' }
   | { type: 'START_WEEKEND' }
   | { type: 'RUN_PRACTICE' }
   | { type: 'RUN_SPRINT_QUALIFYING' }
   | { type: 'RUN_SPRINT' }
   | { type: 'RUN_QUALIFYING' }
-  | { type: 'RUN_RACE' }
+  | { type: 'RUN_RACE'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'START_RACE'; kind: 'race' | 'sprint'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'ADVANCE_RACE'; sessionId: string; expectedRevision: number; until: 'next_lap' | 'next_decision' }
   | { type: 'SET_RACE_TACTICS'; sessionId: string; expectedRevision: number; drivers: Array<{ driverId: string; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }
