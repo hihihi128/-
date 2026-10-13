@@ -306,6 +306,11 @@ const OP_LABEL: Record<string, string> = {
   flag: '剧情标记',
   penalty: '罚退',
   fans: '粉丝意见',
+  driver_attr: '车手属性',
+  staff_skill: '员工技能',
+  research_progress: '设计研发进度',
+  weather_tendency: '公开降雨倾向',
+  car_setup: '临时调校',
 };
 
 /** 把日志转成一行可读文本（状态条/提示词用） */

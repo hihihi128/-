@@ -26,6 +26,7 @@ import { applyAiCommands, describeLog, parseAiCommands } from '../engine/protoco
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
 import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
 import { strategyOptions } from '../engine/strategy';
+import { applySupernaturalCommands, effectiveSetup, parseSupernaturalCommands, SUPERNATURAL_LIMITS } from '../engine/supernatural';
 import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, StaffRole } from '../engine/types';
 import { hashString, money, round1 } from '../engine/util';
 import { buildView, type GameView } from '../engine/view';
@@ -120,6 +121,12 @@ export interface EngineerStrategyResult extends Outcome {
   gridPosition?: number | null;
   weatherResponse?: string;
   mode?: 'engineer' | 'perfect';
+}
+
+export interface SupernaturalInterventionResult extends Outcome {
+  api: 'main' | 'secondary';
+  revisionId: string | null;
+  results: import('../engine/types').AiLogEntry[];
 }
 
 function safeWeatherAdvice(text: string, hasRainWindow: boolean): boolean {
@@ -479,6 +486,7 @@ export class F1Controller {
         randomness: opts.randomness ?? 'deterministic',
         seed: opts.seed,
         selectionReason: opts.selectionReason,
+        supernaturalMode: opts.supernaturalMode === true,
       });
     } catch (e) {
       return { ok: false, message: e instanceof Error ? e.message : String(e) };
@@ -677,7 +685,7 @@ export class F1Controller {
     const round = state.calendar[state.weekend.roundIndex];
     const track = round ? state.tracks[round.trackId] : null;
     const perfectOptions = perfect && car && track
-      ? strategyOptions(state.rules, track, track.laps, { driverTyre: driver.attrs.tyre, carTyre: carRatings(team, car, state.rules, 'disclosed').tyre, paceMode: 'balanced', knowledge: state.weekend.setup[driverId]?.tyreKnowledge ?? 0 }, { wet: false, sprint: false }).slice(0, 6)
+      ? strategyOptions(state.rules, track, track.laps, { driverTyre: driver.attrs.tyre, carTyre: carRatings(team, car, state.rules, 'disclosed').tyre, paceMode: 'balanced', knowledge: effectiveSetup(state, driverId, state.weekend.setup[driverId] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 }).tyreKnowledge }, { wet: false, sprint: false }).slice(0, 6)
       : null;
     const availableOptions = perfectOptions ?? driverView.options;
     if (!availableOptions.length) return { ok: false, message: '当前没有可用的干地策略方案' };
@@ -749,6 +757,79 @@ export class F1Controller {
 
   requestPerfectStrategy(driverId: string, requestedApi?: 'main' | 'secondary'): Promise<EngineerStrategyResult> {
     return this.requestEngineerStrategy(driverId, requestedApi, true);
+  }
+
+  /**
+   * A deliberately separate, guarded path for the opt-in supernatural panel.
+   * It never delegates to the loose narration protocol or dispatches rows one
+   * at a time: all accepted effects are committed as one ordinary revision.
+   */
+  async requestSupernaturalIntervention(request: { description: unknown; expectedRevisionId: unknown; api?: unknown }): Promise<SupernaturalInterventionResult> {
+    const selected = request.api === undefined ? this.settings.engineerApi : request.api;
+    const api: 'main' | 'secondary' = selected === 'secondary' ? 'secondary' : 'main';
+    const fail = (message: string, results: import('../engine/types').AiLogEntry[] = []): SupernaturalInterventionResult => ({ ok: false, message, api, revisionId: null, results });
+    if (selected !== 'main' && selected !== 'secondary') return fail('API 必须是 main 或 secondary');
+    if (typeof request.description !== 'string' || !request.description.trim() || request.description.trim().length > 1000) return fail('干预描述必须为 1–1000 个非空字符');
+    if (typeof request.expectedRevisionId !== 'string' || !request.expectedRevisionId) return fail('缺少当前存档版本号');
+    if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
+    if (api === 'secondary' && !this.settings.engineerProxyPreset) return fail('请先在设置中填写副 API 的代理预设名称');
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    if (!current) return fail('还没有开局');
+    const state = current.state;
+    const team = state.teams[state.meta.playerTeamId];
+    if (!state.meta.supernaturalMode || !team) return fail('本存档未启用超自然干预模式');
+    if (current.rev.id !== request.expectedRevisionId) return fail('存档版本已变化，请刷新后重试');
+    if (state.weekend?.liveRace || state.season.phase === 'season_end') return fail('当前阶段不能执行超自然干预');
+    const guard = {
+      chatId: this.env.chatId(), floor, gameId: state.gameId, revisionId: current.rev.id,
+      phase: state.season.phase, year: state.season.year, roundIndex: state.season.roundIndex,
+      liveId: state.weekend?.liveRace?.id ?? null,
+    };
+    const invocationId = `sn-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+    const drivers = Object.values(state.drivers)
+      .filter(driver => driver.teamId === team.id && (driver.role === 'race' || driver.role === 'reserve'))
+      .map(driver => `${driver.id}=${driver.name}(${driver.role}; 心态${driver.morale} 信任${driver.trust} 体能${driver.fitness}; 属性 pace${driver.attrs.pace}/racecraft${driver.attrs.racecraft}/consistency${driver.attrs.consistency}/tyre${driver.attrs.tyre}/wet${driver.attrs.wet}/feedback${driver.attrs.feedback})`);
+    const staff = Object.entries(team.staff).filter(([, member]) => !!member.id).map(([role, member]) => `${member.id}=${member.name}(${role}; skill${member.skill})`);
+    const projects = team.projects.filter(project => project.kind === 'design').map(project => `${project.id}=${project.label}(剩余${project.weeksLeft}周)`);
+    const setup = state.weekend ? team.cars.filter(car => !!car.driverId).map(car => {
+      const natural = state.weekend!.setup[car.driverId!]; const offset = state.weekend!.supernaturalCarEffects?.[car.driverId!];
+      return natural ? `${car.driverId}: confidence=${natural.confidence}+${offset?.confidence ?? 0}, tyreKnowledge=${natural.tyreKnowledge}+${offset?.tyreKnowledge ?? 0}` : '';
+    }).filter(Boolean) : [];
+    const pending = state.supernatural.pendingWeather;
+    const prompt = [
+      '你是严格的 F1 超自然干预编排器。只可建议下列引擎白名单 JSON 指令；引擎会自行拒绝非法请求。',
+      `玩家请求：${request.description.trim()}`,
+      `当前阶段=${state.season.phase}；年份/本站=${state.season.year}/${state.season.roundIndex + 1}；资金=${team.funds}M；董事会=${team.boardConfidence}；媒体=${team.mediaReputation}；员工士气=${team.staffMorale}。`,
+      `车手（只能使用精确 ID）：${drivers.join('；') || '无'}。员工（只能使用精确 ID）：${staff.join('；') || '无'}。设计项目：${projects.join('；') || '无'}。`,
+      `公开天气倾向=${pending?.rainBias ?? 0}；本站临时调校=${setup.join('；') || '周末尚未创建'}。`,
+      `每次最多${SUPERNATURAL_LIMITS.maxCommands}项。上限：人心态/信任/体能=${SUPERNATURAL_LIMITS.morale}/${SUPERNATURAL_LIMITS.trust}/${SUPERNATURAL_LIMITS.fitness}；车队董事会/媒体/员工=${SUPERNATURAL_LIMITS.board}/${SUPERNATURAL_LIMITS.media}/${SUPERNATURAL_LIMITS.staff}；车手属性和员工技能每人总计1；资金总计${SUPERNATURAL_LIMITS.funds}M；设计项目最多提前1周且不得完成；天气倾向${SUPERNATURAL_LIMITS.weatherTendency}；每车每项调校${SUPERNATURAL_LIMITS.carSetup}，总偏移±${SUPERNATURAL_LIMITS.carSetupOffset}。`,
+      '禁止结果、积分、零件、合同、雇佣、比赛控制、任意补丁和未来天气。只返回一个 <F1M_UPDATE>[...]</F1M_UPDATE>，数组中每个对象必须使用以下一种精确格式：{op:"morale|trust|fitness",driver:"ID",delta:number,reason?:string}、{op:"board|media|staff|funds|weather_tendency",delta:number,reason?:string}、{op:"driver_attr",driver:"ID",attr:"pace|racecraft|consistency|tyre|wet|feedback",delta:number}、{op:"staff_skill",staffId:"ID",field:"skill|setup|communication|reaction|strategy|weather|risk",delta:number}、{op:"research_progress",projectId:"ID",weeks:1}、{op:"car_setup",driver:"ID",field:"confidence|tyreKnowledge",delta:number}。',
+    ].join('\n');
+    this.busy = true;
+    try {
+      const generated = await withTimeout(
+        this.env.generateText(prompt, api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined),
+        60_000,
+      );
+      if (generated.length > 16 * 1024) return fail('API 返回超过 16 KiB，未保存任何改动');
+      const parsed = parseSupernaturalCommands(generated);
+      if (parsed.error) return fail(parsed.error);
+      const latestFloor = this.latestFloor();
+      const latest = this.store.resolve(latestFloor);
+      const latestState = latest?.state;
+      if (this.env.isGenerating() || this.env.chatId() !== guard.chatId || latestFloor !== guard.floor || !latest || !latestState || latest.rev.id !== guard.revisionId || latestState.gameId !== guard.gameId || latestState.season.phase !== guard.phase || latestState.season.year !== guard.year || latestState.season.roundIndex !== guard.roundIndex || (latestState.weekend?.liveRace?.id ?? null) !== guard.liveId || !latestState.meta.supernaturalMode) return fail('等待 API 时存档或聊天已变化，结果已安全丢弃');
+      const next = JSON.parse(JSON.stringify(latestState)) as GameState;
+      const applied = applySupernaturalCommands(next, parsed.commands, invocationId);
+      if (!applied.changed) return { ok: false, message: '没有可应用的干预；存档未改变', api, revisionId: null, results: applied.logs };
+      const revision = this.store.commit(next, { floor: Math.max(0, latestFloor), kind: 'ui', label: '超自然干预' });
+      this.notify('supernatural');
+      return { ok: true, message: applied.logs.some(row => !row.ok) ? '部分干预已执行，其余已拒绝或裁剪' : '超自然干预已执行', api, revisionId: revision.id, results: applied.logs };
+    } catch (error) {
+      return fail(error instanceof Error && /超时/.test(error.message) ? '超自然 API 请求超时，未保存任何改动' : '超自然 API 请求失败，未保存任何改动');
+    } finally {
+      this.busy = false;
+    }
   }
 
   /** 发送一条用户消息并触发 AI 叙述待叙述事件 */

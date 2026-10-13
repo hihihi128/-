@@ -6,6 +6,7 @@ export { dispatch } from './actions';
 export { buildView, type GameView } from './view';
 export { buildStatePrompt } from './prompt';
 export { parseAiCommands, applyAiCommands, describeLog, stripAiCommands, UPDATE_TAG } from './protocol';
+export { applySupernaturalCommands, effectiveSetup, parseSupernaturalCommands, SUPERNATURAL_LIMITS } from './supernatural';
 export { previewProject, previewManufacture, previewDriverTraining, previewFacility } from './development';
 export { strategyOptions } from './strategy';
 export { nextActionFor } from './season';

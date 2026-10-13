@@ -30,6 +30,16 @@ function fillMissing(target: Record<string, unknown>, defaults: Record<string, u
 
 export function migrateState(state: GameState): GameState {
   if (!state?.rules || !state.teams) return state;
+  // This is deliberately before the modern-save return: old or malformed saves
+  // must never opt into a privileged mode merely by being loaded.
+  if (state.meta) state.meta.supernaturalMode = state.meta.supernaturalMode === true;
+  state.supernatural ??= { pendingWeather: null };
+  const pending = state.supernatural.pendingWeather;
+  if (!pending || !Number.isFinite(pending.year) || !Number.isInteger(pending.roundIndex) || !Number.isFinite(pending.rainBias)) {
+    state.supernatural.pendingWeather = null;
+  } else {
+    pending.rainBias = Math.max(-0.2, Math.min(0.2, pending.rainBias));
+  }
   if (state.ferrari === undefined) state.ferrari = null;
   if (state.mclaren === undefined) state.mclaren = null;
   if (state.mercedes === undefined) state.mercedes = null;
@@ -73,6 +83,20 @@ export function migrateState(state: GameState): GameState {
   // Live race is additive and must be initialized before the legacy early return.
   // Never synthesize a session or consume RNG while loading an older save.
   if (state.weekend && state.weekend.liveRace === undefined) state.weekend.liveRace = null;
+  if (state.weekend) {
+    const bias = state.weekend.supernaturalRainBias;
+    if (bias !== undefined && (!Number.isFinite(bias) || bias < -0.2 || bias > 0.2)) delete state.weekend.supernaturalRainBias;
+    const effects = state.weekend.supernaturalCarEffects;
+    if (effects && typeof effects === 'object') {
+      for (const [id, value] of Object.entries(effects)) {
+        if (!value || !Number.isFinite(value.confidence) || !Number.isFinite(value.tyreKnowledge)) delete effects[id];
+        else {
+          value.confidence = Math.max(-15, Math.min(15, value.confidence));
+          value.tyreKnowledge = Math.max(-15, Math.min(15, value.tyreKnowledge));
+        }
+      }
+    } else delete state.weekend.supernaturalCarEffects;
+  }
   if (state.weekend?.liveRace) {
     const live = state.weekend.liveRace;
     // Do not attempt to resume malformed or incompatible private simulation data.

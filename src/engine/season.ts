@@ -190,11 +190,13 @@ export function finishRound(state: GameState, rng: Rng): Outcome {
   for (const d of Object.values(state.drivers)) d.morale = round1(d.morale + (60 - d.morale) * 0.15);
   for (const tid of state.teamOrder) pruneObsoleteSpecs(state.teams[tid]);
   if (state.season.roundIndex >= state.calendar.length - 1) {
+    state.supernatural.pendingWeather = null;
     seasonEnd(state);
     return ok('赛季结束');
   }
   maybeEvaluateAduo(state, state.season.roundIndex + 1);
   state.season.roundIndex += 1;
+  state.supernatural.pendingWeather = null;
   refreshAeroAllowance(state);
   const gap = state.calendar[state.season.roundIndex].weeksGap;
   advanceWeeks(state, gap, rng);
@@ -567,6 +569,7 @@ export function sortedDrivers(state: GameState): string[] {
 
 function seasonEnd(state: GameState): void {
   state.season.phase = 'season_end';
+  state.supernatural.pendingWeather = null;
   const teams = sortedTeams(state);
   const drivers = sortedDrivers(state);
   const pt = playerTeam(state);
@@ -658,6 +661,7 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
   state.standings = emptyStandings(state);
   state.history = [];
   state.weekend = null;
+  state.supernatural.pendingWeather = null;
   addNarration(state, 'new_season', `${state.season.year} 赛季季前准备`, `新赛季开始，所有车队推出了新车。${playerTeam(state).name} 的新车继承了上赛季 ${Math.round(rules.carryOver * 100)}% 的研发成果。`);
   return ok(`${state.season.year} 赛季季前准备开始`);
 }

@@ -43,6 +43,7 @@ import type {
 } from './types';
 import { clamp, gapText, round3 } from './util';
 import { currentTrack, planOf } from './weekend';
+import { effectiveSetup } from './supernatural';
 
 interface SimCar {
   driver: DriverState;
@@ -158,7 +159,7 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
     const e = entries.find(x => x.driver.id === id)!;
     const ratings = carRatings(e.team, e.car, rules);
     const plan = e.team.isPlayer ? planOf(state, id) : { ...DEFAULT_PLAN };
-    const setup = w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
+    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
     const ctx = { driverTyre: e.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge };
     const factor = degFactor(track, ctx);
     const options = strategyOptions(rules, track, totalLaps, ctx, { wet, sprint });
@@ -655,7 +656,8 @@ export function createRaceSession(
     if (!grid.includes(entry.driver.id)) grid.push(entry.driver.id);
   }
   const startsWet = (kind === 'race' ? w.weather.race : w.weather.sprint) === 'wet';
-  const trajectory = createWeatherTrajectory(totalLaps, startsWet, track.rainChance, weatherRng);
+  const rainProbability = w.supernaturalRainBias ? clamp(track.rainChance + w.supernaturalRainBias, 0.05, 0.95) : track.rainChance;
+  const trajectory = createWeatherTrajectory(totalLaps, startsWet, rainProbability, weatherRng);
   const sessionId = `race-${state.season.number}-${state.season.roundIndex}-${kind}-${state.seq++}`;
   const cars: Record<string, LiveRaceCar> = {};
   const lapChart: Record<string, number[]> = {};
@@ -668,7 +670,7 @@ export function createRaceSession(
     if (entry.team.isPlayer) {
       plan = { ...planOf(state, id) };
     } else {
-      const setup = w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
+      const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
       const baseContext = { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: 'balanced' as const, knowledge: setup.tyreKnowledge };
       const options = strategyOptions(rules, track, totalLaps, baseContext, { wet: false, sprint: kind === 'sprint' });
       const decision = strategyDecisionSkill(entry.team, entry.car.slot);
@@ -697,7 +699,7 @@ export function createRaceSession(
       plan = { ...plan, paceMode: entry.driver.ego >= 50 ? 'push' : 'conserve', pitTiming: 'late', scReaction: false };
       disobedient.push(id);
     }
-    const setup = w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
+    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
     const wet = trajectory[0] > 0.18;
     const compounds = wet
       ? [rules.wetCompound]

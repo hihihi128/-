@@ -34,6 +34,7 @@ export interface NewGameOptions {
   now?: number;
   /** 玩家自填的「为什么被选中」（可选，最多 300 字） */
   selectionReason?: string;
+  supernaturalMode?: boolean;
 }
 
 export const SELECTION_REASON_MAX = 300;
@@ -156,6 +157,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
       randomness: opts.randomness ?? 'deterministic',
       dataSignature: db.signature,
       dataSources: [...db.sources],
+      supernaturalMode: opts.supernaturalMode === true,
       ...(selectionReason ? { selectionReason } : {}),
     },
     rng: opts.seed ?? seedFrom(`${gameId}:${db.signature}`),
@@ -175,6 +177,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     narrated: [],
     flags: {},
     aiLog: [],
+    supernatural: { pendingWeather: null },
     aduo: { evaluations: [] },
     lastSeason: null,
   };

@@ -25,6 +25,7 @@ import {
 import { annualSalaries, capRemaining, costCapOf } from './finance';
 import { fanCamps, fanGap } from './ferrari';
 import { dismissalReason } from './teamSpecials';
+import { effectiveSetup, SUPERNATURAL_LIMITS } from './supernatural';
 import { teammateRelationship } from './driverBehavior';
 import { describeLog } from './protocol';
 import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
@@ -179,6 +180,7 @@ export interface WeekendDriverView {
   driverName: string;
   plan: DriverPlan;
   setup: SetupState;
+  supernaturalSetup?: { base: SetupState; offset: { confidence: number; tyreKnowledge: number }; expires: string };
   options: StrategyOption[];
   sprintOptions: StrategyOption[];
   tyreLife: Record<string, number>;
@@ -289,6 +291,14 @@ export interface GameView {
   narration: GameState['narration'];
   narrated: GameState['narrated'];
   aiLog: Array<GameState['aiLog'][number] & { text: string }>;
+  supernatural: {
+    enabled: boolean;
+    available: boolean;
+    reason: string | null;
+    targets: { drivers: Array<{ id: string; name: string; role: string; attrs: GameState['drivers'][string]['attrs'] }>; staff: Array<{ id: string; name: string; role: string }>; projects: Array<{ id: string; label: string; weeksLeft: number }> };
+    pendingWeather: { rainBias: number; year: number; roundIndex: number } | null;
+    caps: typeof SUPERNATURAL_LIMITS;
+  };
   flags: GameState['flags'];
   ferrari: FerrariView | null;
   mclaren: GameState['mclaren'];
@@ -649,6 +659,7 @@ export function buildView(state: GameState): GameView {
     narration: state.narration,
     narrated: state.narrated,
     aiLog: [...state.aiLog].reverse().map(e => ({ ...e, text: describeLog(state, e) })),
+    supernatural: supernaturalView(state),
     flags: state.flags,
     ferrari: ferrariView(state),
     mclaren: state.mclaren ?? null,
@@ -714,8 +725,9 @@ function buildWeekendView(state: GameState): WeekendView | null {
       if (!car.driverId) continue;
       const d = state.drivers[car.driverId];
       const plan = w.plans[d.id];
-      const setup = w.setup[d.id];
-      if (!plan || !setup) continue;
+      const naturalSetup = w.setup[d.id];
+      if (!plan || !naturalSetup) continue;
+      const setup = effectiveSetup(state, d.id, naturalSetup);
       const ratings = carRatings(team, car, state.rules, 'disclosed');
       const ctx = { driverTyre: d.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge };
       const sprintLaps = Math.max(3, Math.round(track.laps * state.rules.sprintLapsFactor));
@@ -725,6 +737,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
         driverName: d.name,
         plan,
         setup,
+        supernaturalSetup: w.supernaturalCarEffects?.[d.id] ? { base: naturalSetup, offset: w.supernaturalCarEffects[d.id], expires: '本站周末结束后失效' } : undefined,
         // 玩家看到的是「干地」策略预测（雨战由引擎自动换雨胎）
         options: strategyOptions(state.rules, track, track.laps, ctx, { wet: false, sprint: false }).slice(0, 6),
         sprintOptions: roundDef?.sprint ? strategyOptions(state.rules, track, sprintLaps, ctx, { wet: false, sprint: true }) : [],
@@ -775,5 +788,25 @@ function buildWeekendView(state: GameState): WeekendView | null {
     qualifying: w.qualifying,
     race: w.race,
     liveRace,
+  };
+}
+
+function supernaturalView(state: GameState): GameView['supernatural'] {
+  const team = state.teams[state.meta.playerTeamId];
+  const blocked = !state.meta.supernaturalMode ? '本存档未在开局时启用超自然模式'
+    : !team ? '玩家车队不可用'
+      : dismissalReason(state) ? '已被撤职，不能干预'
+        : state.weekend?.liveRace ? '实时比赛进行中，不能干预' : null;
+  return {
+    enabled: state.meta.supernaturalMode,
+    available: !blocked,
+    reason: blocked,
+    targets: {
+      drivers: team ? Object.values(state.drivers).filter(driver => driver.teamId === team.id && (driver.role === 'race' || driver.role === 'reserve')).map(driver => ({ id: driver.id, name: driver.name, role: driver.role, attrs: { ...driver.attrs } })) : [],
+      staff: team ? Object.entries(team.staff).filter(([, staff]) => !!staff.id).map(([role, staff]) => ({ id: staff.id!, name: staff.name, role })) : [],
+      projects: team ? team.projects.filter(project => project.kind === 'design').map(project => ({ id: project.id, label: project.label, weeksLeft: project.weeksLeft })) : [],
+    },
+    pendingWeather: state.supernatural.pendingWeather ? { ...state.supernatural.pendingWeather } : null,
+    caps: SUPERNATURAL_LIMITS,
   };
 }

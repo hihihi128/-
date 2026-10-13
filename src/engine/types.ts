@@ -951,6 +951,10 @@ export interface WeekendState {
   };
   /** 仅供引擎复现隐藏正赛天气轨迹；不得进入公开视图或提示词。 */
   raceWeatherSeed?: number;
+  /** 本站已消费的公开降雨倾向，不暴露隐藏天气。 */
+  supernaturalRainBias?: number;
+  /** 只作用于本周末尚未执行计算的玩家赛车调校。 */
+  supernaturalCarEffects?: Record<string, { confidence: number; tyreKnowledge: number }>;
   setup: Record<string, SetupState>;
   plans: Record<string, DriverPlan>;
   teamOrders: TeamOrders;
@@ -1007,6 +1011,8 @@ export interface AiLogEntry {
   reason: string;
   ok: boolean;
   note: string;
+  source?: 'supernatural';
+  invocationId?: string;
 }
 
 export interface GameMeta {
@@ -1019,6 +1025,13 @@ export interface GameMeta {
   dataSources: string[];
   /** 玩家开局时填写的「为什么被选中」（可为空） */
   selectionReason?: string;
+  /** 仅本存档的手动超自然干预模式。 */
+  supernaturalMode: boolean;
+}
+
+export interface SupernaturalState {
+  /** 尚未进入周末的本赛季本站公开降雨倾向。 */
+  pendingWeather: { year: number; roundIndex: number; rainBias: number } | null;
 }
 
 /** 法拉利特殊机制的动态状态 */
@@ -1187,6 +1200,7 @@ export interface GameState {
   narrated: NarrationEvent[];
   flags: Record<string, string | number | boolean>;
   aiLog: AiLogEntry[];
+  supernatural: SupernaturalState;
   /** 法拉利特殊机制（非法拉利开局或旧存档为 null / 缺省） */
   ferrari?: FerrariState | null;
   mclaren?: McLarenState | null;

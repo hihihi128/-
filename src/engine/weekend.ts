@@ -7,6 +7,7 @@ import { activeEntries, carRatings, fittedSpec, qualiSkill, trackScore } from '.
 import { createPreRaceRainWindow, createWeatherTrajectory } from './raceWeather';
 import { Rng } from './rng';
 import { raceEngineerFor, staffAbility } from './staff';
+import { effectiveSetup } from './supernatural';
 import type {
   DriverPlan,
   DriverState,
@@ -50,17 +51,22 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
   const round = currentRound(state);
   const track = currentTrack(state);
   const prev = state.weekend;
-  const forecastQ = clamp(track.rainChance + rng.normal(0, 0.08), 0, 1);
-  const forecastR = clamp(track.rainChance + rng.normal(0, 0.08), 0, 1);
+  const pending = state.supernatural.pendingWeather;
+  const rainBias = pending && pending.year === state.season.year && pending.roundIndex === state.season.roundIndex ? pending.rainBias : 0;
+  // The zero path retains the exact former random draw sequence and values.
+  const rainProbability = rainBias ? clamp(track.rainChance + rainBias, 0.05, 0.95) : track.rainChance;
+  state.supernatural.pendingWeather = null;
+  const forecastQ = clamp(rainProbability + rng.normal(0, 0.08), 0, 1);
+  const forecastR = clamp(rainProbability + rng.normal(0, 0.08), 0, 1);
   const roll = (p: number): Weather => (rng.chance(p) ? 'wet' : 'dry');
   // 保持原有天气抽取顺序，避免相同种子因新增预报而改变整个周末天气。
-  const practiceWeather = roll(track.rainChance);
+  const practiceWeather = roll(rainProbability);
   const sprintQualifyingWeather = roll(forecastQ);
   const sprintWeather = roll(forecastR);
   const qualifyingWeather = roll(forecastQ);
   const raceWeather = roll(forecastR);
   const raceWeatherSeed = rng.int(0, 0xffffffff);
-  const hiddenRaceTrajectory = createWeatherTrajectory(track.laps, raceWeather === 'wet', track.rainChance, new Rng(raceWeatherSeed));
+  const hiddenRaceTrajectory = createWeatherTrajectory(track.laps, raceWeather === 'wet', rainProbability, new Rng(raceWeatherSeed));
   const forecastNoise = new Rng(rng.int(0, 0xffffffff));
   const raceRainWindow = createPreRaceRainWindow(hiddenRaceTrajectory, forecastR, staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), forecastNoise);
   const weekend: WeekendState = {
@@ -74,6 +80,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     },
     forecast: { qualifying: round3(forecastQ), race: round3(forecastR), raceRainWindow },
     raceWeatherSeed,
+    ...(rainBias ? { supernaturalRainBias: rainBias } : {}),
     setup: {},
     plans: {},
     teamOrders: prev?.teamOrders ? deepClone(prev.teamOrders) : { mode: 'free', favorDriverId: null },
@@ -87,10 +94,10 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     liveRace: null,
   };
   // 保留上一站积累的罚退（例如 AI 叙事产生的罚退）
-  const pending = state.flags.pendingPenalties;
-  if (typeof pending === 'string' && pending) {
+  const pendingPenalties = state.flags.pendingPenalties;
+  if (typeof pendingPenalties === 'string' && pendingPenalties) {
     try {
-      Object.assign(weekend.penalties, JSON.parse(pending));
+      Object.assign(weekend.penalties, JSON.parse(pendingPenalties));
     } catch {
       /* 忽略损坏的数据 */
     }
@@ -218,7 +225,7 @@ function qualiLap(
   const rules = state.rules;
   const plan = team.isPlayer ? planOf(state, driver.id) : DEFAULT_PLAN;
   const approach = APPROACH[plan.qualiApproach] ?? APPROACH.standard;
-  const setup = setupOf(state, driver.id, team, team.cars.find(car => car.driverId === driver.id)?.slot ?? 1);
+  const setup = effectiveSetup(state, driver.id, setupOf(state, driver.id, team, team.cars.find(car => car.driverId === driver.id)?.slot ?? 1));
   const errChance = 0.035 * approach.err * (1 + (100 - driver.attrs.consistency) / 100) * (wet ? 2 : 1);
   if (rng.chance(errChance)) return { time: null, note: wet ? '雨中失误' : '圈速被取消/失误' };
   const sigma = (0.08 + (100 - driver.attrs.consistency) * 0.0025) * (wet ? 1.6 : 1);
