@@ -119,6 +119,43 @@ function entry(id, comment, content, opt = {}) {
 }
 
 const wb = 'worldbook';
+const teamLore = [
+  { id: 7, slug: 'ferrari', name: '法拉利车队（2026）', keys: ['法拉利', 'Ferrari', '马拉内罗', '埃尔坎', '瓦塞尔', '瓜尔蒂耶里', 'SF-26', '过渡领队'] },
+  { id: 10, slug: 'mclaren', name: '迈凯伦车队（2026）', keys: ['迈凯伦', 'McLaren', '斯特拉', '扎克·布朗', '诺里斯', '皮亚斯特里', 'MCL40'] },
+  { id: 11, slug: 'mercedes', name: '梅赛德斯车队（2026）', keys: ['梅赛德斯', 'Mercedes', '梅奔', 'Toto Wolff', '托托', 'W17', '压缩比'] },
+  { id: 12, slug: 'redbull', name: '红牛车队（2026）', keys: ['红牛', 'Red Bull', '梅基斯', '维斯塔潘', 'Verstappen', 'RB23'] },
+  { id: 13, slug: 'aston-martin', name: '阿斯顿·马丁车队（2026）', keys: ['阿斯顿·马丁', 'Aston Martin', 'AMR26', '劳伦斯·斯特罗尔'] },
+  { id: 14, slug: 'racing-bulls', name: '小红牛车队（2026）', keys: ['小红牛', 'Racing Bulls', 'VCARB', '佩尔曼'] },
+  { id: 15, slug: 'audi', name: '奥迪车队（2026）', keys: ['奥迪', 'Audi', '比诺托'] },
+  { id: 16, slug: 'cadillac', name: '凯迪拉克车队（2026）', keys: ['凯迪拉克', 'Cadillac', '格雷姆·洛登'] },
+  { id: 17, slug: 'alpine', name: '阿尔派车队（2026）', keys: ['阿尔派', 'Alpine', '布里亚托利', 'Gasly', '加斯利', 'Colapinto', '科拉平托', '克拉平托'] },
+  { id: 18, slug: 'haas', name: '哈斯车队（2026）', keys: ['哈斯', 'Haas', '丰田', 'Toyota Gazoo Racing', '小松礼雄', 'Gene Haas', '吉恩·哈斯'] },
+  { id: 19, slug: 'williams', name: '威廉姆斯车队（2026）', keys: ['威廉姆斯', 'Williams', 'James Vowles', '沃尔斯', 'Albon', '阿尔本', 'Sainz', '塞恩斯'] },
+];
+const driverLore = [
+  { id: 8, slug: 'hamilton', name: '刘易斯·汉密尔顿', keys: ['刘易斯·汉密尔顿', '汉密尔顿', 'Lewis Hamilton', 'Hamilton'] },
+  { id: 9, slug: 'leclerc', name: '夏尔·勒克莱尔', keys: ['夏尔·勒克莱尔', '勒克莱尔', 'Charles Leclerc', 'Leclerc'] },
+  { id: 20, slug: 'russell', name: '乔治·拉塞尔', keys: ['乔治·拉塞尔', '拉塞尔', 'George Russell', 'Russell'] },
+  { id: 21, slug: 'antonelli', name: '基米·安东内利', keys: ['基米·安东内利', '安东内利', 'Kimi Antonelli', 'Antonelli'] },
+  { id: 22, slug: 'norris', name: '兰多·诺里斯', keys: ['兰多·诺里斯', '诺里斯', 'Lando Norris', 'Norris'] },
+  { id: 23, slug: 'piastri', name: '奥斯卡·皮亚斯特里', keys: ['奥斯卡·皮亚斯特里', '皮亚斯特里', 'Oscar Piastri', 'Piastri'] },
+  { id: 24, slug: 'verstappen', name: '马克斯·维斯塔潘', keys: ['马克斯·维斯塔潘', '维斯塔潘', 'Max Verstappen', 'Verstappen'] },
+  { id: 25, slug: 'hadjar', name: '伊萨克·哈贾尔', keys: ['伊萨克·哈贾尔', '哈贾尔', 'Isack Hadjar', 'Hadjar'] },
+  { id: 26, slug: 'albon', name: '亚历山大·阿尔本', keys: ['亚历山大·阿尔本', '阿尔本', 'Alexander Albon', 'Albon'] },
+  { id: 27, slug: 'sainz', name: '卡洛斯·塞恩斯', keys: ['卡洛斯·塞恩斯', '塞恩斯', 'Carlos Sainz', 'Sainz'] },
+  { id: 28, slug: 'lawson', name: '利亚姆·劳森', keys: ['利亚姆·劳森', '劳森', 'Liam Lawson', 'Lawson'] },
+  { id: 29, slug: 'lindblad', name: '阿尔维德·林德布拉德', keys: ['阿尔维德·林德布拉德', '林德布拉德', 'Arvid Lindblad', 'Lindblad'] },
+  { id: 30, slug: 'alonso', name: '费尔南多·阿隆索', keys: ['费尔南多·阿隆索', '阿隆索', 'Fernando Alonso', 'Alonso'] },
+  { id: 31, slug: 'stroll', name: '兰斯·斯特罗尔', keys: ['兰斯·斯特罗尔', '斯特罗尔', 'Lance Stroll', 'Stroll'] },
+  { id: 32, slug: 'ocon', name: '埃斯特班·奥孔', keys: ['埃斯特班·奥孔', '奥孔', 'Esteban Ocon', 'Ocon'] },
+  { id: 33, slug: 'bearman', name: '奥利弗·贝尔曼', keys: ['奥利弗·贝尔曼', '贝尔曼', 'Oliver Bearman', 'Bearman'] },
+  { id: 34, slug: 'hulkenberg', name: '尼科·霍肯伯格', keys: ['尼科·霍肯伯格', '霍肯伯格', 'Nico Hulkenberg', 'Hulkenberg'] },
+  { id: 35, slug: 'bortoleto', name: '加布里埃尔·博托莱托', keys: ['加布里埃尔·博托莱托', '博托莱托', 'Gabriel Bortoleto', 'Bortoleto'] },
+  { id: 36, slug: 'gasly', name: '皮埃尔·加斯利', keys: ['皮埃尔·加斯利', '加斯利', 'Pierre Gasly', 'Gasly'] },
+  { id: 37, slug: 'colapinto', name: '弗朗哥·科拉平托', keys: ['弗朗哥·科拉平托', '科拉平托', '克拉平托', 'Franco Colapinto', 'Colapinto'] },
+  { id: 38, slug: 'bottas', name: '瓦尔特利·博塔斯', keys: ['瓦尔特利·博塔斯', '博塔斯', 'Valtteri Bottas', 'Bottas'] },
+  { id: 39, slug: 'perez', name: '塞尔吉奥·佩雷斯', keys: ['塞尔吉奥·佩雷斯', '佩雷斯', 'Sergio Perez', 'Perez'] },
+];
 const book = {
   name: BOOK_NAME,
   entries: [
@@ -129,45 +166,8 @@ const book = {
     entry(4, '[F1M数据] 赛道', readCard(`${wb}/data-tracks.yaml`), { enabled: false, order: 903 }),
     entry(5, '[F1M数据] 赛历', readCard(`${wb}/data-calendar.yaml`), { enabled: false, order: 904 }),
     entry(6, '[F1M资料] 车手资料模板（复制后使用）', readCard(`${wb}/lore-template.md`), { enabled: false, keys: ['填写车手名'], order: 200 }),
-    entry(7, '[F1M资料] 法拉利车队（2026）', readCard(`${wb}/lore-ferrari.md`), {
-      keys: ['法拉利', 'Ferrari', '马拉内罗', '埃尔坎', '瓦塞尔', '瓜尔蒂耶里', 'SF-26', '过渡领队'],
-      order: 201,
-    }),
-    entry(8, '[F1M资料] 刘易斯·汉密尔顿', readCard(`${wb}/lore-hamilton.md`), { keys: ['汉密尔顿', 'Hamilton', '刘易斯'], order: 202 }),
-    entry(9, '[F1M资料] 夏尔·勒克莱尔', readCard(`${wb}/lore-leclerc.md`), { keys: ['勒克莱尔', 'Leclerc', '夏尔'], order: 203 }),
-    entry(10, '[F1M资料] 迈凯伦车队（2026）', readCard(`${wb}/lore-mclaren.md`), {
-      keys: ['迈凯伦', 'McLaren', '斯特拉', '扎克·布朗', '诺里斯', '皮亚斯特里', 'MCL40'],
-      order: 204,
-    }),
-    entry(11, '[F1M资料] 梅赛德斯车队（2026）', readCard(`${wb}/lore-mercedes.md`), {
-      keys: ['梅赛德斯', 'Mercedes', '梅奔', 'Toto Wolff', '托托', 'W17', '压缩比'],
-      order: 205,
-    }),
-    entry(12, '[F1M资料] 红牛车队（2026）', readCard(`${wb}/lore-redbull.md`), {
-      keys: ['红牛', 'Red Bull', '梅基斯', '维斯塔潘', 'Verstappen', 'RB23'],
-      order: 206,
-    }),
-    entry(13, '[F1M资料] 阿斯顿·马丁车队（2026）', readCard(`${wb}/lore-aston-martin.md`), {
-      keys: ['阿斯顿·马丁', 'Aston Martin', 'AMR26', '劳伦斯·斯特罗尔'], order: 207,
-    }),
-    entry(14, '[F1M资料] 小红牛车队（2026）', readCard(`${wb}/lore-racing-bulls.md`), {
-      keys: ['小红牛', 'Racing Bulls', 'VCARB', '佩尔曼'], order: 208,
-    }),
-    entry(15, '[F1M资料] 奥迪车队（2026）', readCard(`${wb}/lore-audi.md`), {
-      keys: ['奥迪', 'Audi', '比诺托'], order: 209,
-    }),
-    entry(16, '[F1M资料] 凯迪拉克车队（2026）', readCard(`${wb}/lore-cadillac.md`), {
-      keys: ['凯迪拉克', 'Cadillac'], order: 210,
-    }),
-    entry(17, '[F1M资料] 阿尔派车队（2026）', readCard(`${wb}/lore-alpine.md`), {
-      keys: ['阿尔派', 'Alpine', '布里亚托利', 'Gasly', '加斯利', 'Colapinto', '科拉平托', '克拉平托'], order: 211,
-    }),
-    entry(18, '[F1M资料] 哈斯车队（2026）', readCard(`${wb}/lore-haas.md`), {
-      keys: ['哈斯', 'Haas', '丰田', 'Toyota Gazoo Racing', '小松礼雄', 'Gene Haas', '吉恩·哈斯'], order: 212,
-    }),
-    entry(19, '[F1M资料] 威廉姆斯车队（2026）', readCard(`${wb}/lore-williams.md`), {
-      keys: ['威廉姆斯', 'Williams', 'James Vowles', '沃尔斯', 'Albon', '阿尔本', 'Sainz', '塞恩斯'], order: 213,
-    }),
+    ...teamLore.map((lore, index) => entry(lore.id, `[F1M资料] ${lore.name}`, readCard(`${wb}/lore-${lore.slug}.md`), { keys: lore.keys, order: 201 + index })),
+    ...driverLore.map((lore, index) => entry(lore.id, `[F1M资料] ${lore.name}`, readCard(`${wb}/lore-driver-${lore.slug}.md`), { keys: lore.keys, order: 220 + index })),
   ],
 };
 

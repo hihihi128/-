@@ -152,7 +152,7 @@ teams:
       floor: { perf: 76.9, rel: 85 }
       sidepods: { perf: 74.9, rel: 86 }
       suspension: { perf: 74.9, rel: 85 }
-    description: RB22 · 红牛-福特动力单元（车队首台自研动力）。2025 年车队榜第 3（451 分）。季前动力单元表现令人意外，但测试初期出现液压问题。
+    description: RB23 · 红牛-福特动力单元（车队首台自研动力）。2025 年车队榜第 3（451 分）。季前动力单元表现令人意外，但测试初期出现液压问题。
 
   # ── 法拉利：真实车队（2026 赛季），带「过渡领队」特殊机制 ──
   # 选择法拉利开局时：玩家是埃尔坎从外部请来的过渡领队，需要稳住媒体支持率，
@@ -237,7 +237,7 @@ teams:
     name: 小红牛车队
     short: RB
     color: '#6692ff'
-    principal: 艾伦·珀曼
+    principal: 艾伦·佩尔曼
     engine: 红牛-福特
     base: 意大利·法恩扎
     funds: 65
@@ -341,7 +341,7 @@ teams:
     name: 奥迪车队
     short: AUD
     color: '#bb0a30'
-    principal: 乔纳森·惠特利
+    principal: 马蒂亚·比诺托
     engine: 奥迪
     worksTeam: true
     base: 瑞士·欣维尔

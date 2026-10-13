@@ -121,16 +121,20 @@ function setupWindow() {
 }
 
 describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backend.js）', () => {
-  it('生成卡包含车队的条件式资料', () => {
+  it('生成卡包含 11 支车队和 22 名正式车手的独立资料', () => {
     const card = JSON.parse(readFileSync(CARD, 'utf8'));
-    const entries = card.data.character_book.entries as Array<{ comment: string; content: string }>;
-    expect(entries.find(entry => entry.comment.includes('迈凯伦车队'))?.content).toContain('若玩家执掌迈凯伦');
-    expect(entries.find(entry => entry.comment.includes('梅赛德斯车队'))?.content).toContain('其他车队存档只把接班人计划视为围场新闻');
-    expect(entries.find(entry => entry.comment.includes('红牛车队'))?.content).toContain('其他车队存档只把人手危机视为围场新闻');
-    expect(entries.find(entry => entry.comment.includes('阿斯顿·马丁车队'))?.content).toContain('若玩家执掌阿斯顿·马丁');
-    expect(entries.find(entry => entry.comment.includes('小红牛车队'))?.content).toContain('若玩家执掌小红牛');
-    expect(entries.find(entry => entry.comment.includes('奥迪车队'))?.content).toContain('若玩家执掌奥迪');
-    expect(entries.find(entry => entry.comment.includes('凯迪拉克车队'))?.content).toContain('若玩家执掌凯迪拉克');
+    const entries = card.data.character_book.entries as Array<{ comment: string; content: string; enabled: boolean; keys: string[] }>;
+    const teams = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M资料]') && entry.comment.includes('车队（2026）'));
+    const drivers = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M资料]') && entry.content.startsWith('<车手资料'));
+    expect(teams).toHaveLength(11);
+    expect(drivers).toHaveLength(22);
+    expect(teams.every(entry => entry.keys.length >= 2)).toBe(true);
+    expect(drivers.every(entry => entry.keys.length >= 4)).toBe(true);
+    expect(teams.find(entry => entry.comment.includes('迈凯伦车队'))?.content).toContain('玩家为临时领队');
+    expect(teams.find(entry => entry.comment.includes('梅赛德斯车队'))?.content).toContain('玩家以副领队身份加入');
+    expect(teams.find(entry => entry.comment.includes('红牛车队'))?.content).toContain('RB23');
+    expect(drivers.find(entry => entry.comment.includes('乔治·拉塞尔'))?.content).toContain('管理触发点');
+    expect(drivers.find(entry => entry.comment.includes('塞尔吉奥·佩雷斯'))?.content).toContain('无线电与叙述指引');
   });
   it('能在模拟的酒馆助手环境中加载并跑通开局 → 面板 → AI 结算 → 注入', async () => {
     const env = setupWindow();
