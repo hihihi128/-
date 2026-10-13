@@ -207,7 +207,8 @@ export interface LiveRaceView {
   completedLaps: number;
   totalLaps: number;
   stage: string;
-  raceControl: 'sc' | 'vsc' | null;
+  raceControl: 'sc' | 'vsc' | 'red_flag' | null;
+  restart: 'standing' | 'rolling' | null;
   weather: { rain: number; surface: 'dry' | 'damp' | 'wet'; forecast: import('./types').RaceForecast };
   timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; pits: number }>;
   playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string }>;
@@ -244,7 +245,7 @@ export interface MarketView {
   current: { raceSeats: Record<string, string | null>; reserveIds: string[]; staff: Record<string, string | null> } | null;
   projected: { raceSeats: Record<string, string | null>; reserveIds: string[]; staff: Record<string, string | null> } | null;
   drivers: Array<{ id: string; name: string; teamId: string | null; role: string; overall: number; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null; acceptsReserve: boolean } }>;
-  staff: Array<{ id: string; name: string; role: string; teamId: string | null; skill: number; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null } }>;
+  staff: Array<{ id: string; name: string; role: string; teamId: string | null; skill: number; abilities?: import('./types').StaffMember['abilities']; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null } }>;
   agreements: Array<{ personId: string; toTeamId: string; role: string; annualSalary: number; endYear: number }>;
 }
 
@@ -270,7 +271,7 @@ export interface GameView {
     projects: ProjectView[];
     rndOptions: ProjectPreview[];
     facilities: Array<{ id: string; name: string; level: number; max: number; preview: ReturnType<typeof previewFacility> }>;
-    staff: Array<{ role: string; label: string; name: string; skill: number; salary: number }>;
+    staff: Array<{ role: string; label: string; name: string; skill: number; abilities?: import('./types').StaffMember['abilities']; salary: number }>;
     pitTraining: ReturnType<typeof previewPitTraining>;
   };
   teams: Array<{ id: string; name: string; short: string; color: string; isPlayer: boolean; points: number; rank: number; carOverall: number; trackScore: number | null; paceRank: number | null }>;
@@ -451,7 +452,7 @@ function marketView(state: GameState): MarketView {
       ...Object.values(market.freeStaff).map(s => ({ ...s, teamId: null })),
     ].map(s => {
       const p = profile(window?.candidateProfiles[s.id!] ?? s.preference, s.salary, s.id!);
-      return { id: s.id!, name: s.name || s.id!, role: s.role ?? '', teamId: s.teamId, skill: s.skill, salary: s.salary, contractEnd: s.contractEnd ?? 0, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId } };
+      return { id: s.id!, name: s.name || s.id!, role: s.role ?? '', teamId: s.teamId, skill: s.skill, abilities: s.abilities ? { ...s.abilities } : undefined, salary: s.salary, contractEnd: s.contractEnd ?? 0, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId } };
     }),
     agreements: (window?.agreements ?? []).filter(a => a.toTeamId === playerId || a.fromTeamId === playerId).map(a => ({ personId: a.personId, toTeamId: a.toTeamId, role: a.driverRole ?? a.staffRole ?? '', annualSalary: a.annualSalary, endYear: a.endYear })),
   };
@@ -559,7 +560,7 @@ export function buildView(state: GameState): GameView {
         max: rules.facilities[f].maxLevel,
         preview: previewFacility(state, team.id, f),
       })),
-      staff: STAFF_ROLES.map(r => ({ role: r, label: LABELS.staff[r], name: team.staff[r].name, skill: team.staff[r].skill, salary: team.staff[r].salary })),
+      staff: STAFF_ROLES.map(r => ({ role: r, label: LABELS.staff[r], name: team.staff[r].name, skill: team.staff[r].skill, abilities: team.staff[r].abilities, salary: team.staff[r].salary })),
       pitTraining: previewPitTraining(state, team.id),
     },
     teams: teamRows.map((tid, i) => {
@@ -699,7 +700,8 @@ function buildWeekendView(state: GameState): WeekendView | null {
         }));
         return {
           id: live.id, revision: live.revision, kind: live.kind, completedLaps: live.completedLaps, totalLaps: live.totalLaps, stage: live.stage,
-          raceControl: live.scLeft > 0 ? 'sc' : live.vscLeft > 0 ? 'vsc' : null,
+          raceControl: live.redFlag?.active ? 'red_flag' : live.scLeft > 0 ? 'sc' : live.vscLeft > 0 ? 'vsc' : null,
+          restart: live.redFlag?.restartPending ? live.redFlag.restart : null,
           weather: { rain: live.rain, surface: live.surface, forecast: live.forecast }, timing,
           playerCars: Object.values(live.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming })),
           events: live.events.slice(-20).map(event => {

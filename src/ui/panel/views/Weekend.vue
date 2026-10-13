@@ -88,7 +88,11 @@ function usePlayerStrategy(d: WeekendDriverView) {
   void setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)], paceMode: 'balanced', pitTiming: 'standard', scReaction: true });
 }
 
-const strategyRiskTeam = computed(() => ['ferrari', 'mclaren', 'aston_martin'].includes(v.value.player.team.id));
+const strategyRiskTeam = computed(() => {
+  const staff = v.value.player.staff;
+  const strategist = staff.find(member => member.role === 'strategist');
+  return (strategist?.abilities?.strategy ?? strategist?.skill ?? 100) < 68 || (strategist?.abilities?.weather ?? strategist?.skill ?? 100) < 68;
+});
 
 function name(id: string): string {
   return v.value.drivers.find(d => d.id === id)?.name ?? id;
@@ -337,7 +341,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
 
       <template v-if="raceLike">
         <div class="small muted">
-          {{ raceLike.weather === 'wet' ? '雨战' : '干地' }} · {{ raceLike.laps }} 圈 · 安全车 {{ raceLike.safetyCars }} 次
+          {{ raceLike.weather === 'wet' ? '雨战' : '干地' }} · {{ raceLike.laps }} 圈 · 安全车 {{ raceLike.safetyCars }} 次 · 红旗 {{ raceLike.redFlags ?? 0 }} 次
           <template v-if="raceLike.fastestLap"> · 最快圈 {{ name(raceLike.fastestLap.driverId) }} {{ lapTime(raceLike.fastestLap.time) }}</template>
         </div>
         <div class="table-wrap">

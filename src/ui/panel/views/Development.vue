@@ -19,6 +19,10 @@ const rush = ref(false);
 const focus = ref(0);
 const selectedCar = computed(() => p.value.cars[0]);
 const lockedParts = computed(() => (v.value.aduo.isCustomer ? v.value.aduo.developmentParts : []));
+const abilityLabels: Record<string, string> = { setup: '调校', communication: '沟通', reaction: '反应', strategy: '策略', weather: '天气', risk: '冒险' };
+function staffAbilities(abilities: Record<string, number> | undefined): string {
+  return abilities ? Object.entries(abilities).map(([key, value]) => `${abilityLabels[key] ?? key} ${value}`).join(' · ') : '综合能力';
+}
 
 watch(
   developable,
@@ -178,7 +182,7 @@ const matrix = computed(() => {
           <tbody>
             <tr v-for="s in p.staff" :key="s.role">
               <td>{{ s.label }}</td>
-              <td class="muted">{{ s.name || '—' }}</td>
+              <td><span class="muted">{{ s.name || '—' }}</span><div class="tiny muted">{{ staffAbilities(s.abilities) }}</div></td>
               <td class="mono">{{ s.skill.toFixed(0) }}</td>
               <td class="mono tiny muted">${{ s.salary }}M/年</td>
             </tr>

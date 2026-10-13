@@ -6,6 +6,7 @@ import { addNarration, driverName, playerTeam } from './log';
 import { activeEntries, carRatings, fittedSpec, qualiSkill, trackScore } from './ratings';
 import { createPreRaceRainWindow, createWeatherTrajectory } from './raceWeather';
 import { Rng } from './rng';
+import { raceEngineerFor, staffAbility } from './staff';
 import type {
   DriverPlan,
   DriverState,
@@ -35,10 +36,11 @@ export function currentTrack(state: GameState): TrackDef {
   return t;
 }
 
-function baseSetup(team: TeamState): SetupState {
+function baseSetup(team: TeamState, slot: number): SetupState {
+  const engineer = raceEngineerFor(team, slot);
   return {
-    confidence: round1(25 + team.facilities.simulator * 5 + team.staff.raceEngineer.skill * 0.1),
-    tyreKnowledge: round1(20 + team.staff.strategist.skill * 0.1),
+    confidence: round1(25 + team.facilities.simulator * 5 + staffAbility(engineer, 'setup') * 0.1),
+    tyreKnowledge: round1(20 + staffAbility(team.staff.strategist, 'strategy') * 0.1),
     qualiBonus: 0,
   };
 }
@@ -60,7 +62,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
   const raceWeatherSeed = rng.int(0, 0xffffffff);
   const hiddenRaceTrajectory = createWeatherTrajectory(track.laps, raceWeather === 'wet', track.rainChance, new Rng(raceWeatherSeed));
   const forecastNoise = new Rng(rng.int(0, 0xffffffff));
-  const raceRainWindow = createPreRaceRainWindow(hiddenRaceTrajectory, forecastR, state.teams[state.meta.playerTeamId].staff.strategist.skill, forecastNoise);
+  const raceRainWindow = createPreRaceRainWindow(hiddenRaceTrajectory, forecastR, staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), forecastNoise);
   const weekend: WeekendState = {
     roundIndex: state.season.roundIndex,
     weather: {
@@ -94,8 +96,8 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     }
     delete state.flags.pendingPenalties;
   }
-  for (const { driver, team } of activeEntries(state)) {
-    weekend.setup[driver.id] = baseSetup(team);
+  for (const { driver, team, car } of activeEntries(state)) {
+    weekend.setup[driver.id] = baseSetup(team, car.slot);
     const old = prev?.plans[driver.id];
     weekend.plans[driver.id] = old ? { ...deepClone(old), tyrePlan: 'auto', sprintTyre: 'auto' } : deepClone(DEFAULT_PLAN);
   }
@@ -110,9 +112,9 @@ export function planOf(state: GameState, driverId: string): DriverPlan {
   return state.weekend?.plans[driverId] ?? deepClone(DEFAULT_PLAN);
 }
 
-function setupOf(state: GameState, driverId: string, team: TeamState): SetupState {
+function setupOf(state: GameState, driverId: string, team: TeamState, slot: number): SetupState {
   const w = state.weekend!;
-  if (!w.setup[driverId]) w.setup[driverId] = baseSetup(team);
+  if (!w.setup[driverId]) w.setup[driverId] = baseSetup(team, slot);
   return w.setup[driverId];
 }
 
@@ -136,9 +138,10 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
     const plan = team.isPlayer ? planOf(state, driver.id) : { ...DEFAULT_PLAN };
     const program = PROGRAM[plan.practiceProgram] ? plan.practiceProgram : 'setup';
     const f = PROGRAM[program];
-    const setup = setupOf(state, driver.id, team);
+    const setup = setupOf(state, driver.id, team, car.slot);
+    const engineer = raceEngineerFor(team, car.slot);
     const base =
-      (18 + driver.attrs.feedback * 0.18 + team.staff.raceEngineer.skill * 0.1 + team.facilities.simulator * 3) * rng.range(0.85, 1.15);
+      (18 + driver.attrs.feedback * 0.18 + staffAbility(engineer, 'setup') * 0.07 + staffAbility(engineer, 'communication') * 0.03 + team.facilities.simulator * 3) * rng.range(0.85, 1.15);
     const setupGain = base * f.setup * sessionMul * (wet ? 0.7 : 1);
     const tyreGain = base * f.tyre * sessionMul * (wet ? 0.5 : 1);
     setup.confidence = round1(clamp(setup.confidence + setupGain, 0, 100));
@@ -215,7 +218,7 @@ function qualiLap(
   const rules = state.rules;
   const plan = team.isPlayer ? planOf(state, driver.id) : DEFAULT_PLAN;
   const approach = APPROACH[plan.qualiApproach] ?? APPROACH.standard;
-  const setup = setupOf(state, driver.id, team);
+  const setup = setupOf(state, driver.id, team, team.cars.find(car => car.driverId === driver.id)?.slot ?? 1);
   const errChance = 0.035 * approach.err * (1 + (100 - driver.attrs.consistency) / 100) * (wet ? 2 : 1);
   if (rng.chance(errChance)) return { time: null, note: wet ? '雨中失误' : '圈速被取消/失误' };
   const sigma = (0.08 + (100 - driver.attrs.consistency) * 0.0025) * (wet ? 1.6 : 1);

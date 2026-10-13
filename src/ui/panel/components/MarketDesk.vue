@@ -54,9 +54,11 @@ function ownerLabel(teamId: string | null) {
   return view.value.teams.find(t => t.id === teamId)?.name ?? '已签约';
 }
 function candidateDetail(person: any): string {
+  const abilityLabels: Record<string, string> = { setup: '调校', communication: '沟通', reaction: '反应', strategy: '策略', weather: '天气', risk: '冒险' };
+  const abilities = person.abilities ? Object.entries(person.abilities).map(([key, value]) => `${abilityLabels[key] ?? key} ${value}`).join(' · ') : '';
   return mode.value === 'drivers'
     ? `${person.overall} 总评 · ${ownerLabel(person.teamId)}`
-    : `${staffLabels.value[person.role] ?? person.role} · 技能 ${person.skill}`;
+    : `${staffLabels.value[person.role] ?? person.role} · 技能 ${person.skill}${abilities ? ` · ${abilities}` : ''}`;
 }
 async function submitOffer() {
   if (!window.value || !selected.value || !selectedQuote.value) return;

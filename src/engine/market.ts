@@ -79,7 +79,12 @@ function strengthSnapshot(state: GameState): Record<string, number> {
 function createFallbackStaff(role: StaffRole, index: number): StaffMember {
   const id = `fictional-${role}-${index}`;
   const skill = 58 + ((index * 7 + role.length * 3) % 24);
-  return { id, role, name: `自由${role}-${index}`, skill, salary: round2(skill / 38), contractStart: 0, contractEnd: 0, preference: preference(id, skill / 38, false) };
+  const abilities = role === 'strategist'
+    ? { strategy: skill, weather: Math.max(1, skill - 3 + index), risk: Math.min(100, skill + 2 - index) }
+    : role === 'raceEngineer' || role === 'raceEngineer2'
+      ? { setup: skill, communication: Math.max(1, skill - 2 + index), reaction: Math.min(100, skill + 1), weather: Math.max(1, skill - 4) }
+      : undefined;
+  return { id, role, name: `自由${role}-${index}`, skill, abilities, salary: round2(skill / 38), contractStart: 0, contractEnd: 0, preference: preference(id, skill / 38, false) };
 }
 
 function ensureFallbackDrivers(state: GameState): void {
@@ -105,6 +110,10 @@ export function ensureMarket(state: GameState): MarketState {
   market.freeStaff ??= {};
   market.completed ??= [];
   for (const [teamId, team] of Object.entries(state.teams)) {
+    if (!team.staff.raceEngineer2) {
+      const first = team.staff.raceEngineer;
+      team.staff.raceEngineer2 = { ...first, id: `${teamId}-raceEngineer2`, role: 'raceEngineer2', name: `${first.name || team.name}（二号车）`, abilities: first.abilities ? { ...first.abilities } : undefined };
+    }
     for (const role of STAFF_ROLES) {
       const staff = team.staff[role];
       if (!staff.id) staff.id = `${teamId}-${role}`;
@@ -113,6 +122,13 @@ export function ensureMarket(state: GameState): MarketState {
       if (!staff.contractStart) staff.contractStart = state.season.year;
       if (!staff.contractEnd) staff.contractEnd = state.season.year;
       staff.preference ??= profileForStaff(staff);
+    }
+  }
+  // Old open windows were created with one engineer slot. Keep those saves
+  // closable by projecting the newly created second engineer into that slot.
+  if (market.window) {
+    for (const [teamId, roster] of Object.entries(market.window.projectedRosters ?? {})) {
+      if (!roster.staff.raceEngineer2) roster.staff.raceEngineer2 = state.teams[teamId]?.staff.raceEngineer2?.id ?? null;
     }
   }
   for (const d of Object.values(state.drivers)) {

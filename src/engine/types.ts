@@ -23,7 +23,8 @@ export type TrackDemand = 'downforce' | 'efficiency' | 'power' | 'mechanical';
 export type DriverAttr = 'pace' | 'racecraft' | 'consistency' | 'tyre' | 'wet' | 'feedback';
 
 export type FacilityType = 'windTunnel' | 'cfd' | 'simulator' | 'factory';
-export type StaffRole = 'technicalDirector' | 'aeroChief' | 'raceEngineer' | 'pitCrew' | 'strategist';
+export type StaffRole = 'technicalDirector' | 'aeroChief' | 'raceEngineer' | 'raceEngineer2' | 'pitCrew' | 'strategist';
+export type StaffAbility = 'setup' | 'communication' | 'reaction' | 'strategy' | 'weather' | 'risk';
 
 export type Ambition = 'conservative' | 'standard' | 'aggressive';
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -342,6 +343,8 @@ export interface StaffMember {
   role?: StaffRole;
   name: string;
   skill: number;
+  /** 个人专项能力。旧数据缺失时回退到综合 skill。 */
+  abilities?: Partial<Record<StaffAbility, number>>;
   /** 年薪 (M$) */
   salary: number;
   contractStart?: number;
@@ -670,6 +673,8 @@ export type RaceEventType =
   | 'damage'
   | 'sc'
   | 'vsc'
+  | 'red_flag'
+  | 'restart'
   | 'sc_end'
   | 'order'
   | 'fastest'
@@ -714,12 +719,14 @@ export interface RaceResult {
   /** 玩家车手每圈名次（用于走势图） */
   lapChart: Record<string, number[]>;
   safetyCars: number;
+  /** 红旗次数；旧结果可能缺失。 */
+  redFlags?: number;
   /** 车队指令执行情况 */
   orderOutcomes: Array<{ lap: number; yielded: string; favored: string; complied: boolean }>;
 }
 
 export type LiveRaceStage = 'grid' | 'ready' | 'before_pit' | 'finished';
-export type RaceWindowReason = 'grid' | 'pit_opportunity' | 'weather_change' | 'sc' | 'vsc' | 'incident';
+export type RaceWindowReason = 'grid' | 'pit_opportunity' | 'weather_change' | 'sc' | 'vsc' | 'red_flag' | 'incident';
 
 export interface RaceForecast {
   issuedLap: number;
@@ -747,6 +754,9 @@ export interface LiveRaceCar {
   tyreFactor: number;
   setupBonus: number;
   pitCrewSkill: number;
+  raceEngineerSkill: number;
+  raceEngineerReaction: number;
+  raceEngineerWeather: number;
   plan: DriverPlan;
   tyre: Compound;
   tyreAge: number;
@@ -828,6 +838,13 @@ export interface LiveRaceState {
   scLeft: number;
   vscLeft: number;
   safetyCars: number;
+  redFlags: number;
+  redFlag: {
+    active: boolean;
+    triggerLap: number;
+    restart: 'standing' | 'rolling';
+    restartPending: boolean;
+  } | null;
   fastestLap: { driverId: string; time: number; lap: number } | null;
   events: Array<RaceEvent & { id: string }>;
   lapChart: Record<string, number[]>;

@@ -17,6 +17,7 @@ import type {
   PartDef,
   RoundDef,
   Rules,
+  StaffAbility,
   StaffMember,
   StaffRole,
   TeamDef,
@@ -356,6 +357,17 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
   return rules;
 }
 
+const STAFF_ABILITIES: StaffAbility[] = ['setup', 'communication', 'reaction', 'strategy', 'weather', 'risk'];
+
+function normalizeStaffAbilities(ctx: Ctx, raw: unknown, path: string): StaffMember['abilities'] {
+  const obj = asObject(raw);
+  const abilities: StaffMember['abilities'] = {};
+  for (const ability of STAFF_ABILITIES) {
+    if (obj[ability] !== undefined) abilities[ability] = ctx.num(obj, ability, path, { def: 60, min: 1, max: 100 });
+  }
+  return Object.keys(abilities).length ? abilities : undefined;
+}
+
 function normalizeStaff(ctx: Ctx, raw: unknown, path: string): Record<StaffRole, StaffMember> {
   const obj = asObject(raw);
   const out = {} as Record<StaffRole, StaffMember>;
@@ -366,12 +378,17 @@ function normalizeStaff(ctx: Ctx, raw: unknown, path: string): Record<StaffRole,
       continue;
     }
     const m = asObject(r);
+    if (role === 'raceEngineer2' && r === undefined && out.raceEngineer) {
+      out[role] = { ...deepClone(out.raceEngineer), id: '', role, name: `${out.raceEngineer.name || '比赛工程师'}（二号车）` };
+      continue;
+    }
     if (r === undefined) ctx.warn(`${path}.${role}`, '未填写，已使用默认能力 60');
     out[role] = {
       id: ctx.str(m, 'id', `${path}.${role}`),
       role,
       name: ctx.str(m, 'name', `${path}.${role}`),
       skill: ctx.num(m, 'skill', `${path}.${role}`, { def: 60, min: 1, max: 100 }),
+      abilities: normalizeStaffAbilities(ctx, m.abilities, `${path}.${role}.abilities`),
       salary: ctx.num(m, 'salary', `${path}.${role}`, { def: 1, min: 0 }),
       contractStart: Math.round(ctx.num(m, 'contractStart', `${path}.${role}`, { def: 0 })),
       contractEnd: Math.round(ctx.num(m, 'contractEnd', `${path}.${role}`, { def: 0 })),
@@ -630,7 +647,7 @@ export function normalizeDatabase(sources: RawSource[]): NormalizeResult & { can
     if (!(STAFF_ROLES as readonly string[]).includes(role)) { ctx.err(`staffCandidates[${i}].role`, '员工岗位无效'); return; }
     const id = ctx.str(raw, 'id', `staffCandidates[${i}]`, { required: true });
     if (!id) return;
-    staffCandidates.push({ id, role: role as StaffRole, name: ctx.str(raw, 'name', `staffCandidates[${i}]`, { def: id }), skill: ctx.num(raw, 'skill', `staffCandidates[${i}]`, { def: 60, min: 1, max: 100 }), salary: ctx.num(raw, 'salary', `staffCandidates[${i}]`, { def: 1, min: 0 }), contractStart: 0, contractEnd: 0 });
+    staffCandidates.push({ id, role: role as StaffRole, name: ctx.str(raw, 'name', `staffCandidates[${i}]`, { def: id }), skill: ctx.num(raw, 'skill', `staffCandidates[${i}]`, { def: 60, min: 1, max: 100 }), abilities: normalizeStaffAbilities(ctx, raw.abilities, `staffCandidates[${i}].abilities`), salary: ctx.num(raw, 'salary', `staffCandidates[${i}]`, { def: 1, min: 0 }), contractStart: 0, contractEnd: 0 });
   });
   const trackItems: Array<{ item: TrackDef; source: string }> = [];
   rawLists.tracks.forEach((r, i) => {

@@ -6,6 +6,7 @@ import { Rng } from '../../src/engine/rng';
 import { createForecast, createWeatherTrajectory } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
 import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
+import { redFlagProbability } from '../../src/engine/race';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -13,6 +14,39 @@ describe('resumable live race', () => {
     state = advanceUntil(state, s => s.season.phase === 'race');
     return state;
   }
+
+  it('scales red-flag risk with incident severity, weather, and involved cars', () => {
+    expect(redFlagProbability('minor', 1, 2, .8)).toBe(0);
+    expect(redFlagProbability('dnf', .8, 2, .5)).toBeGreaterThan(redFlagProbability('dnf', 0, 1, .5));
+  });
+
+  it('allows a free tyre change during a red flag and schedules the selected restart', () => {
+    const state = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    live.completedLaps = 8;
+    live.lap = 8;
+    live.stage = 'before_pit';
+    live.redFlags = 1;
+    live.redFlag = { active: true, triggerLap: 8, restart: 'standing', restartPending: false };
+    live.pendingDecision!.stage = 'before_pit';
+    live.pendingDecision!.lap = 8;
+    live.pendingDecision!.reasons = ['red_flag'];
+    const playerCars = Object.values(live.cars).filter(car => car.player);
+    const changed = playerCars[0];
+    const freeCompound = state.rules.dryCompounds.at(-1)!;
+    const oldPits = changed.pits;
+    const oldTime = changed.cumulativeTime;
+    const result = act(state, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
+      drivers: playerCars.map((car, index) => index === 0 ? { driverId: car.driverId, pit: 'box' as const, compound: freeCompound } : { driverId: car.driverId, pit: 'auto' as const }),
+    });
+    const resumed = result.weekend!.liveRace!;
+    expect(resumed.cars[changed.driverId].tyre).toBe(freeCompound);
+    expect(resumed.cars[changed.driverId].pits).toBe(oldPits);
+    expect(resumed.cars[changed.driverId].cumulativeTime).toBe(oldTime);
+    expect(resumed.redFlag).toMatchObject({ active: false, restartPending: true, restart: 'standing' });
+    expect(resumed.events.some(event => event.type === 'restart')).toBe(true);
+  });
 
   it('creates a JSON-safe grid checkpoint and hides private simulation inputs from the view', () => {
     const state = act(raceReady(), { type: 'START_RACE', kind: 'race' });

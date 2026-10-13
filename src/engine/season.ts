@@ -430,6 +430,7 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
       `本队：${mine}。`,
       keyEvents ? `关键时刻：${keyEvents}。` : '',
       result.safetyCars ? `全场出动 ${result.safetyCars} 次安全车。` : '',
+      result.redFlags ? `全场出示 ${result.redFlags} 次红旗。` : '',
       crashNotes.length ? `事故损失：${crashNotes.join('；')}。` : '',
       moraleNotes.length ? `心态变化：${moraleNotes.join('，')}。` : '',
       financeNote ? `财务：${financeNote}。` : '',

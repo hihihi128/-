@@ -233,7 +233,7 @@ export const CAR_ATTRS: CarAttr[] = ['downforce', 'efficiency', 'power', 'mechan
 export const TRACK_DEMANDS: TrackDemand[] = ['downforce', 'efficiency', 'power', 'mechanical'];
 export const DRIVER_ATTRS: DriverAttr[] = ['pace', 'racecraft', 'consistency', 'tyre', 'wet', 'feedback'];
 export const FACILITIES: FacilityType[] = ['windTunnel', 'cfd', 'simulator', 'factory'];
-export const STAFF_ROLES: StaffRole[] = ['technicalDirector', 'aeroChief', 'raceEngineer', 'pitCrew', 'strategist'];
+export const STAFF_ROLES: StaffRole[] = ['technicalDirector', 'aeroChief', 'raceEngineer', 'raceEngineer2', 'pitCrew', 'strategist'];
 export const AMBITIONS: Ambition[] = ['conservative', 'standard', 'aggressive'];
 
 export const LABELS = {
@@ -267,9 +267,10 @@ export const LABELS = {
   staff: {
     technicalDirector: '技术总监',
     aeroChief: '空气动力学主管',
-    raceEngineer: '比赛工程师',
+    raceEngineer: '一号车比赛工程师',
+    raceEngineer2: '二号车比赛工程师',
     pitCrew: '维修组',
-    strategist: '策略师',
+    strategist: '首席策略师',
   } satisfies Record<StaffRole, string>,
   program: {
     setup: '调校',

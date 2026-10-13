@@ -24,6 +24,7 @@ import { previewContractOffer } from '../engine/market';
 import { buildStatePrompt } from '../engine/prompt';
 import { applyAiCommands, describeLog, parseAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
+import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
 import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, StaffRole } from '../engine/types';
 import { hashString, money, round1 } from '../engine/util';
 import { buildView, type GameView } from '../engine/view';
@@ -119,7 +120,7 @@ export interface HudView {
   projects?: Array<{ label: string; weeksLeft: number; progress: number }>;
   lastRace?: string | null;
   /** Public only: current progress/control state, never hidden weather or strategy. */
-  liveRace?: { lap: number; totalLaps: number; raceControl: 'sc' | 'vsc' | null; pendingDecision: boolean } | null;
+  liveRace?: { lap: number; totalLaps: number; raceControl: 'sc' | 'vsc' | 'red_flag' | null; pendingDecision: boolean } | null;
   /** 法拉利过渡领队考核（只有法拉利存档有） */
   ferrari?: { media: number; minMedia: number; warnMedia: number; fans: Array<{ name: string; value: number }>; gap: number; maxFanGap: number; warnFanGap: number; dismissed: string | null };
   changes: string[];
@@ -518,8 +519,10 @@ export class F1Controller {
     if (!driverView || !driver || driver.teamId !== team.id) return { ok: false, message: '找不到本队正式车手' };
     if (!driverView.options.length) return { ok: false, message: '当前没有可用的干地策略方案' };
 
-    const midfield = !['red_bull', 'mercedes', 'mclaren', 'aston_martin', 'ferrari'].includes(team.id);
-    const level = team.id === 'red_bull' ? 0 : team.id === 'mercedes' ? 1 : midfield ? 2 : team.id === 'mclaren' ? 3 : team.id === 'aston_martin' ? 4 : 5;
+    const slot = team.cars.find(car => car.driverId === driverId)?.slot ?? 1;
+    const engineer = raceEngineerFor(team, slot);
+    const decisionSkill = strategyDecisionSkill(team, slot);
+    const level = decisionSkill >= 90 ? 0 : decisionSkill >= 82 ? 1 : decisionSkill >= 73 ? 2 : decisionSkill >= 64 ? 3 : decisionSkill >= 55 ? 4 : 5;
     const labels = ['顶级', '优秀', '中游', '保守迟钝', '较差', '灾难级'];
     const liveCar = state.weekend.liveRace?.kind === 'race' ? state.weekend.liveRace.cars[driverId] : undefined;
     const activeDriverIds = new Set(Object.values(state.teams).flatMap(currentTeam => currentTeam.cars.map(car => car.driverId).filter((id): id is string => !!id)));
@@ -557,7 +560,7 @@ export class F1Controller {
         : '目前没有明确降雨窗口，按干地基础方案执行';
     const prompt = [
       '你是 F1 车队策略工程师。请用中文给领队一段简短、自然的策略建议。',
-      `车队：${team.name}。车手：${driver.name}。策略部门水平：${labels[level]}。`,
+      `车队：${team.name}。车手：${driver.name}。比赛工程师：${engineer.name}。首席策略师：${team.staff.strategist.name}。本车策略判断水平：${labels[level]}。`,
       `比赛上下文：${gridContext}；正赛降雨概率 ${Math.round(state.weekend.forecast.race * 100)}%。${weatherResponse}。`,
       `必须建议：${compounds}，${option.stops} 停，预计分段 ${option.stints.join('/')} 圈。`,
       `驾驶模式：${plan.paceMode}；进站时机：${plan.pitTiming}；安全车响应：${plan.scReaction ? '积极' : '迟钝'}。`,

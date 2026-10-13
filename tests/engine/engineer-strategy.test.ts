@@ -3,14 +3,12 @@ import { act, advanceUntil, newTestGame } from '../helpers';
 import { engineerDecisionRoll, engineerWeatherRisk } from '../../src/engine/race';
 
 describe('engineer strategy execution', () => {
-  it('uses the requested team-specific wet-weather risks and tyre preferences', () => {
-    expect(engineerWeatherRisk('ferrari', '法拉利', .3)).toMatchObject({ probability: .55, preference: 'soft' });
-    expect(engineerWeatherRisk('mclaren', '迈凯伦', .7)).toMatchObject({ probability: .25, preference: 'medium' });
-    expect(engineerWeatherRisk('aston_martin', '阿斯顿·马丁', .4)).toMatchObject({ probability: .3, preference: 'medium' });
-    expect(engineerWeatherRisk('racing_bulls', '小红牛', .03)).toMatchObject({ probability: .8, preference: 'intermediate' });
-    expect(engineerWeatherRisk('racing_bulls', '小红牛', .2)).toMatchObject({ probability: .8, preference: 'intermediate' });
-    expect(engineerWeatherRisk('racing_bulls', '小红牛', .029)).toBeNull();
-    expect(engineerWeatherRisk('racing_bulls', '小红牛', .201)).toBeNull();
+  it('derives wet-weather risks from personal abilities rather than team identity', () => {
+    expect(engineerWeatherRisk(72, 70, 84, .3)).toMatchObject({ preference: 'soft', holdLaps: 2 });
+    expect(engineerWeatherRisk(90, 88, 68, .7)).toMatchObject({ preference: 'medium', holdLaps: 1 });
+    expect(engineerWeatherRisk(75, 74, 86, .1)).toMatchObject({ preference: 'intermediate', holdLaps: 3 });
+    expect(engineerWeatherRisk(90, 90, 70, .1)).toBeNull();
+    expect(engineerWeatherRisk(72, 70, 84, .5)!.probability).toBeGreaterThan(engineerWeatherRisk(90, 88, 68, .5)!.probability);
   });
 
   it('makes each weather decision deterministic without using a supplied race RNG', () => {

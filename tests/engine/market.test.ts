@@ -143,11 +143,11 @@ describe('确定性合同市场', () => {
     expect(view.market.window).toBeNull();
   });
 
-  it('exposes public projected roster and all five staff roles without rival finance', () => {
+  it('exposes public projected roster and all six staff roles without rival finance', () => {
     const state = newTestGame();
     const view = buildView(state);
     expect(view.market.window?.targetYear).toBe(state.season.year);
-    expect(Object.keys(view.market.current!.staff)).toHaveLength(5);
+    expect(Object.keys(view.market.current!.staff)).toHaveLength(6);
     expect(JSON.stringify(view.market)).not.toContain('costCapSpent');
     expect(JSON.stringify(view.market)).not.toContain('funds');
   });

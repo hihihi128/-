@@ -49,12 +49,19 @@ export function migrateState(state: GameState): GameState {
     if (live.version !== 1 || !live.id || !Array.isArray(live.weatherTrajectory) || !live.cars || !Number.isFinite(live.rngState) || live.completedLaps < 0 || live.completedLaps > live.totalLaps) state.weekend.liveRace = null;
     else {
       live.strategistSkill ??= state.teams[state.meta.playerTeamId]?.staff.strategist.skill ?? 50;
+      live.redFlags ??= 0;
+      live.redFlag ??= null;
       for (const car of Object.values(live.cars)) {
         const driver = state.drivers[car.driverId];
         car.trust ??= driver?.trust ?? 50;
         car.ego ??= driver?.ego ?? 50;
         car.stayOutUntilLap ??= 0;
         car.pendingCompound ??= null;
+        const team = state.teams[car.teamId];
+        const engineer = car.slot === 2 ? (team?.staff.raceEngineer2 ?? team?.staff.raceEngineer) : team?.staff.raceEngineer;
+        car.raceEngineerSkill ??= engineer?.skill ?? 50;
+        car.raceEngineerReaction ??= engineer?.abilities?.reaction ?? engineer?.skill ?? 50;
+        car.raceEngineerWeather ??= engineer?.abilities?.weather ?? engineer?.skill ?? 50;
       }
     }
   }
@@ -62,6 +69,10 @@ export function migrateState(state: GameState): GameState {
   if (state.rules.puAllocation && !state.rules.aduo) state.rules.aduo = deepClone(DEFAULT_RULES.aduo);
   state.aduo ??= { evaluations: [] };
   for (const team of Object.values(state.teams)) {
+    if (!team.staff.raceEngineer2) {
+      const first = team.staff.raceEngineer;
+      team.staff.raceEngineer2 = { ...deepClone(first), id: `${team.id}-raceEngineer2`, role: 'raceEngineer2', name: `${first.name || team.name}（二号车）` };
+    }
     team.worksTeam ??= false;
     // 进行中的动力单元设计项目已经占用认证次数（取消时会返还）
     team.puHomologations ??= state.rules.aduo
