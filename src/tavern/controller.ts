@@ -180,6 +180,7 @@ interface ActiveNegotiation extends NegotiationSessionView {
   chatId: string;
   gameId: string;
   revisionId: string;
+  revisionData: string;
   floor: number;
   phase: GameState['season']['phase'];
   year: number;
@@ -910,7 +911,7 @@ export class F1Controller {
 
   getSpecialNegotiation(): NegotiationSessionView | null {
     if (!this.specialNegotiation) return null;
-    const { chatId: _chatId, gameId: _gameId, revisionId: _revisionId, floor: _floor, phase: _phase, year: _year, roundIndex: _roundIndex, ...view } = this.specialNegotiation;
+    const { chatId: _chatId, gameId: _gameId, revisionId: _revisionId, revisionData: _revisionData, floor: _floor, phase: _phase, year: _year, roundIndex: _roundIndex, ...view } = this.specialNegotiation;
     return JSON.parse(JSON.stringify(view)) as NegotiationSessionView;
   }
 
@@ -922,12 +923,12 @@ export class F1Controller {
     if (this.busy || this.env.isGenerating()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', session: this.getSpecialNegotiation() };
     if (this.specialNegotiation?.status === 'active') return { ok: false, message: '请先完成或取消当前谈判', session: this.getSpecialNegotiation() };
     const secondaryError = selected === 'secondary' ? this.secondaryApiError() : null;
-    if (secondaryError) return { ok: false, message: secondaryError, session: null };
+    if (secondaryError) return { ok: false, message: secondaryError, session: this.getSpecialNegotiation() };
     const floor = this.latestFloor();
     const current = this.store.resolve(floor);
-    if (!current) return { ok: false, message: '还没有开局', session: null };
+    if (!current) return { ok: false, message: '还没有开局', session: this.getSpecialNegotiation() };
     const unavailable = definition.unavailable(current.state);
-    if (unavailable) return { ok: false, message: unavailable, session: null };
+    if (unavailable) return { ok: false, message: unavailable, session: this.getSpecialNegotiation() };
     const openingSpeaker = definition.participants[0];
     this.specialNegotiation = {
       id: `neg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -944,6 +945,7 @@ export class F1Controller {
       chatId: this.env.chatId(),
       gameId: current.state.gameId,
       revisionId: current.rev.id,
+      revisionData: current.rev.data,
       floor,
       phase: current.state.season.phase,
       year: current.state.season.year,
@@ -958,6 +960,13 @@ export class F1Controller {
     return { ok: true, message: '已取消谈判，存档没有变化', session: null };
   }
 
+  private resolveNegotiationContext(session: ActiveNegotiation) {
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    if (!current || this.env.chatId() !== session.chatId || floor !== session.floor || current.state.gameId !== session.gameId || current.rev.id !== session.revisionId || current.rev.data !== session.revisionData || current.state.season.phase !== session.phase || current.state.season.year !== session.year || current.state.season.roundIndex !== session.roundIndex) return null;
+    return current;
+  }
+
   async sendSpecialNegotiationTurn(request: { text: unknown; sessionId: unknown }): Promise<NegotiationResult> {
     const fail = (message: string): NegotiationResult => ({ ok: false, message, session: this.getSpecialNegotiation() });
     const session = this.specialNegotiation;
@@ -967,10 +976,11 @@ export class F1Controller {
     if (session.round >= session.maxRounds) return fail('谈判轮数已经用完');
     if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
     const definition = NEGOTIATIONS[session.kind];
-    const floor = this.latestFloor();
-    const current = this.store.resolve(floor);
-    if (!current || this.env.chatId() !== session.chatId || floor !== session.floor || current.state.gameId !== session.gameId || current.rev.id !== session.revisionId || current.state.season.phase !== session.phase || current.state.season.year !== session.year || current.state.season.roundIndex !== session.roundIndex) {
-      return fail('谈判期间存档或聊天已经变化，请重新开始谈判');
+    const current = this.resolveNegotiationContext(session);
+    if (!current) {
+      session.status = 'breakdown';
+      session.outcome = '谈判期间存档或聊天已经变化，请重新开始谈判。';
+      return fail(session.outcome);
     }
     const unavailable = definition.unavailable(current.state);
     if (unavailable) return fail(unavailable);
@@ -986,10 +996,11 @@ export class F1Controller {
       );
       if (new TextEncoder().encode(generated).byteLength > 16 * 1024) return fail('谈判 API 返回超过 16 KiB');
       const reply = parseNegotiationReply(generated, definition, nextRound, session.minRounds, session.maxRounds);
-      const latestFloor = this.latestFloor();
-      const latest = this.store.resolve(latestFloor);
-      if (this.env.chatId() !== session.chatId || latestFloor !== session.floor || !latest || latest.state.gameId !== session.gameId || latest.rev.id !== session.revisionId || latest.state.season.phase !== session.phase || latest.state.season.year !== session.year || latest.state.season.roundIndex !== session.roundIndex) {
-        return fail('等待 API 时存档或聊天已经变化，结果已安全丢弃');
+      const latest = this.resolveNegotiationContext(session);
+      if (this.env.isGenerating() || !latest) {
+        session.status = 'breakdown';
+        session.outcome = '等待 API 时存档或聊天已经变化，结果已安全丢弃。';
+        return fail(session.outcome);
       }
       session.messages.push({ role: 'player', speaker: '玩家领队', text: playerText });
       session.messages.push({ role: 'counterparty', speaker: reply.speaker, text: reply.reply });
@@ -1003,8 +1014,12 @@ export class F1Controller {
       const choice = definition.choices[reply.choice!];
       if (!choice?.action) return fail('谈判没有可执行的结算动作');
       const applied = dispatch(latest.state, choice.action);
-      if (!applied.ok) return fail(`协议无法结算：${applied.message}`);
-      this.store.commit(applied.state, { floor: Math.max(0, latestFloor), kind: 'ui', label: `${definition.title}：${choice.label}` });
+      if (!applied.ok) {
+        session.status = 'breakdown';
+        session.outcome = `协议无法执行：${applied.message}`;
+        return { ok: true, message: session.outcome, session: this.getSpecialNegotiation() };
+      }
+      this.store.commit(applied.state, { floor: Math.max(0, session.floor), kind: 'ui', label: `${definition.title}：${choice.label}` });
       session.status = 'agreement';
       session.outcome = `${choice.label}。${applied.message}`;
       this.notify('negotiation');

@@ -233,6 +233,7 @@ export interface WeekendView {
   drivers: WeekendDriverView[];
   /** Individual FP results, including a migrated legacy result as FP1. */
   practiceSessions: PracticeResult[];
+  practiceSessionTotal: number;
   /** Latest practice result retained for consumers of the old view shape. */
   practice: PracticeResult | null;
   sprintQualifying: QualiResult | null;
@@ -787,6 +788,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
     penalties: w.penalties,
     drivers,
     practiceSessions: Array.isArray(w.practiceSessions) ? w.practiceSessions : w.practice ? [w.practice] : [],
+    practiceSessionTotal: state.calendar[w.roundIndex]?.sprint ? 1 : 3,
     practice: w.practice,
     sprintQualifying: w.sprintQualifying,
     sprint: w.sprint,

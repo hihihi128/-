@@ -152,6 +152,62 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(specialCtrl.listRevisions()[0].label).toContain('ADUO 四队联盟谈判');
   });
 
+  it('谈判破裂、取消或等待期间换档都不会修改事件状态', async () => {
+    const specialEnv = new FakeTavern(cardWorldbook());
+    const specialCtrl = new F1Controller(specialEnv);
+    specialCtrl.init();
+    await specialCtrl.loadData();
+    expect((await specialCtrl.newGame({ playerTeamId: 'audi', seed: 89 })).ok).toBe(true);
+
+    let replies = 0;
+    specialEnv.generateText = async () => ++replies === 1
+      ? '{"speaker":"法拉利代表","reply":"还需要更明确的边界。","status":"continue","choice":null}'
+      : '{"speaker":"梅赛德斯代表","reply":"条件无法统一，本轮谈判结束。","status":"breakdown","choice":null}';
+    const started = specialCtrl.startSpecialNegotiation({ kind: 'aduo_alliance', api: 'main' });
+    await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '先讨论联盟边界。' });
+    const breakdown = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '奥迪不能再让步。' });
+    expect(breakdown).toMatchObject({ ok: true, session: { status: 'breakdown', round: 2 } });
+    expect(specialCtrl.stateAt()!.audi?.alliance).toBe(false);
+    expect(specialCtrl.cancelSpecialNegotiation()).toMatchObject({ ok: true, session: null });
+
+    let release!: (value: string) => void;
+    specialEnv.generateText = async () => new Promise<string>(resolve => { release = resolve; });
+    const pendingStart = specialCtrl.startSpecialNegotiation({ kind: 'aduo_alliance', api: 'main' });
+    const pending = specialCtrl.sendSpecialNegotiationTurn({ sessionId: pendingStart.session!.id, text: '等待各队答复。' });
+    await Promise.resolve();
+    const replacement = JSON.parse(specialCtrl.exportSave()!);
+    replacement.state.gameId = 'replacement-negotiation-game';
+    expect((await specialCtrl.importSave(JSON.stringify(replacement))).ok).toBe(true);
+    release('{"speaker":"法拉利代表","reply":"继续讨论。","status":"continue","choice":null}');
+    const stale = await pending;
+    expect(stale.ok).toBe(false);
+    expect(stale.message).toContain('安全丢弃');
+    expect(specialCtrl.stateAt()!.gameId).toBe('replacement-negotiation-game');
+    expect(specialCtrl.getSpecialNegotiation()).toBeNull();
+  });
+
+  it('谈判达成的动作被引擎拒绝时会结束为破裂状态', async () => {
+    const specialEnv = new FakeTavern(cardWorldbook());
+    const specialCtrl = new F1Controller(specialEnv);
+    specialCtrl.init();
+    await specialCtrl.loadData();
+    expect((await specialCtrl.newGame({ playerTeamId: 'mercedes', seed: 90 })).ok).toBe(true);
+    const blocked = JSON.parse(specialCtrl.exportSave()!);
+    blocked.state.fiaMeeting.current = { index: 1, issue: 'cost_cap', opponents: ['ferrari', 'audi'] };
+    expect((await specialCtrl.importSave(JSON.stringify(blocked))).ok).toBe(true);
+    let replies = 0;
+    specialEnv.generateText = async () => ++replies === 1
+      ? '{"speaker":"FIA 技术代表","reply":"请继续说明技术依据。","status":"continue","choice":null}'
+      : '{"speaker":"Toto Wolff","reply":"我们接受先做技术辩护。","status":"agreement","choice":"defend"}';
+
+    const started = specialCtrl.startSpecialNegotiation({ kind: 'mercedes_politics', api: 'main' });
+    await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '先提交完整数据。' });
+    const result = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '现在采用技术辩护路线。' });
+    expect(result).toMatchObject({ ok: true, session: { status: 'breakdown', round: 2 } });
+    expect(result.message).toContain('请先完成辩论');
+    expect(specialCtrl.stateAt()!.mercedes?.lastActionRound).toBeNull();
+  });
+
   it('validates direct secondary API settings before generation', async () => {
     for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
     expect(() => ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: '', engineerApiUrl: 'not-a-url', engineerModel: 'test-model' })).toThrow('有效的 http:// 或 https:// 地址');

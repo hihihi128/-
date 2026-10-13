@@ -1,18 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import type { NegotiationKind, NegotiationSessionView } from '../../../tavern/negotiation';
+import type { NegotiationKind } from '../../../tavern/negotiation';
 import { call, peek, store } from '../bridge';
 
 const props = defineProps<{ kind: NegotiationKind }>();
-const apiChoice = ref<'main' | 'secondary'>('secondary');
+const apiChoice = ref<'main' | 'secondary'>(peek(api => api.getSettings().engineerApi) ?? 'main');
 const text = ref('');
-const session = ref<NegotiationSessionView | null>(peek(api => api.getSpecialNegotiation()));
-const mine = computed(() => session.value?.kind === props.kind ? session.value : null);
-const otherActive = computed(() => session.value?.status === 'active' && session.value.kind !== props.kind);
+const mine = computed(() => store.negotiation?.kind === props.kind ? store.negotiation : null);
+const otherActive = computed(() => store.negotiation?.status === 'active' && store.negotiation.kind !== props.kind);
 
 async function start() {
   const result = await call(api => api.startSpecialNegotiation({ kind: props.kind, api: apiChoice.value }));
-  if (result) session.value = result.session;
+  if (result) store.negotiation = result.session;
 }
 
 async function send() {
@@ -21,13 +20,13 @@ async function send() {
   const message = text.value;
   text.value = '';
   const result = await call(api => api.sendSpecialNegotiationTurn({ text: message, sessionId: current.id }));
-  if (result) session.value = result.session;
-  else text.value = message;
+  if (result) store.negotiation = result.session;
+  if (!result?.ok) text.value = message;
 }
 
 async function cancel() {
   const result = await call(api => api.cancelSpecialNegotiation());
-  if (result) session.value = result.session;
+  if (result) store.negotiation = result.session;
 }
 </script>
 
@@ -39,7 +38,8 @@ async function cancel() {
         <option value="main">主 API</option>
       </select>
       <button class="primary" :disabled="store.busy || otherActive" @click="start">开始多轮 AI 谈判</button>
-      <span v-if="otherActive" class="tiny muted">请先完成当前的 {{ session?.title }}。</span>
+      <span v-if="otherActive" class="tiny muted">请先完成当前的 {{ store.negotiation?.title }}。</span>
+      <button v-if="otherActive" class="small" :disabled="store.busy" @click="cancel">取消当前谈判</button>
     </div>
 
     <template v-else>

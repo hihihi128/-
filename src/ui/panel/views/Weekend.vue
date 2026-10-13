@@ -12,14 +12,14 @@ import type { EngineerStrategyResult } from '../../../tavern/controller';
 const v = computed(() => store.view!);
 const w = computed(() => v.value.weekend);
 const phase = computed(() => v.value.season.phase);
-const isSprint = computed(() => !!v.value.round?.sprint);
+const isSprint = computed(() => w.value ? w.value.practiceSessionTotal === 1 : !!v.value.round?.sprint);
 const current = computed(() => !!w.value?.isCurrent);
 const generating = computed(() => !!store.status?.generating);
 const practiceSessions = computed(() => {
   const ww = w.value;
   return ww?.practiceSessions?.length ? ww.practiceSessions : ww?.practice ? [ww.practice] : [];
 });
-const practiceSessionTotal = computed(() => (isSprint.value ? 1 : 3));
+const practiceSessionTotal = computed(() => w.value?.practiceSessionTotal ?? 0);
 
 const steps = computed(() => {
   const s: Array<{ id: string; label: string }> = [{ id: 'practice', label: `练习赛 ${practiceSessions.value.length}/${practiceSessionTotal.value}` }];
@@ -38,7 +38,7 @@ const done = computed(() => ({
 }));
 
 const resultTab = ref<'race' | 'qualifying' | 'sprint' | 'sprintQualifying' | 'practice'>('race');
-const practiceResultIndex = ref(0);
+const practiceResultIndex = ref(-1);
 const shownResult = computed(() => {
   const ww = w.value;
   if (!ww) return null;
@@ -48,7 +48,12 @@ const shownResult = computed(() => {
   }
   return null;
 });
-const shownPractice = computed(() => practiceSessions.value[Math.min(practiceResultIndex.value, practiceSessions.value.length - 1)] ?? null);
+const shownPractice = computed(() => {
+  const latest = practiceSessions.value.length - 1;
+  const index = practiceResultIndex.value < 0 ? latest : Math.min(practiceResultIndex.value, latest);
+  return practiceSessions.value[index] ?? null;
+});
+const shownPracticeIndex = computed(() => practiceResultIndex.value < 0 ? practiceSessions.value.length - 1 : practiceResultIndex.value);
 
 function showPracticeResult(index: number) {
   practiceResultIndex.value = index;
@@ -77,7 +82,10 @@ watch(() => w.value?.roundIndex, () => {
   engineerSuggestions.value = {};
   perfectSuggestions.value = {};
   perfectOpen.value = false;
-  practiceResultIndex.value = 0;
+  practiceResultIndex.value = Math.max(0, practiceSessions.value.length - 1);
+});
+watch(() => practiceSessions.value.length, length => {
+  if (length > 0) practiceResultIndex.value = length - 1;
 });
 
 function customFor(d: WeekendDriverView): string[] {
@@ -348,7 +356,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
       <div class="spread">
         <h3>{{ current ? '本站' : '上一站' }}成绩</h3>
         <div class="seg">
-          <button v-for="(_, i) in practiceSessions" :key="`practice-${i}`" :class="{ on: shownResult === 'practice' && practiceResultIndex === i }" @click="showPracticeResult(i)">练习 {{ i + 1 }}</button>
+          <button v-for="(_, i) in practiceSessions" :key="`practice-${i}`" :class="{ on: shownResult === 'practice' && shownPracticeIndex === i }" @click="showPracticeResult(i)">练习 {{ i + 1 }}</button>
           <button v-if="w.sprintQualifying" :class="{ on: shownResult === 'sprintQualifying' }" @click="resultTab = 'sprintQualifying'">冲刺排位</button>
           <button v-if="w.sprint" :class="{ on: shownResult === 'sprint' }" @click="resultTab = 'sprint'">冲刺赛</button>
           <button v-if="w.qualifying" :class="{ on: shownResult === 'qualifying' }" @click="resultTab = 'qualifying'">排位</button>

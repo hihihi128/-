@@ -8,6 +8,7 @@ import { reactive } from 'vue';
 import type { F1ManagerApi } from '../../tavern/api';
 import type { GameView } from '../../engine/view';
 import type { Action } from '../../engine/types';
+import type { NegotiationSessionView } from '../../tavern/negotiation';
 
 type Status = ReturnType<F1ManagerApi['status']>;
 
@@ -21,6 +22,7 @@ export const store = reactive({
   connected: false,
   status: null as Status | null,
   view: null as GameView | null,
+  negotiation: null as NegotiationSessionView | null,
   busy: false,
   toasts: [] as Toast[],
   tab: 'overview',
@@ -63,6 +65,7 @@ export function refresh(): void {
   try {
     store.status = clone(a.status());
     store.view = clone(a.view());
+    store.negotiation = clone(a.getSpecialNegotiation());
     store.connected = true;
     store.error = '';
   } catch (e) {

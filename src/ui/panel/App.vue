@@ -246,6 +246,7 @@ function supernaturalSettings() {
   gap: 6px;
   z-index: 50;
   max-width: min(420px, 90vw);
+  pointer-events: none;
 }
 .toast {
   background: var(--bg3);

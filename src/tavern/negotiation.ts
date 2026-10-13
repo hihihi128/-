@@ -35,6 +35,7 @@ export interface NegotiationDefinition {
 
 const roundKey = (state: GameState) => `${state.season.number}-${state.season.roundIndex}`;
 const teamName = (state: GameState, id: string) => state.teams[id]?.name ?? id;
+const owns = (target: object, key: PropertyKey) => Object.prototype.hasOwnProperty.call(target, key);
 
 export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
   aduo_alliance: {
@@ -112,7 +113,15 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       const r = state.redBull!;
       return `GP 留任意愿 ${r.gpRetention}。留任方案成本 ${state.rules.redBull.gpNegotiationCost}M，车队资金 ${state.teams[state.meta.playerTeamId].funds}M。`;
     },
-    unavailable: state => !state.redBull ? '当前车队没有红牛 GP 留任机制' : state.redBull.gpTransferred ? 'GP 已经转投迈凯伦' : state.redBull.lastActionRound === roundKey(state) ? '本站已经与 GP 谈判过' : null,
+    unavailable: state => !state.redBull
+      ? '当前车队没有红牛 GP 留任机制'
+      : state.redBull.gpTransferred
+        ? 'GP 已经转投迈凯伦'
+        : state.redBull.lastActionRound === roundKey(state)
+          ? '本站已经与 GP 谈判过'
+          : state.teams[state.meta.playerTeamId].funds < state.rules.redBull.gpNegotiationCost
+            ? `车队资金不足，留任方案需要 ${state.rules.redBull.gpNegotiationCost}M`
+            : null,
   },
   haas_toyota: {
     kind: 'haas_toyota',
@@ -133,7 +142,7 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
 };
 
 export function negotiationDefinition(kind: unknown): NegotiationDefinition | null {
-  return typeof kind === 'string' && kind in NEGOTIATIONS ? NEGOTIATIONS[kind as NegotiationKind] : null;
+  return typeof kind === 'string' && owns(NEGOTIATIONS, kind) ? NEGOTIATIONS[kind as NegotiationKind] : null;
 }
 
 export function negotiationPrompt(state: GameState, session: NegotiationSessionView, playerText: string): string {
@@ -169,7 +178,7 @@ export function parseNegotiationReply(text: string, definition: NegotiationDefin
   if (status !== 'continue' && status !== 'agreement' && status !== 'breakdown') throw new Error('谈判 API 返回了未知状态');
   if (round < minRounds && status !== 'continue') throw new Error(`谈判至少需要 ${minRounds} 轮`);
   if (round >= maxRounds && status === 'continue') throw new Error(`谈判必须在第 ${maxRounds} 轮结算`);
-  if (status === 'agreement' && (!choice || !(choice in definition.choices))) throw new Error('谈判 API 返回了非法结算选择');
+  if (status === 'agreement' && (!choice || !owns(definition.choices, choice))) throw new Error('谈判 API 返回了非法结算选择');
   if (status !== 'agreement' && choice !== null) throw new Error('未达成协议时不能包含结算选择');
   return { speaker, reply, status, choice };
 }
