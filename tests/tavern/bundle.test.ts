@@ -137,7 +137,7 @@ describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backen
     expect(staffGroups).toHaveLength(11);
     expect(new Set(leaders.map(entry => entry.comment.match(/^\[F1M管理层\] \[([^:]+):/)?.[1])).size).toBe(11);
     expect(leaders.every(entry => entry.content.startsWith('<管理层资料') && entry.keys.length >= 2)).toBe(true);
-    expect(strategies.every(entry => entry.content.startsWith('<策略组资料') && entry.keys.length >= 3)).toBe(true);
+    expect(strategies.every(entry => entry.content.startsWith('<策略组资料') && entry.keys.length >= 2)).toBe(true);
     expect(staffGroups.every(entry => entry.content.startsWith('<核心人员组资料') && entry.keys.length >= 3)).toBe(true);
     expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
     expect(new Set(entries.map(entry => entry.comment)).size).toBe(entries.length);
@@ -150,6 +150,10 @@ describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backen
     expect(redBullStaff.keys).not.toContain('红牛核心组');
     expect(redBullStrategy.keys.some(key => racingBullsStrategy.keys.some(other => other.includes(key)))).toBe(false);
     expect(redBullStaff.keys.some(key => racingBullsStaff.keys.some(other => other.includes(key)))).toBe(false);
+    expect(redBullStrategy.keys.some(key => '小红牛车队策略组'.includes(key) || '小红牛车队策略团队'.includes(key))).toBe(false);
+    expect(redBullStaff.keys.some(key => '小红牛车队核心组'.includes(key))).toBe(false);
+    const strategyKeys = strategies.flatMap(entry => entry.keys);
+    for (const ambiguousKey of ['韦特', '辛格', '贾恩', '雷迪']) expect(strategyKeys).not.toContain(ambiguousKey);
     expect(drivers.find(entry => entry.comment.includes('夏尔·勒克莱尔'))?.keys).not.toContain('夏尔');
     const comments = new Set(leaders.map(entry => entry.comment));
     for (const name of Object.values(PLAYER_REPLACED_LEADERSHIP).flat()) expect(comments.has(name), name).toBe(true);
