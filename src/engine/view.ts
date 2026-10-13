@@ -335,6 +335,7 @@ export interface GameView {
     costCap: number;
     dryCompounds: string[];
     wetCompound: string;
+    fullWetCompound: string;
     mandatoryCompounds: number;
     aiLimits: GameState['rules']['aiLimits'];
   };
@@ -719,6 +720,7 @@ export function buildView(state: GameState): GameView {
       costCap: rules.costCap,
       dryCompounds: rules.dryCompounds,
       wetCompound: rules.wetCompound,
+      fullWetCompound: rules.fullWetCompound,
       mandatoryCompounds: rules.mandatoryCompounds,
       aiLimits: rules.aiLimits,
     },

@@ -12,6 +12,17 @@ import { act, advanceUntil, newTestGame } from '../helpers';
 const legacy = (): GameState => JSON.parse(readFileSync(resolve(__dirname, '../fixtures/legacy-save-2025.json'), 'utf8'));
 
 describe('旧存档升级', () => {
+  it('为旧规则补齐全雨胎，并把旧雨胎名称改为半雨胎', () => {
+    const state = newTestGame(5);
+    delete (state.rules as Partial<typeof state.rules>).fullWetCompound;
+    delete state.rules.tyres.wet;
+    state.rules.tyres.inter.name = '雨胎';
+    migrateState(state);
+    expect(state.rules.fullWetCompound).toBe('wet');
+    expect(state.rules.tyres.inter.name).toBe('半雨胎');
+    expect(state.rules.tyres.wet.name).toBe('全雨胎');
+  });
+
   it('2025 规则存档补齐 2026 字段后可以生成视图并继续推进', () => {
     const raw = legacy();
     expect(raw.rules.puAllocation).toBeUndefined();

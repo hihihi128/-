@@ -193,7 +193,7 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
       rng.range(0.2, 1.4) + // 油量与项目差异（谍照永远不准）
       rng.normal(0, 0.25);
     const laps = rng.int(18, 34);
-    const practiceCompounds = wet ? [rules.wetCompound] : rules.dryCompounds;
+    const practiceCompounds = wet ? [...new Set([rules.wetCompound, rules.fullWetCompound])] : rules.dryCompounds;
     const compound = practiceCompounds[(session - 1) % practiceCompounds.length];
     useTyreSet(takeTyreSet(team, driver.id, compound, weekendTyreKey(state)), laps);
     result.timesheet.push({ driverId: driver.id, teamId: team.id, time: round3(time), laps });

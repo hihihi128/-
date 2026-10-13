@@ -104,17 +104,17 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(weatherAware.gridPosition).toBe(2);
     expect(weatherAware.weatherResponse).toContain('第 10–14 圈可能降雨');
     expect(weatherAware.explanation).toContain('天气预案');
-    expect(weatherAware.explanation).toContain('换半雨胎');
+    expect(weatherAware.explanation).toContain('半雨胎或全雨胎');
     expect(env.generated.at(-1)?.prompt).toContain('从 P2 发车');
     expect(env.generated.at(-1)?.prompt).toContain('正赛降雨概率 72%');
-    expect(env.generated.at(-1)?.prompt).toContain('换半雨胎');
+    expect(env.generated.at(-1)?.prompt).toContain('半雨胎或全雨胎');
 
     contextual.weekend!.forecast.raceRainWindow = [1, 4];
     contextual.weekend!.weather.race = 'wet';
     expect((await ctrl.importSave(JSON.stringify(contextual))).ok).toBe(true);
     const earlyRain = await ctrl.requestEngineerStrategy('c1', 'main');
     expect(earlyRain.weatherResponse).toContain('发车前确认赛道');
-    expect(earlyRain.weatherResponse).toContain('若已湿则直接使用半雨胎');
+    expect(earlyRain.weatherResponse).toContain('潮湿时使用半雨胎，严重积水时使用全雨胎');
 
     delete contextual.weekend!.forecast.raceRainWindow;
     contextual.weekend!.forecast.race = 0.2;

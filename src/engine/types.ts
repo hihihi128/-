@@ -317,6 +317,8 @@ export interface Rules {
   dryCompounds: Compound[];
   /** 雨地配方 */
   wetCompound: Compound;
+  /** 大雨和严重积水时使用的全雨胎配方 */
+  fullWetCompound: Compound;
   /** 干地正赛至少使用几种不同配方 */
   mandatoryCompounds: number;
   /** 每节练习赛后每位正式车手必须交回的轮胎组数 */

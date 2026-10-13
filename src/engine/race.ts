@@ -701,7 +701,7 @@ export function createRaceSession(
     const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
     const wet = trajectory[0] > 0.18;
     const compounds = wet
-      ? [rules.wetCompound]
+      ? [wetCompoundFor(rules, trajectory[0])]
       : kind === 'sprint'
         ? [plan.sprintTyre !== 'auto' && rules.tyres[plan.sprintTyre] ? plan.sprintTyre : rules.dryCompounds[1] ?? rules.dryCompounds[0]]
         : plan.tyrePlan !== 'auto' && !validatePlan(rules, plan.tyrePlan, false)
@@ -767,16 +767,25 @@ function createWindow(session: LiveRaceState, reasons: RaceDecisionWindow['reaso
   session.stage = 'before_pit';
 }
 
+export function wetCompoundFor(rules: GameState['rules'], wetness: number): Compound {
+  return wetness >= .68 ? rules.fullWetCompound : rules.wetCompound;
+}
+
+export function tyreWeatherPenalty(rules: GameState['rules'], compound: Compound, wetness: number): number {
+  if (compound === rules.fullWetCompound) return Math.max(0, .52 - wetness) * 5;
+  if (compound === rules.wetCompound) return Math.max(0, .28 - wetness) * 4 + Math.max(0, wetness - .72) * 5;
+  if (rules.tyres[compound]?.wet) return Math.max(0, .4 - wetness) * 4;
+  return Math.max(0, wetness - .2) * 8;
+}
+
 function tyreMismatch(rules: GameState['rules'], car: LiveRaceCar, wetness: number): number {
-  const wetTyre = rules.tyres[car.tyre]?.wet;
-  if (wetTyre) return Math.max(0, 0.45 - wetness) * 4;
-  return Math.max(0, wetness - 0.2) * 8;
+  return tyreWeatherPenalty(rules, car.tyre, wetness);
 }
 
 function replacementCompound(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound {
   if (car.pendingCompound) return car.pendingCompound;
   if (car.engineerTyreOverride && session.lap <= (car.engineerTyreOverrideUntilLap ?? 0)) return car.engineerTyreOverride;
-  if (session.surface === 'wet' || session.wetness >= .55) return state.rules.wetCompound;
+  if (session.wetness >= .22) return wetCompoundFor(state.rules, session.wetness);
   // A wet-start plan contains W only. On a drying track choose a real dry tyre
   // instead of pitting repeatedly onto the same mismatched compound.
   const planned = car.plannedCompounds.slice(car.stintIndex + 1).find(compound => !state.rules.tyres[compound]?.wet);

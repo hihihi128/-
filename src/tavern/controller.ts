@@ -995,8 +995,8 @@ export class F1Controller {
     const gridContext = gridPosition === null ? '发车位尚未确定' : `从 P${gridPosition} 发车`;
     const weatherResponse = rainWindow
       ? rainWindow[0] <= 2
-        ? `公开预报显示开局阶段可能降雨；发车前确认赛道，若已湿则直接使用半雨胎，若仍干燥则用 ${state.rules.tyres[option.compounds[0]]?.name ?? option.compounds[0]}短跑，赛道转湿后立即换半雨胎`
-        : `公开预报显示第 ${rainWindow[0]}–${rainWindow[1]} 圈可能降雨；先用 ${state.rules.tyres[option.compounds[0]]?.name ?? option.compounds[0]}，赛道转湿时准备换半雨胎，避免在降雨前多做一次干胎进站`
+        ? `公开预报显示开局阶段可能降雨；发车前确认赛道，潮湿时使用半雨胎，严重积水时使用全雨胎；若仍干燥则用 ${state.rules.tyres[option.compounds[0]]?.name ?? option.compounds[0]}短跑`
+        : `公开预报显示第 ${rainWindow[0]}–${rainWindow[1]} 圈可能降雨；先用 ${state.rules.tyres[option.compounds[0]]?.name ?? option.compounds[0]}，赛道转湿时按积水程度准备半雨胎或全雨胎，避免在降雨前多做一次干胎进站`
       : state.weekend.forecast.race >= 0.55
         ? '公开预报存在降雨风险，但到达时间不明确；按干地方案起步并保留雨胎应急窗口'
         : '目前没有明确降雨窗口，按干地基础方案执行';

@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPreRaceRainWindow } from '../../src/engine/raceWeather';
+import { DEFAULT_RULES } from '../../src/engine/defaults';
+import { tyreWeatherPenalty, wetCompoundFor } from '../../src/engine/race';
 import { Rng } from '../../src/engine/rng';
 
 describe('赛前公开降雨窗口', () => {
@@ -17,5 +19,22 @@ describe('赛前公开降雨窗口', () => {
 
   it('允许无雨轨迹没有公开降雨窗口', () => {
     expect(createPreRaceRainWindow(Array(40).fill(0), 0, 95, new Rng(1))).toBeNull();
+  });
+});
+
+describe('半雨胎与全雨胎', () => {
+  it('按积水程度选择对应雨胎', () => {
+    expect(DEFAULT_RULES.tyres[DEFAULT_RULES.wetCompound].name).toBe('半雨胎');
+    expect(DEFAULT_RULES.tyres[DEFAULT_RULES.fullWetCompound].name).toBe('全雨胎');
+    expect(wetCompoundFor(DEFAULT_RULES, .45)).toBe(DEFAULT_RULES.wetCompound);
+    expect(wetCompoundFor(DEFAULT_RULES, .8)).toBe(DEFAULT_RULES.fullWetCompound);
+  });
+
+  it('半雨胎适合潮湿赛道，全雨胎适合严重积水', () => {
+    const inter = DEFAULT_RULES.wetCompound;
+    const fullWet = DEFAULT_RULES.fullWetCompound;
+    expect(tyreWeatherPenalty(DEFAULT_RULES, inter, .4)).toBeLessThan(tyreWeatherPenalty(DEFAULT_RULES, fullWet, .4));
+    expect(tyreWeatherPenalty(DEFAULT_RULES, fullWet, .85)).toBeLessThan(tyreWeatherPenalty(DEFAULT_RULES, inter, .85));
+    expect(tyreWeatherPenalty(DEFAULT_RULES, 'medium', .85)).toBeGreaterThan(tyreWeatherPenalty(DEFAULT_RULES, fullWet, .85));
   });
 });

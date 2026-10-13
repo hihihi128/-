@@ -83,9 +83,11 @@ rules:
   #   soft:   { name: 软胎, short: S, pace: -0.65, deg: 0.095, cliff: 17, wet: false, color: '#e10600' }
   #   medium: { name: 中性胎, short: M, pace: 0, deg: 0.06, cliff: 27, wet: false, color: '#ffd400' }
   #   hard:   { name: 硬胎, short: H, pace: 0.5, deg: 0.04, cliff: 40, wet: false, color: '#f2f2f2' }
-  #   inter:  { name: 雨胎, short: I, pace: 0, deg: 0.05, cliff: 38, wet: true, color: '#3fb950' }
+  #   inter:  { name: 半雨胎, short: I, pace: 0.15, deg: 0.055, cliff: 34, wet: true, color: '#3fb950' }
+  #   wet:    { name: 全雨胎, short: W, pace: 0.75, deg: 0.04, cliff: 42, wet: true, color: '#2387d9' }
   # dryCompounds: [soft, medium, hard]
   # wetCompound: inter
+  # fullWetCompound: wet
   # mandatoryCompounds: 2     # 干地正赛至少使用几种配方
 
   # ── 其他 ──

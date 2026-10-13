@@ -180,6 +180,11 @@ export function migrateState(state: GameState): GameState {
     team.aduoCapBonus ??= 0;
     team.aduoTier ??= 0;
   }
+  if (!state.rules.fullWetCompound) {
+    state.rules.fullWetCompound = DEFAULT_RULES.fullWetCompound;
+    state.rules.tyres[state.rules.fullWetCompound] ??= deepClone(DEFAULT_RULES.tyres[DEFAULT_RULES.fullWetCompound]);
+  }
+  if (state.rules.tyres[state.rules.wetCompound]?.name === '雨胎') state.rules.tyres[state.rules.wetCompound].name = '半雨胎';
   migrateTyreInventory(state);
   if (state.weekend?.practiceReturn) {
     const team = state.teams[state.meta.playerTeamId];

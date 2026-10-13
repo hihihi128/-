@@ -11,6 +11,9 @@ import { advanceUntil, act, newTestGame, tryAct } from '../helpers';
 describe('physical tyre sets and pit crew timing', () => {
   it('requires each player driver to return the configured number of sets after practice', () => {
     let state = advanceUntil(newTestGame(41), s => s.season.phase === 'practice');
+    const allocatedDriver = state.teams[state.meta.playerTeamId].cars[0].driverId!;
+    expect(state.teams[state.meta.playerTeamId].tyreInventory![allocatedDriver].some(set => set.compound === state.rules.wetCompound)).toBe(true);
+    expect(state.teams[state.meta.playerTeamId].tyreInventory![allocatedDriver].some(set => set.compound === state.rules.fullWetCompound)).toBe(true);
     state = act(state, { type: 'RUN_PRACTICE' });
     const request = state.weekend!.practiceReturn!;
     expect(request.required).toBe(1);
