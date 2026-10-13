@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../src/engine/actions';
+import { supplyCustomers } from '../../src/engine/aduo';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
-import { afterManagementRace, completeWilliamsHandover } from '../../src/engine/managementSpecials';
+import { afterManagementRace, completeAlpineDriverExit, completeWilliamsHandover } from '../../src/engine/managementSpecials';
 import { triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
 import { Rng } from '../../src/engine/rng';
 import type { Action, GameState } from '../../src/engine/types';
@@ -25,6 +26,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
   it('按车队初始化特殊状态并公开到视图', () => {
     const alpine = game('alpine');
     expect(alpine.alpine).toMatchObject({ puIntegration: 20, integrationPenaltyActive: true, gaslyLeaving: false });
+    expect(Object.keys(alpine.alpine!.penalizedPowerSpecs)).toHaveLength(2);
     expect(buildView(alpine).alpine?.rndDirection).toEqual(['chassis', 'sidepods']);
 
     const haas = game('haas');
@@ -48,6 +50,19 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     expect(run(state, { type: 'ALPINE_MANAGEMENT', strategy: 'integrate_power_unit' }).ok).toBe(false);
   });
 
+  it('阿尔派动力匹配惩罚覆盖供应商新件，完成匹配后只恢复到梅赛德斯水平', () => {
+    let state = game('alpine');
+    const works = state.teams.mercedes;
+    supplyCustomers(state, works, 'power_unit', { id: 'works-test', type: 'power_unit', version: 99, perf: 94, rel: 90, verified: true, expected: null, introduced: 'test' });
+    const delivered = state.teams.alpine.parts.power_unit.specs.at(-1)!;
+    expect(delivered).toMatchObject({ perf: 90, rel: 85 });
+    state.alpine!.puIntegration = 80;
+    state = run(state, { type: 'ALPINE_MANAGEMENT', strategy: 'integrate_power_unit' }).state;
+    expect(state.alpine!.integrationPenaltyActive).toBe(false);
+    expect(state.teams.alpine.parts.power_unit.specs.at(-1)).toMatchObject({ perf: 94, rel: 90 });
+    expect(state.teams.alpine.parts.power_unit.specs[0].perf).toBe(state.teams.mercedes.parts.power_unit.specs[0].perf);
+  });
+
   it('哈斯接受丰田投入会增加资金和影响力，影响力过高后限制研发', () => {
     let state = game('haas');
     const funds = state.teams.haas.funds;
@@ -68,6 +83,12 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     expect(result.ok).toBe(true);
     expect(result.state.williams!.developmentInvestment).toBeGreaterThan(0);
     expect(run(result.state, { type: 'UPGRADE_FACILITY', facility: 'windTunnel' }).ok).toBe(false);
+
+    let postRace = game('williams');
+    postRace = run(postRace, { type: 'WILLIAMS_BUDGET_FOCUS', focus: 'facilities' }).state;
+    afterManagementRace(postRace);
+    expect(postRace.williams!.focus).toBe('facilities');
+    expect(run(postRace, { type: 'UPGRADE_FACILITY', facility: 'windTunnel' }).ok).toBe(true);
   });
 
   it('2026 年底沃尔斯返回梅赛德斯，并按准备度确认或延长接班考核', () => {
@@ -99,6 +120,15 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     triggerWeekendRandomEvent(state, new Rng(11));
     expect(state.randomEvents?.current?.kind).toBe('none');
     expect(state.randomEvents?.history).toHaveLength(2);
+  });
+
+  it('加斯利失去留队意愿后会在赛季末实际进入自由市场', () => {
+    const state = game('alpine');
+    state.alpine!.gaslyLeaving = true;
+    completeAlpineDriverExit(state);
+    expect(state.drivers.gasly.teamId).toBeNull();
+    expect(state.teams.alpine.cars.some(car => car.driverId === 'gasly')).toBe(false);
+    expect(state.narration.at(-1)?.title).toContain('离开');
   });
 
   it('未处理车队事务会在赛后产生持续后果', () => {

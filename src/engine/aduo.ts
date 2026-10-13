@@ -8,6 +8,7 @@
  * - 评估：evalRounds 中的站次正赛后，比较各厂商 measurePart 的真实性能。
  */
 import { addNarration, addNews } from './log';
+import { applyAlpinePuPenalty } from './managementSpecials';
 import { autoFit } from './development';
 import { bestSpec } from './ratings';
 import type { AduoEvaluation, AduoResult, GameState, PartSpec, PartType, TeamState } from './types';
@@ -101,6 +102,7 @@ export function supplyCustomers(state: GameState, works: TeamState, partType: Pa
       introduced: stamp(state),
     };
     parts.specs.push(copy);
+    applyAlpinePuPenalty(state, c, partType, copy);
     const units = Math.max(1, c.cars.length);
     parts.stock[id] = (parts.stock[id] ?? 0) + units;
     if (c.isPlayer) {
@@ -123,6 +125,7 @@ export function syncCustomerPu(state: GameState): void {
       if (!src || !dst || team.parts[pt].specs.length !== 1) continue;
       dst.perf = src.perf;
       dst.rel = src.rel;
+      applyAlpinePuPenalty(state, team, pt, dst);
     }
   }
 }

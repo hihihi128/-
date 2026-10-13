@@ -127,7 +127,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   }
   if (state.alpine) {
     const a = state.alpine;
-    L.push(`【阿尔派·布里亚托接班人】布里亚托满意度 ${a.briatoreSatisfaction} · 克拉平托粉丝压力 ${a.fanPressure} · 加斯利留队意愿 ${a.gaslyCommitment}${a.gaslyLeaving ? '（已经决定离队）' : ''} · 梅赛德斯动力单元匹配 ${a.puIntegration}% · 当前研发方向 ${a.rndDirection.map(type => rules.parts[type]?.name ?? type).join('、')}。玩家无权改变布里亚托决定的大方向。`);
+    L.push(`【阿尔派·布里亚托接班人】布里亚托满意度 ${a.briatoreSatisfaction} · 科拉平托粉丝压力 ${a.fanPressure} · 加斯利留队意愿 ${a.gaslyCommitment}${a.gaslyLeaving ? '（已经决定离队）' : ''} · 梅赛德斯动力单元匹配 ${a.puIntegration}% · 当前研发方向 ${a.rndDirection.map(type => rules.parts[type]?.name ?? type).join('、')}。玩家无权改变布里亚托决定的大方向。`);
   }
   if (state.haas) {
     const h = state.haas;

@@ -38,6 +38,7 @@ export function migrateState(state: GameState): GameState {
   if (state.racingBulls === undefined) state.racingBulls = null;
   if (state.audi === undefined) state.audi = null;
   if (state.alpine === undefined) state.alpine = null;
+  if (state.alpine && state.alpine.penalizedPowerSpecs === undefined) state.alpine.penalizedPowerSpecs = {};
   if (state.haas === undefined) state.haas = null;
   if (state.williams === undefined) state.williams = null;
   state.randomEvents ??= { lastRoundKey: null, current: null, history: [] };

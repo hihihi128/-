@@ -28,7 +28,7 @@ export function triggerWeekendRandomEvent(state: GameState, rng: Rng): void {
     const project = team.projects.find(value => value.kind === 'design' && value.partType && state.rules.parts[value.partType]?.aero);
     const hours = Math.min(team.aeroHours, rng.int(4, 10));
     team.aeroHours = Math.max(0, team.aeroHours - hours);
-    if (project) project.weeksLeft += 1;
+    if (project) { project.weeksLeft += 1; project.weeksTotal += 1; }
     record = { roundKey: key, kind, title: '风洞数据异常', detail: `工程团队发现风洞相关性偏差，损失 ${hours} 小时时长${project ? `，${project.label} 延期 1 周` : ''}。` };
   } else if (kind === 'part_issue') {
     const car = team.cars[rng.int(0, Math.max(0, team.cars.length - 1))];

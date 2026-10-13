@@ -11,7 +11,7 @@ import { emptyStandings } from './newgame';
 import { ferrariAfterRace, ferrariMediaDelta, ferrariOnAllocation, ferrariOnBench, ferrariOnOrder } from './ferrari';
 import { afterSpecialRace } from './teamSpecials';
 import { afterNextTeamRace, maybeTriggerRacingBullsRecall } from './nextTeamSpecials';
-import { afterManagementRace, completeWilliamsHandover } from './managementSpecials';
+import { afterManagementRace, completeAlpineDriverExit, completeWilliamsHandover } from './managementSpecials';
 import { triggerWeekendRandomEvent } from './randomEvents';
 import { resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
@@ -595,6 +595,7 @@ function seasonEnd(state: GameState): void {
     `车手冠军：${driverName(state, drivers[0])}；车队冠军：${teamName(state, teams[0])}。${pt.name} 最终排名第 ${pos}（目标第 ${pt.targetPosition}），${prizes.join('')}。董事会信心 ${pt.boardConfidence.toFixed(0)}。${fired ? '董事会对成绩极度不满，决定解除领队职务！' : ''}`,
   );
   completeWilliamsHandover(state);
+  completeAlpineDriverExit(state);
   openMarket(state, state.season.year + 1);
 }
 
@@ -613,6 +614,7 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
   state.season.roundIndex = 0;
   state.season.week = 0;
   state.season.phase = 'preseason';
+  if (state.randomEvents) { state.randomEvents.current = null; state.randomEvents.lastRoundKey = null; }
   const rules = state.rules;
   for (const tid of state.teamOrder) {
     const team = state.teams[tid];

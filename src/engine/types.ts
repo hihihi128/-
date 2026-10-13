@@ -1094,6 +1094,7 @@ export interface AlpineState {
   gaslyCommitment: number;
   puIntegration: number;
   integrationPenaltyActive: boolean;
+  penalizedPowerSpecs: Record<string, { partType: PartType; specId: string }>;
   rndDirection: PartType[];
   lastActionRound: string | null;
   gaslyLeaving: boolean;
@@ -1122,7 +1123,6 @@ export interface WilliamsState {
   developmentInvestment: number;
   vowlesDeparted: boolean;
   confirmedSuccessor: boolean;
-  dismissed: string | null;
   log: Array<{ at: string; text: string }>;
 }
 

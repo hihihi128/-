@@ -244,7 +244,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
   } else if (state.alpine) {
     newsText = `布里亚托任命 ${name} 为阿尔派副领队，并把其列入接班人培养计划。`;
     title = '布里亚托的接班人：阿尔派副领队';
-    detail = ['2026 年初，Flavio Briatore 决定培养一名未来接班人，玩家因此加入阿尔派管理层。', reasonLine, '布里亚托保留研发大方向等关键决定。玩家必须适当照顾克拉平托及其庞大粉丝群，同时避免加斯利失去信心。A526 与新换装的梅赛德斯动力单元也需要逐步完成匹配。', tail];
+    detail = ['2026 年初，Flavio Briatore 决定培养一名未来接班人，玩家因此加入阿尔派管理层。', reasonLine, '布里亚托保留研发大方向等关键决定。玩家必须适当照顾科拉平托及其庞大粉丝群，同时避免加斯利失去信心。A526 与新换装的梅赛德斯动力单元也需要逐步完成匹配。', tail];
   } else if (state.haas) {
     newsText = `${name} 加入 TGR 哈斯，与小松礼雄共同管理车队。`;
     title = '两方股东之间：哈斯共同领队';

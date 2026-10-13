@@ -122,11 +122,11 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
     <div v-if="alpine" class="card stack-s special-card">
       <div class="spread"><h3>阿尔派 · 布里亚托接班人</h3><span class="badge" :class="alpine.dismissed ? 'bad' : 'warn'">{{ alpine.dismissed ? '已撤职' : '副领队考核中' }}</span></div>
       <Bar label="布里亚托满意度" :value="alpine.briatoreSatisfaction" :mark="v.nextSpecialRules.alpine.dismissBriatoreSatisfaction" color="#0093cc" :hint="`低于 ${v.nextSpecialRules.alpine.dismissBriatoreSatisfaction} 会被撤职`" />
-      <Bar label="克拉平托粉丝压力" :value="alpine.fanPressure" color="#f28ab2" hint="越高越危险" />
+      <Bar label="科拉平托粉丝压力" :value="alpine.fanPressure" color="#f28ab2" hint="越高越危险" />
       <Bar label="加斯利留队意愿" :value="alpine.gaslyCommitment" color="#2d5f8b" :hint="alpine.gaslyLeaving ? '加斯利已经决定赛季末离队' : '长期受到不公平待遇会离队'" />
       <Bar label="梅奔动力单元匹配" :value="alpine.puIntegration" color="#00a19c" hint="达到 100% 后消除开局性能和可靠性损失" />
       <div class="small muted">布里亚托当前只允许研发：{{ alpine.rndDirection.map((x) => v.labels.parts[x] ?? x).join('、') }}</div>
-      <div class="row"><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'back_colapinto' })">公开支持克拉平托</button><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'reassure_gasly' })">安抚加斯利</button><button :disabled="store.busy || alpine.puIntegration >= 100" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'integrate_power_unit' })">推进动力匹配</button></div>
+      <div class="row"><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'back_colapinto' })">公开支持科拉平托</button><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'reassure_gasly' })">安抚加斯利</button><button :disabled="store.busy || alpine.puIntegration >= 100" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'integrate_power_unit' })">推进动力匹配</button></div>
       <div class="tiny muted">每站只能执行一次。选择任何一方都会让另一方承担代价。</div>
     </div>
 
@@ -140,9 +140,10 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
     </div>
 
     <div v-if="williams" class="card stack-s special-card">
-      <div class="spread"><h3>威廉姆斯 · 沃尔斯接班培养</h3><span class="badge" :class="williams.confirmedSuccessor ? 'ok' : williams.dismissed ? 'bad' : 'warn'">{{ williams.confirmedSuccessor ? '已正式接任' : williams.dismissed ? '接班失败' : '培养中' }}</span></div>
+      <div class="spread"><h3>威廉姆斯 · 沃尔斯接班培养</h3><span class="badge" :class="williams.confirmedSuccessor ? 'ok' : 'warn'">{{ williams.confirmedSuccessor ? '已正式接任' : '培养中' }}</span></div>
       <Bar label="沃尔斯信心" :value="williams.vowlesConfidence" color="#64c4ff" />
       <Bar label="接班准备度" :value="williams.successionReadiness" :mark="v.nextSpecialRules.williams.successionThreshold" color="#005aff" :hint="`2026 年底至少需要 ${v.nextSpecialRules.williams.successionThreshold}`" />
+      <div class="small">本站方向：{{ williams.focus === 'facilities' ? '设施更新' : williams.focus === 'development' ? '赛车升级' : williams.focus === 'reserve' ? '保留现金' : '尚未决定' }}</div>
       <div class="grid2 small"><div>设施累计投入：{{ money(williams.facilityInvestment) }}</div><div>赛车升级投入：{{ money(williams.developmentInvestment) }}</div></div>
       <div class="row"><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'facilities' })">优先设施</button><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'development' })">优先赛车升级</button><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'reserve' })">保留现金</button></div>
       <div class="tiny muted">每站只能确定一次预算方向。设施和研发动作必须符合本站方向。</div>
