@@ -376,7 +376,7 @@ teams:
     name: 阿尔派车队
     short: ALP
     color: '#0093cc'
-    principal: 弗拉维奥·布里亚托雷
+    principal: 弗拉维奥·布里亚托利
     engine: 梅赛德斯
     base: 英国·恩斯通
     funds: 75
@@ -402,7 +402,7 @@ teams:
       floor: { perf: 63.5, rel: 82 }
       sidepods: { perf: 64.5, rel: 83 }
       suspension: { perf: 64.5, rel: 82 }
-    description: A526 · 梅赛德斯动力单元。玩家作为布里亚托雷培养的副领队，必须服从其研发大方向，并在科拉平托粉丝与加斯利留队意愿之间平衡，同时解决新动力单元的匹配问题。
+    description: A526 · 梅赛德斯动力单元。玩家作为布里亚托利培养的副领队，必须服从其研发大方向，并在科拉平托粉丝与加斯利留队意愿之间平衡，同时解决新动力单元的匹配问题。
 
   # ── 凯迪拉克：新加入的第 11 支车队，法拉利客户动力；跑得多但下压力不足 ──
   - id: cadillac

@@ -120,12 +120,12 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
     </div>
 
     <div v-if="alpine" class="card stack-s special-card">
-      <div class="spread"><h3>阿尔派 · 布里亚托接班人</h3><span class="badge" :class="alpine.dismissed ? 'bad' : 'warn'">{{ alpine.dismissed ? '已撤职' : '副领队考核中' }}</span></div>
-      <Bar label="布里亚托满意度" :value="alpine.briatoreSatisfaction" :mark="v.nextSpecialRules.alpine.dismissBriatoreSatisfaction" color="#0093cc" :hint="`低于 ${v.nextSpecialRules.alpine.dismissBriatoreSatisfaction} 会被撤职`" />
+      <div class="spread"><h3>阿尔派 · 布里亚托利接班人</h3><span class="badge" :class="alpine.dismissed ? 'bad' : 'warn'">{{ alpine.dismissed ? '已撤职' : '副领队考核中' }}</span></div>
+      <Bar label="布里亚托利满意度" :value="alpine.briatoreSatisfaction" :mark="v.nextSpecialRules.alpine.dismissBriatoreSatisfaction" color="#0093cc" :hint="`低于 ${v.nextSpecialRules.alpine.dismissBriatoreSatisfaction} 会被撤职`" />
       <Bar label="科拉平托粉丝压力" :value="alpine.fanPressure" color="#f28ab2" hint="越高越危险" />
       <Bar label="加斯利留队意愿" :value="alpine.gaslyCommitment" color="#2d5f8b" :hint="alpine.gaslyLeaving ? '加斯利已经决定赛季末离队' : '长期受到不公平待遇会离队'" />
       <Bar label="梅奔动力单元匹配" :value="alpine.puIntegration" color="#00a19c" hint="达到 100% 后消除开局性能和可靠性损失" />
-      <div class="small muted">布里亚托当前只允许研发：{{ alpine.rndDirection.map((x) => v.labels.parts[x] ?? x).join('、') }}</div>
+      <div class="small muted">布里亚托利当前只允许研发：{{ alpine.rndDirection.map((x) => v.labels.parts[x] ?? x).join('、') }}</div>
       <div class="row"><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'back_colapinto' })">公开支持科拉平托</button><button :disabled="store.busy" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'reassure_gasly' })">安抚加斯利</button><button :disabled="store.busy || alpine.puIntegration >= 100" @click="act({ type: 'ALPINE_MANAGEMENT', strategy: 'integrate_power_unit' })">推进动力匹配</button></div>
       <div class="tiny muted">每站只能执行一次。选择任何一方都会让另一方承担代价。</div>
     </div>

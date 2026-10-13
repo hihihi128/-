@@ -116,6 +116,19 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(saved.tyrePlan).toEqual(result.plan?.tyrePlan);
   });
 
+  it('完美策略复用所选 API，但忽略车队策略水平并采用最快合法方案', async () => {
+    for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
+    const expected = ctrl.view()!.weekend!.drivers.find(driver => driver.driverId === 'c1')!.options[0].compounds;
+    ctrl.updateSettings({ engineerProxyPreset: '完美策略副线', engineerModel: 'perfect-model' });
+    const result = await ctrl.requestPerfectStrategy('c1', 'secondary');
+    expect(result).toMatchObject({ ok: true, api: 'secondary', strategyLevel: '完美', mode: 'perfect' });
+    expect(result.plan?.tyrePlan).toEqual(expected);
+    expect(result.message).toContain('完美 AI 策略');
+    expect(env.generated.at(-1)?.options).toEqual({ proxyPreset: '完美策略副线', model: 'perfect-model' });
+    expect(env.generated.at(-1)?.prompt).toContain('忽略车队策略部门水平');
+    expect(ctrl.stateAt()!.weekend!.plans.c1.strategySource).toBe('engineer');
+  });
+
   it('生成前注入实时数据提示词', async () => {
     await env.userSays('你好');
     await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'normal', {}, false);

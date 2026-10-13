@@ -48,9 +48,13 @@ function setPlan(d: WeekendDriverView, patch: Partial<DriverPlan>) {
 const customPlans = ref<Record<string, string[]>>({});
 const engineerApi = ref<Record<string, 'main' | 'secondary'>>({});
 const engineerSuggestions = ref<Record<string, EngineerStrategyResult>>({});
+const perfectSuggestions = ref<Record<string, EngineerStrategyResult>>({});
+const perfectOpen = ref(false);
 watch(() => w.value?.roundIndex, () => {
   customPlans.value = {};
   engineerSuggestions.value = {};
+  perfectSuggestions.value = {};
+  perfectOpen.value = false;
 });
 
 function customFor(d: WeekendDriverView): string[] {
@@ -77,7 +81,18 @@ function removeCustomCompound(d: WeekendDriverView) {
 
 async function askEngineer(d: WeekendDriverView) {
   const result = await call(a => a.requestEngineerStrategy(d.driverId, engineerApi.value[d.driverId]));
-  if (result?.ok) engineerSuggestions.value[d.driverId] = result;
+  if (result?.ok) {
+    engineerSuggestions.value[d.driverId] = result;
+    delete perfectSuggestions.value[d.driverId];
+  }
+}
+
+async function askPerfect(d: WeekendDriverView) {
+  const result = await call(a => a.requestPerfectStrategy(d.driverId, engineerApi.value[d.driverId]));
+  if (result?.ok) {
+    perfectSuggestions.value[d.driverId] = result;
+    engineerSuggestions.value[d.driverId] = result;
+  }
 }
 
 function engineerApiFor(driverId: string): 'main' | 'secondary' {
@@ -151,6 +166,23 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
 
 <template>
   <div class="stack">
+    <button v-if="current && w" class="codex-fab" title="打开完美策略 AI" aria-label="打开完美策略 AI" @click="perfectOpen = true">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 15 7l5.2.7-3.3 4.1.8 5.2-4.8-2.2L8.1 17l.8-5.2-3.3-4.1L10.8 7 12 2.5Zm0 5.1-1.2 3.1-3.3.2 2.5 2.2-.8 3.2 2.8-1.7 2.8 1.7-.8-3.2 2.5-2.2-3.3-.2L12 7.6Z" /></svg>
+    </button>
+    <div v-if="perfectOpen" class="perfect-backdrop" @click.self="perfectOpen = false">
+      <section class="perfect-window card stack-s" role="dialog" aria-modal="true" aria-label="完美策略 AI">
+        <div class="spread">
+          <div class="row"><span class="codex-mark"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 15 7l5.2.7-3.3 4.1.8 5.2-4.8-2.2L8.1 17l.8-5.2-3.3-4.1L10.8 7 12 2.5Zm0 5.1-1.2 3.1-3.3.2 2.5 2.2-.8 3.2 2.8-1.7 2.8 1.7-.8-3.2 2.5-2.2-3.3-.2L12 7.6Z" /></svg></span><div><h3>完美策略 AI</h3><div class="tiny muted">使用与车队工程师相同的 API，但忽略策略人员水平，自动应用最快合法方案。</div></div></div>
+          <button class="small" aria-label="关闭" @click="perfectOpen = false">✕</button>
+        </div>
+        <div v-for="d in (w?.drivers ?? [])" :key="d.driverId" class="perfect-driver stack-s">
+          <div class="spread"><b>{{ d.driverName }}</b><select :value="engineerApiFor(d.driverId)" class="small" :disabled="store.busy" @change="engineerApi[d.driverId] = ($event.target as HTMLSelectElement).value as 'main' | 'secondary'"><option value="main">主 API</option><option value="secondary">副 API</option></select></div>
+          <div v-if="perfectSuggestions[d.driverId]?.explanation" class="small">{{ perfectSuggestions[d.driverId].explanation }}</div>
+          <div v-else class="tiny muted">后端会结合发车位、天气窗口、合法轮胎组合和预计总用时选择方案。</div>
+          <button class="primary" :disabled="done.race || store.busy" @click="askPerfect(d)">{{ perfectSuggestions[d.driverId] ? '重新计算并应用' : '生成并应用完美策略' }}</button>
+        </div>
+      </section>
+    </div>
     <LiveRaceDesk v-if="current && w && ['race', 'sprint'].includes(phase)" />
     <div class="card">
       <div class="stepper">
@@ -251,7 +283,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
               <div v-else class="plan engineer-plan on">
                 <span class="badge">工程师</span>
                 <span class="grow stack-s">
-                  <b class="small">工程师策略已自动执行</b>
+                  <b class="small">{{ perfectSuggestions[d.driverId] ? '完美 AI 策略已自动执行' : '工程师策略已自动执行' }}</b>
                   <span v-if="engineerSuggestions[d.driverId]?.explanation" class="tiny">{{ engineerSuggestions[d.driverId].explanation }}</span>
                   <span v-if="engineerSuggestions[d.driverId]?.weatherResponse && !engineerSuggestions[d.driverId]?.explanation?.includes(engineerSuggestions[d.driverId].weatherResponse!)" class="tiny muted">{{ engineerSuggestions[d.driverId].weatherResponse }}</span>
                   <span v-if="!engineerSuggestions[d.driverId]?.explanation && !engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">当前使用已保存的工程师方案。建议质量取决于车队策略部门水平。</span>
@@ -481,4 +513,48 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
   color: var(--muted);
   padding: 1px 0;
 }
+.codex-fab {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 35;
+  width: 48px;
+  height: 48px;
+  padding: 10px;
+  border-radius: 50%;
+  color: #05070b;
+  background: #fff;
+  border-color: #fff;
+  box-shadow: 0 8px 28px #000b;
+}
+.codex-fab svg, .codex-mark svg { width: 100%; height: 100%; fill: currentColor; }
+.perfect-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  padding: 18px;
+  background: #000b;
+  backdrop-filter: blur(4px);
+}
+.perfect-window {
+  width: min(520px, 100%);
+  max-height: min(680px, calc(100vh - 36px));
+  overflow: auto;
+  border-color: #fff6;
+  box-shadow: 0 18px 60px #000;
+}
+.codex-mark {
+  display: inline-flex;
+  width: 34px;
+  height: 34px;
+  padding: 7px;
+  flex: 0 0 auto;
+  color: #05070b;
+  background: #fff;
+  border-radius: 10px;
+}
+.perfect-driver { padding: 10px; border: 1px solid var(--line); background: var(--bg); }
+@media (max-width: 640px) { .codex-fab { right: 12px; bottom: 12px; } .perfect-backdrop { padding: 8px; } .perfect-window { max-height: calc(100vh - 16px); } }
 </style>

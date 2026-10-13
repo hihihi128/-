@@ -23,7 +23,7 @@ const specialLabels: Record<string, string> = {
   aston_martin: '本田振动危机',
   racing_bulls: '红牛临时调用',
   audi: '涡轮与ADUO联盟',
-  alpine: '布里亚托接班人',
+  alpine: '布里亚托利接班人',
   haas: '哈斯—丰田平衡',
   williams: '沃尔斯接班培养',
 };
@@ -157,8 +157,8 @@ onMounted(load);
       <ul class="tiny"><li>修复涡轮前，两台车起步会随机丢失 {{ report?.specialRules?.audi.startDropMin ?? 2 }}–{{ report?.specialRules?.audi.startDropMax ?? 3 }} 个位置。</li><li>可与马丁、梅奔和法拉利组成四队联盟，共同向 FIA 争取 ADUO。</li></ul>
     </div>
     <div v-else-if="special === 'alpine'" class="card notice special-team small stack-s">
-      <b>阿尔派 · 布里亚托的接班人</b>
-      <div>玩家在 2026 年初成为副领队。布里亚托保留研发大方向等关键决定。</div>
+      <b>阿尔派 · 布里亚托利的接班人</b>
+      <div>玩家在 2026 年初成为副领队。布里亚托利保留研发大方向等关键决定。</div>
       <ul class="tiny"><li>适当偏袒科拉平托，避免其粉丝向玩家和车队施压。</li><li>同时维持加斯利的留队意愿，避免长期偏袒使其离队。</li><li>逐步解决 A526 与全新梅赛德斯动力单元的匹配问题。</li></ul>
     </div>
     <div v-else-if="special === 'haas'" class="card notice special-team small stack-s">

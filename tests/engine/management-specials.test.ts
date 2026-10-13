@@ -38,9 +38,9 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     expect(williams.narration.at(-1)?.title).toContain('交接年');
   });
 
-  it('阿尔派只能遵守布里亚托研发方向，并在三种管理取舍中每站选择一次', () => {
+  it('阿尔派只能遵守布里亚托利研发方向，并在三种管理取舍中每站选择一次', () => {
     let state = game('alpine');
-    expect(run(state, { type: 'START_PROJECT', partType: 'floor', ambition: 'standard' }).message).toContain('布里亚托');
+    expect(run(state, { type: 'START_PROJECT', partType: 'floor', ambition: 'standard' }).message).toContain('布里亚托利');
     const beforeGasly = state.alpine!.gaslyCommitment;
     const result = run(state, { type: 'ALPINE_MANAGEMENT', strategy: 'back_colapinto' });
     expect(result.ok).toBe(true);

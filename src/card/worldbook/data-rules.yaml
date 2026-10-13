@@ -163,7 +163,7 @@ rules:
   # fiaMeeting:
   #   interval: 3
   #   startPoliticalCapital: 50
-  # alpine:                    # 布里亚托接班人、车手平衡与梅奔动力匹配
+  # alpine:                    # 布里亚托利接班人、车手平衡与梅奔动力匹配
   #   startBriatoreSatisfaction: 65
   #   dismissBriatoreSatisfaction: 20
   #   startFanPressure: 42

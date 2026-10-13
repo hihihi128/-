@@ -7,9 +7,12 @@ describe('strategy mode interface', () => {
   const newGame = readFileSync(resolve(__dirname, '../../src/ui/panel/views/NewGame.vue'), 'utf8');
   const liveRace = readFileSync(resolve(__dirname, '../../src/ui/panel/components/LiveRaceDesk.vue'), 'utf8');
 
-  it('shows only player and engineer strategy modes', () => {
+  it('shows player, engineer, and optional perfect AI strategy controls', () => {
     expect(weekend).toContain('玩家自己做策略');
     expect(weekend).toContain('听工程师');
+    expect(weekend).toContain('完美策略 AI');
+    expect(weekend).toContain('requestPerfectStrategy');
+    expect(weekend).toContain('codex-fab');
     expect(weekend).not.toContain('d.options.slice(0, 2)');
     expect(weekend).not.toContain('车队工程师建议');
     expect(weekend).toContain("strategySource: 'player', tyrePlan: [...customFor(d)], paceMode: 'balanced', pitTiming: 'standard', scReaction: true");

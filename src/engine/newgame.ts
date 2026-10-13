@@ -242,9 +242,9 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     title = '四环入局：奥迪副领队';
     detail = ['Jonathan Wheatley 在 2025 年底转往阿斯顿·马丁。技术背景出身的比诺托上位，并邀请玩家处理车队间政治斗争。', reasonLine, '奥迪自研动力单元存在涡轮问题，修复前起步会随机丢失两到三个位置。玩家可以与阿斯顿·马丁、梅赛德斯和法拉利组成四队联盟，共同争取 ADUO。', tail];
   } else if (state.alpine) {
-    newsText = `布里亚托任命 ${name} 为阿尔派副领队，并把其列入接班人培养计划。`;
-    title = '布里亚托的接班人：阿尔派副领队';
-    detail = ['2026 年初，Flavio Briatore 决定培养一名未来接班人，玩家因此加入阿尔派管理层。', reasonLine, '布里亚托保留研发大方向等关键决定。玩家必须适当照顾科拉平托及其庞大粉丝群，同时避免加斯利失去信心。A526 与新换装的梅赛德斯动力单元也需要逐步完成匹配。', tail];
+    newsText = `布里亚托利任命 ${name} 为阿尔派副领队，并把其列入接班人培养计划。`;
+    title = '布里亚托利的接班人：阿尔派副领队';
+    detail = ['2026 年初，Flavio Briatore 决定培养一名未来接班人，玩家因此加入阿尔派管理层。', reasonLine, '布里亚托利保留研发大方向等关键决定。玩家必须适当照顾科拉平托及其庞大粉丝群，同时避免加斯利失去信心。A526 与新换装的梅赛德斯动力单元也需要逐步完成匹配。', tail];
   } else if (state.haas) {
     newsText = `${name} 加入 TGR 哈斯，与小松礼雄共同管理车队。`;
     title = '两方股东之间：哈斯共同领队';

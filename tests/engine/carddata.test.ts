@@ -48,6 +48,15 @@ describe('角色卡数据：2026 真实阵容', () => {
     expect(db.drivers.every(d => d.teamId === null || db.teams.some(t => t.id === d.teamId))).toBe(true);
   });
 
+  it('使用完整 2026 赛历与六场冲刺赛', () => {
+    const db = cardDb();
+    expect(db.calendar).toHaveLength(24);
+    expect(db.tracks).toHaveLength(24);
+    expect(db.calendar[0]).toMatchObject({ trackId: 'melbourne', sprint: false });
+    expect(db.calendar.at(-1)).toMatchObject({ trackId: 'yas_marina', sprint: false });
+    expect(db.calendar.filter(round => round.sprint).map(round => round.trackId)).toEqual(['shanghai', 'miami', 'montreal', 'silverstone', 'zandvoort', 'singapore']);
+  });
+
   it('法拉利保留特殊机制与两位车手', () => {
     const db = cardDb();
     expect(db.teams.find(t => t.id === 'ferrari')!.special).toBe('ferrari');

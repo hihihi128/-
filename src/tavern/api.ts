@@ -33,6 +33,7 @@ export function createApi(ctrl: F1Controller, panel: () => PanelHost | null) {
     setSettings: (patch: Partial<Settings>) => ctrl.updateSettings(patch),
     requestNarration: (text?: string) => ctrl.requestNarration(text),
     requestEngineerStrategy: (driverId: string, api?: 'main' | 'secondary') => ctrl.requestEngineerStrategy(driverId, api),
+    requestPerfectStrategy: (driverId: string, api?: 'main' | 'secondary') => ctrl.requestPerfectStrategy(driverId, api),
     /** 强制重新结算最新一条 AI 回复的指令 */
     reprocessLatest: async () => {
       const last = ctrl.latestFloor();

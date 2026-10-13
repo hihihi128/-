@@ -88,6 +88,7 @@ export interface EngineerStrategyResult extends Outcome {
   strategyLevel?: string;
   gridPosition?: number | null;
   weatherResponse?: string;
+  mode?: 'engineer' | 'perfect';
 }
 
 function safeWeatherAdvice(text: string, hasRainWindow: boolean): boolean {
@@ -520,7 +521,7 @@ export class F1Controller {
    * 车队工程师使用主 API 或已配置的副 API 解释一套后端选定的方案。
    * 方案排名严格按车队策略水平选择，避免强队与弱队得到同样聪明的建议。
    */
-  async requestEngineerStrategy(driverId: string, requestedApi?: 'main' | 'secondary'): Promise<EngineerStrategyResult> {
+  async requestEngineerStrategy(driverId: string, requestedApi?: 'main' | 'secondary', perfect = false): Promise<EngineerStrategyResult> {
     if (this.env.isGenerating()) return { ok: false, message: '当前正在生成内容，请稍后再请求工程师建议' };
     const state = this.stateAt();
     if (!state?.weekend) return { ok: false, message: '比赛周末开始后才能请求工程师建议' };
@@ -534,7 +535,7 @@ export class F1Controller {
     const slot = team.cars.find(car => car.driverId === driverId)?.slot ?? 1;
     const engineer = raceEngineerFor(team, slot);
     const decisionSkill = strategyDecisionSkill(team, slot);
-    const level = decisionSkill >= 90 ? 0 : decisionSkill >= 82 ? 1 : decisionSkill >= 73 ? 2 : decisionSkill >= 64 ? 3 : decisionSkill >= 55 ? 4 : 5;
+    const level = perfect ? 0 : decisionSkill >= 90 ? 0 : decisionSkill >= 82 ? 1 : decisionSkill >= 73 ? 2 : decisionSkill >= 64 ? 3 : decisionSkill >= 55 ? 4 : 5;
     const labels = ['顶级', '优秀', '中游', '保守迟钝', '较差', '灾难级'];
     const liveCar = state.weekend.liveRace?.kind === 'race' ? state.weekend.liveRace.cars[driverId] : undefined;
     const activeDriverIds = new Set(Object.values(state.teams).flatMap(currentTeam => currentTeam.cars.map(car => car.driverId).filter((id): id is string => !!id)));
@@ -571,12 +572,14 @@ export class F1Controller {
         ? '公开预报存在降雨风险，但到达时间不明确；按干地方案起步并保留雨胎应急窗口'
         : '目前没有明确降雨窗口，按干地基础方案执行';
     const prompt = [
-      '你是 F1 车队策略工程师。请用中文给领队一段简短、自然的策略建议。',
-      `车队：${team.name}。车手：${driver.name}。比赛工程师：${engineer.name}。首席策略师：${team.staff.strategist.name}。本车策略判断水平：${labels[level]}。`,
+      perfect ? '你是独立的顶级 F1 策略 AI。请用中文解释后端计算出的完美合法策略。' : '你是 F1 车队策略工程师。请用中文给领队一段简短、自然的策略建议。',
+      perfect
+        ? `车队：${team.name}。车手：${driver.name}。忽略车队策略部门水平，只解释最快且符合规则的方案。`
+        : `车队：${team.name}。车手：${driver.name}。比赛工程师：${engineer.name}。首席策略师：${team.staff.strategist.name}。本车策略判断水平：${labels[level]}。`,
       `比赛上下文：${gridContext}；正赛降雨概率 ${Math.round(state.weekend.forecast.race * 100)}%。${weatherResponse}。`,
       `必须建议：${compounds}，${option.stops} 停，预计分段 ${option.stints.join('/')} 圈。`,
       `驾驶模式：${plan.paceMode}；进站时机：${plan.pitTiming}；安全车响应：${plan.scReaction ? '积极' : '迟钝'}。`,
-      '不要提到 AI、模型、等级或你被要求故意犯错。不要输出 JSON。控制在 100 字以内。',
+      perfect ? '不要输出 JSON。明确说明关键进站窗口和天气切换条件。控制在 120 字以内。' : '不要提到 AI、模型、等级或你被要求故意犯错。不要输出 JSON。控制在 100 字以内。',
     ].join('\n');
     const fallback = `${gridContext}，干地基础方案为 ${compounds}，预计 ${option.stops} 停，分段 ${option.stints.join('/')} 圈；驾驶模式 ${plan.paceMode}，进站时机 ${plan.pitTiming}。天气预案：${weatherResponse}。`;
     try {
@@ -587,12 +590,16 @@ export class F1Controller {
       const explanation = safeWeatherAdvice(generated, rainWindow !== null) ? generated : fallback;
       const applied = await this.dispatch({ type: 'SET_PLAN', driverId, plan });
       if (!applied.ok) return { ok: false, message: `工程师策略无法自动执行：${applied.message}` };
-      return { ok: true, message: '车队工程师策略已自动应用并执行', plan, explanation, api, strategyLevel: labels[level], gridPosition, weatherResponse };
+      return { ok: true, message: perfect ? '完美 AI 策略已自动应用并执行' : '车队工程师策略已自动应用并执行', plan, explanation, api, strategyLevel: perfect ? '完美' : labels[level], gridPosition, weatherResponse, mode: perfect ? 'perfect' : 'engineer' };
     } catch (error) {
       const applied = await this.dispatch({ type: 'SET_PLAN', driverId, plan });
       if (!applied.ok) return { ok: false, message: `工程师策略无法自动执行：${applied.message}` };
-      return { ok: true, message: 'API 暂时不可用，工程师基础策略已自动应用并执行', plan, explanation: fallback, api, strategyLevel: labels[level], gridPosition, weatherResponse };
+      return { ok: true, message: perfect ? 'API 暂时不可用，后端完美策略已自动应用并执行' : 'API 暂时不可用，工程师基础策略已自动应用并执行', plan, explanation: fallback, api, strategyLevel: perfect ? '完美' : labels[level], gridPosition, weatherResponse, mode: perfect ? 'perfect' : 'engineer' };
     }
+  }
+
+  requestPerfectStrategy(driverId: string, requestedApi?: 'main' | 'secondary'): Promise<EngineerStrategyResult> {
+    return this.requestEngineerStrategy(driverId, requestedApi, true);
   }
 
   /** 发送一条用户消息并触发 AI 叙述待叙述事件 */

@@ -60,6 +60,9 @@ describe('比赛模拟', () => {
     s = act(s, { type: 'SET_PLAN', driverId: 'c1', plan: { tyrePlan: ['hard', 'medium'] } });
     s = act(s, { type: 'SET_PLAN', driverId: 'c2', plan: { tyrePlan: ['soft', 'medium', 'soft'] } });
     s.weekend!.weather.race = 'dry';
+    s.weekend!.forecast.race = 0;
+    delete s.weekend!.forecast.raceRainWindow;
+    s.tracks[s.calendar[s.season.roundIndex].trackId].rainChance = 0;
     const { result } = simulateRace(s, new Rng(3), 'race');
     const c1 = result.classification.find(c => c.driverId === 'c1')!;
     const c2 = result.classification.find(c => c.driverId === 'c2')!;
@@ -113,7 +116,7 @@ describe('比赛模拟', () => {
 describe('策略预测', () => {
   it('高轮胎负荷赛道更倾向多停', () => {
     const s = newTestGame();
-    const track = { ...s.tracks.t_balanced };
+    const track = { ...s.tracks.barcelona };
     const ctx = { driverTyre: 80, carTyre: 80, paceMode: 'balanced' as const, knowledge: 50 };
     const low = strategyOptions(s.rules, { ...track, tyreStress: 10 }, 52, ctx, { wet: false, sprint: false });
     const high = strategyOptions(s.rules, { ...track, tyreStress: 95 }, 52, ctx, { wet: false, sprint: false });
@@ -124,7 +127,7 @@ describe('策略预测', () => {
 
   it('进攻模式衰减更快', () => {
     const s = newTestGame();
-    const t = s.tracks.t_fast;
+    const t = s.tracks.monza;
     const base = { driverTyre: 80, carTyre: 80, knowledge: 0 };
     expect(degFactor(t, { ...base, paceMode: 'push' })).toBeGreaterThan(degFactor(t, { ...base, paceMode: 'conserve' }));
   });

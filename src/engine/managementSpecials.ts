@@ -170,7 +170,7 @@ export function williamsBudgetFocus(state: GameState, focus: 'facilities' | 'dev
 
 export function managementActionBlocker(state: GameState, action: Action): string | null {
   if (action.type === 'START_PROJECT') {
-    if (state.alpine && !state.alpine.rndDirection.includes(action.partType)) return `布里亚托已经决定本阶段只研发：${state.alpine.rndDirection.map(type => state.rules.parts[type]?.name ?? type).join('、')}`;
+    if (state.alpine && !state.alpine.rndDirection.includes(action.partType)) return `布里亚托利已经决定本阶段只研发：${state.alpine.rndDirection.map(type => state.rules.parts[type]?.name ?? type).join('、')}`;
     if (state.haas && state.haas.toyotaInfluence >= state.rules.haas.interferenceThreshold && !state.haas.preferredParts.includes(action.partType)) return `丰田当前要求研发资源集中在：${state.haas.preferredParts.map(type => state.rules.parts[type]?.name ?? type).join('、')}`;
     if (state.williams && (state.williams.focusRound !== roundKey(state) || state.williams.focus !== 'development')) return '请先把威廉姆斯本站预算方向设为赛车升级';
   }
@@ -204,8 +204,8 @@ export function afterManagementRace(state: GameState): void {
     a.fanPressure = round1(clamp(a.fanPressure, 0, 100));
     a.gaslyCommitment = round1(clamp(a.gaslyCommitment, 0, 100));
     if (a.gaslyCommitment <= 0 && !a.gaslyLeaving) { a.gaslyLeaving = true; addNarration(state, 'gasly_exit', '加斯利决定离开阿尔派', '长期偏袒科拉平托使加斯利失去信心。他通知车队，赛季结束后不会续约。'); }
-    if (a.briatoreSatisfaction < state.rules.alpine.dismissBriatoreSatisfaction && !a.dismissed) { a.dismissed = `布里亚托满意度降至 ${a.briatoreSatisfaction}`; state.flags.fired = true; state.flags.firedReason = a.dismissed; }
-    if ((state.season.roundIndex + 1) % 3 === 0) { a.rndDirection = [...DIRECTIONS[Math.floor((state.season.roundIndex + 1) / 3) % DIRECTIONS.length]]; addNews(state, '研发', `布里亚托将下一阶段研发方向定为${a.rndDirection.map(type => state.rules.parts[type]?.name ?? type).join('与')}。`); }
+    if (a.briatoreSatisfaction < state.rules.alpine.dismissBriatoreSatisfaction && !a.dismissed) { a.dismissed = `布里亚托利满意度降至 ${a.briatoreSatisfaction}`; state.flags.fired = true; state.flags.firedReason = a.dismissed; }
+    if ((state.season.roundIndex + 1) % 3 === 0) { a.rndDirection = [...DIRECTIONS[Math.floor((state.season.roundIndex + 1) / 3) % DIRECTIONS.length]]; addNews(state, '研发', `布里亚托利将下一阶段研发方向定为${a.rndDirection.map(type => state.rules.parts[type]?.name ?? type).join('与')}。`); }
   }
   if (state.haas) {
     const h = state.haas;

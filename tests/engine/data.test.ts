@@ -24,9 +24,9 @@ describe('数据解析（世界书 YAML）', () => {
     expect(rules.prizeMoney).toHaveLength(11);
     expect(rules.aeroAllowanceByPosition).toHaveLength(11);
     expect(rules.aeroAllowanceByPosition[10]).toBe(1.15);
-    expect(res.db!.tracks).toHaveLength(3);
-    expect(res.db!.calendar).toHaveLength(3);
-    expect(res.db!.calendar[1].sprint).toBe(true);
+    expect(res.db!.tracks).toHaveLength(24);
+    expect(res.db!.calendar).toHaveLength(24);
+    expect(res.db!.calendar.filter(round => round.sprint)).toHaveLength(6);
     // 赛道权重自动归一化
     for (const t of res.db!.tracks) {
       const s = Object.values(t.weights).reduce((a, b) => a + b, 0);

@@ -32,7 +32,7 @@ describe('完整赛季流程', () => {
     expect(phases).toEqual(
       expect.arrayContaining(['preseason', 'pre_race', 'practice', 'qualifying', 'race', 'post_race', 'sprint_qualifying', 'sprint', 'season_end']),
     );
-    expect(s.history).toHaveLength(3);
+    expect(s.history).toHaveLength(s.calendar.length);
     // 积分一致性：积分榜 = 历史成绩之和（含冲刺赛）
     for (const [id, st] of Object.entries(s.standings.drivers)) {
       const fromHistory = s.history.reduce((acc, h) => {
@@ -81,7 +81,7 @@ describe('完整赛季流程', () => {
 
   it('视图模型可以在每个阶段构建', () => {
     let s = newTestGame(99);
-    for (let i = 0; i < 40 && s.season.phase !== 'season_end'; i++) {
+    for (let i = 0; i < 300 && s.season.phase !== 'season_end'; i++) {
       const v = buildView(s);
       expect(v.player.cars).toHaveLength(2);
       expect(v.standings.teams).toHaveLength(11);
