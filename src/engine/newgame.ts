@@ -121,6 +121,8 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
       operatingCost: def.operatingCost,
       facilities: { ...def.facilities },
       staff: deepClone(def.staff),
+      pitCrewTraining: { speed: def.staff.pitCrew.skill, consistency: def.staff.pitCrew.skill, error_control: def.staff.pitCrew.skill },
+      tyreInventory: {},
       parts,
       cars,
       projects: [],

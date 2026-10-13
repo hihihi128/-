@@ -91,9 +91,10 @@ async function autoFinish() {
           <article v-for="d in drivers" :key="d.id" class="card driver-card">
             <div class="spread"><div><h3>{{ driverShort(d.id) }} <span class="small muted">{{ d.name }}</span></h3><div class="tiny muted">{{ live.timing.find(t => t.driverId === d.id)?.gap ?? '—' }}</div></div><b class="position">P{{ live.timing.find(t => t.driverId === d.id)?.pos ?? 'DNF' }}</b></div>
             <div v-for="car in [carById.get(d.id)!]" :key="d.id" class="telemetry">
-              <div><span class="tiny muted">轮胎</span><b><Tyre :c="car.tyre" /> {{ car.tyreAge }} 圈</b></div>
+              <div><span class="tiny muted">轮胎</span><b><Tyre :c="car.tyre" /> {{ car.tyreAge }} 圈 · {{ car.tyreState === 'new' ? '新胎' : '已用' }}</b></div>
               <div><span class="tiny muted">能量</span><b class="mono">{{ Math.round(car.energy) }}%</b><i class="energy"><i :style="{ width: `${car.energy}%` }"></i></i></div>
               <div><span class="tiny muted">赛车状态</span><b :class="car.damage || car.partial ? 'neg' : 'pos'">{{ car.damage ? '前翼受损' : car.partial ? '机械异常' : '正常' }}</b></div>
+              <div><span class="tiny muted">进站静止</span><b class="mono">预计 {{ car.predictedStationary.toFixed(1) }}s<span v-if="car.lastPit"> · 实际 {{ car.lastPit.actualStationary.toFixed(1) }}s</span></b></div>
             </div>
             <div class="tactic-fields">
               <label class="field">节奏<select v-model="choice(d.id).paceMode" :disabled="store.busy"><option value="conserve">保守</option><option value="balanced">均衡</option><option value="push">进攻</option></select></label>

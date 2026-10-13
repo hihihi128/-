@@ -20,6 +20,14 @@ const practiceSessions = computed(() => {
   return ww?.practiceSessions?.length ? ww.practiceSessions : ww?.practice ? [ww.practice] : [];
 });
 const practiceSessionTotal = computed(() => w.value?.practiceSessionTotal ?? 0);
+const returnSelections = ref<Record<string, string[]>>({});
+function toggleReturnSet(driverId: string, setId: string) {
+  const selected = returnSelections.value[driverId] ?? [];
+  returnSelections.value[driverId] = selected.includes(setId) ? selected.filter(id => id !== setId) : [...selected, setId];
+}
+function returnTyres(driverId: string) {
+  void act({ type: 'RETURN_PRACTICE_TYRES', driverId, setIds: returnSelections.value[driverId] ?? [] });
+}
 
 const steps = computed(() => {
   const s: Array<{ id: string; label: string }> = [{ id: 'practice', label: `练习赛 ${practiceSessions.value.length}/${practiceSessionTotal.value}` }];
@@ -87,6 +95,7 @@ watch(() => w.value?.roundIndex, () => {
 watch(() => practiceSessions.value.length, length => {
   if (length > 0) practiceResultIndex.value = length - 1;
 });
+watch(() => practiceSessions.value.length, () => { returnSelections.value = {}; });
 
 function customFor(d: WeekendDriverView): string[] {
   if (!customPlans.value[d.driverId]) {
@@ -264,6 +273,19 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
             <Bar label="轮胎数据" :value="d.setup.tyreKnowledge" color="#ffb347" />
           </div>
           <div v-if="w.penalties[d.driverId]" class="notice warn tiny">本站罚退 {{ w.penalties[d.driverId] }} 格</div>
+          <div class="block stack-s">
+            <div class="label">实体轮胎库存 <span class="tiny muted">新胎 / 已使用 · 圈数</span></div>
+            <div class="row wrap tyre-inventory">
+              <label v-for="set in d.tyreSets" :key="set.id" class="tyre-set tiny" :class="{ returned: set.returned, selected: (returnSelections[d.driverId] ?? []).includes(set.id) }">
+                <input v-if="w.practiceReturn?.driverIds.includes(d.driverId) && !set.returned" type="checkbox" :checked="(returnSelections[d.driverId] ?? []).includes(set.id)" @change="toggleReturnSet(d.driverId, set.id)" />
+                <Tyre :c="set.compound" /> {{ set.state === 'new' ? '新' : '已用' }} {{ set.laps }}L<span v-if="set.returned"> · 已交回</span>
+              </label>
+            </div>
+            <div v-if="w.practiceReturn?.driverIds.includes(d.driverId)" class="row">
+              <span class="tiny warn">本节必须交回 {{ w.practiceReturn.required }} 组（已选 {{ (returnSelections[d.driverId] ?? []).length }}）</span>
+              <button class="small primary" :disabled="store.busy || (returnSelections[d.driverId] ?? []).length !== w.practiceReturn.required" @click="returnTyres(d.driverId)">确认交回</button>
+            </div>
+          </div>
 
           <div class="block">
             <div class="label">练习赛项目</div>
@@ -414,7 +436,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
         </div>
         <div class="table-wrap">
           <table>
-            <thead><tr><th>名次</th><th>车手</th><th>发车</th><th>差距</th><th>进站</th><th>轮胎</th><th>最快圈</th><th>积分</th></tr></thead>
+            <thead><tr><th>名次</th><th>车手</th><th>发车</th><th>差距</th><th>进站</th><th>静止时间（预估/实际）</th><th>轮胎</th><th>最快圈</th><th>积分</th></tr></thead>
             <tbody>
               <tr v-for="c in raceLike.classification" :key="c.driverId" :class="{ me: teamOf(c.driverId).mine }">
                 <td class="mono">{{ c.pos ?? 'DNF' }}</td>
@@ -422,6 +444,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                 <td class="mono">{{ c.grid }}<span v-if="c.pos" class="tiny" :class="c.grid - c.pos > 0 ? 'pos' : c.grid - c.pos < 0 ? 'neg' : 'muted'">（{{ c.grid - c.pos > 0 ? '+' : '' }}{{ c.grid - c.pos }}）</span></td>
                 <td class="mono">{{ c.status === 'dnf' ? c.reason : c.gap }}</td>
                 <td class="mono">{{ c.pits }}</td>
+                <td class="tiny mono"><span v-for="(stop, i) in c.pitStops" :key="i">{{ stop.predictedStationary.toFixed(1) }}/{{ stop.actualStationary.toFixed(1) }}s{{ stop.slow ? ' !' : '' }}<br /></span><span v-if="!c.pitStops?.length">—</span></td>
                 <td><span class="row" style="gap: 2px"><Tyre v-for="(t, i) in c.tyres" :key="i" :c="t" /></span></td>
                 <td class="mono">{{ lapTime(c.bestLap) }}</td>
                 <td class="mono">{{ c.points || '' }}</td>
@@ -462,6 +485,10 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
   color: var(--muted);
   font-size: 12px;
 }
+.tyre-inventory { gap: 4px; }
+.tyre-set { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.tyre-set.returned { opacity: .45; text-decoration: line-through; }
+.tyre-set.selected { border-color: var(--team); background: color-mix(in srgb, var(--team) 15%, transparent); }
 .step .dot {
   width: 18px;
   height: 18px;

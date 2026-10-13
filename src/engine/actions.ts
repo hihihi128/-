@@ -35,6 +35,7 @@ import {
   startLiveRace,
   advanceLiveRace,
   resolveLiveRaceDecision,
+  returnPracticeTyres,
   swapDriver,
 } from './season';
 import { validatePlan } from './strategy';
@@ -167,6 +168,8 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
       return startWeekend(state, rng);
     case 'RUN_PRACTICE':
       return doPractice(state, rng);
+    case 'RETURN_PRACTICE_TYRES':
+      return returnPracticeTyres(state, action.driverId, action.setIds);
     case 'RUN_SPRINT_QUALIFYING':
       return doQualifying(state, rng, 'sprint_qualifying');
     case 'RUN_SPRINT':
@@ -270,7 +273,7 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
       return result;
     }
     case 'TRAIN_PIT_CREW':
-      return startPitTraining(state, tid);
+      return startPitTraining(state, tid, action.focus);
     case 'TRAIN_DRIVER':
       if (!DRIVER_ATTRS.includes(action.attr)) return fail('未知能力项');
       return startDriverTraining(state, tid, action.driverId, action.attr);

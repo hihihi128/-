@@ -15,6 +15,8 @@ import { redBullCrashMultiplier, specialFailureChance } from './teamSpecials';
 import { applyAudiStartDrop, astonVibrationActive } from './nextTeamSpecials';
 import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from './raceWeather';
 import { validOrders, validRaceChoice } from './raceDecisions';
+import { actualStationaryTime } from './pitstop';
+import { takeTyreSet, useTyreSet } from './tyres';
 import {
   degFactor,
   optimizeStints,
@@ -391,15 +393,10 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
       }
       if (!reason) continue;
       const lossBase = scActive ? track.pitLoss * 0.5 : vscActive ? track.pitLoss * 0.7 : track.pitLoss;
-      const crew = c.team.staff.pitCrew.skill;
-      let stationary = 2.2 + ((100 - crew) / 100) * 1.3 + rng.range(0, 0.4);
-      let slow = false;
-      if (rng.chance(((100 - crew) / 100) * 0.12)) {
-        stationary += rng.range(2, 6);
-        slow = true;
-      }
+      const stop = actualStationaryTime(c.team, () => rng.next(), reason === 'repair');
+      let stationary = stop.actual;
+      const slow = stop.slow;
       if (reason === 'repair') {
-        stationary += 6;
         c.repairPending = false;
         c.damage = 0;
       }
@@ -424,7 +421,7 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
         pushEvent(
           lap,
           slow ? 'slow_stop' : 'pit',
-          `${driverName(state, c.driver.id)} ${label}，换上${rules.tyres[c.tyre].name}（静止 ${stationary.toFixed(1)}s${slow ? '，进站失误！' : ''}）`,
+          `${driverName(state, c.driver.id)} ${label}，换上${rules.tyres[c.tyre].name}（预计 ${stop.predicted.toFixed(1)}s，实际 ${stationary.toFixed(1)}s${slow ? '，进站失误！' : ''}）`,
           [c.driver.id],
           c.isPlayer,
         );
@@ -598,6 +595,7 @@ function freeRedFlagTyreChange(state: GameState, session: LiveRaceState, car: Li
   car.stints.splice(nextStint, car.stints.length - nextStint, ...optimizeStints(state.rules, currentTrack(state), remainingCompounds, remainingLaps, car.tyreFactor));
   car.stintIndex = nextStint;
   car.tyre = compound;
+  car.tyreSetId = takeTyreSet(state.teams[car.teamId], car.driverId, compound, state.season.roundIndex)?.id;
   car.tyreAge = 0;
   car.usedCompounds.push(compound);
   car.pendingPit = null;
@@ -709,6 +707,7 @@ export function createRaceSession(
           ? [...plan.tyrePlan]
           : [rules.dryCompounds[1] ?? rules.dryCompounds[0], rules.dryCompounds[0]];
     const factor = degFactor(track, { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge });
+    const startingSet = takeTyreSet(entry.team, id, compounds[0], state.season.roundIndex);
     cars[id] = {
       driverId: id, teamId: entry.team.id, slot: entry.car.slot, player: entry.team.isPlayer, grid: index + 1,
       score: trackScore(ratings, track), skill: raceSkill(entry.driver, wet), consistency: entry.driver.attrs.consistency,
@@ -716,9 +715,8 @@ export function createRaceSession(
       tyreFactor: factor, setupBonus: setup.confidence / 100 * 0.3, pitCrewSkill: entry.team.staff.pitCrew.skill,
       raceEngineerReaction: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'reaction'),
       raceEngineerWeather: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'weather'),
-      plan, tyre: compounds[0], tyreAge: 0, usedCompounds: [compounds[0]], plannedCompounds: compounds,
-      stints: optimizeStints(rules, track, compounds, totalLaps, factor), stintIndex: 0, pits: 0,
-      cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
+      plan, tyre: compounds[0], tyreAge: 0, tyreSetId: startingSet?.id, usedCompounds: [compounds[0]], plannedCompounds: compounds,
+      stints: optimizeStints(rules, track, compounds, totalLaps, factor), stintIndex: 0, pits: 0, pitStops: [], cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
       damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced', pendingPit: null, pendingCompound: null, stayOutUntilLap: 0,
       engineerLightRainAssessed: false, engineerWetAssessed: false, engineerWeatherSpell: 0, engineerTyreOverride: null, engineerTyreOverrideUntilLap: 0,
       neutralStopTaken: false,
@@ -855,17 +853,20 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || neutralOpportunity || (planned && car.tyreAge >= pitTriggerLap(car))));
   if (!shouldPit) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
-  let stationary = 2.2 + (100 - car.pitCrewSkill) / 100 * 1.3 + rng.range(0, 0.4);
-  if (car.repairPending) { stationary += 6; car.damage = 0; car.repairPending = false; const damage = [...session.damageLedger].reverse().find(d => d.driverId === car.driverId && !d.repairedInRace); if (damage) damage.repairedInRace = true; }
+  const repair = car.repairPending;
+  const stop = actualStationaryTime(state.teams[car.teamId], () => rng.next(), repair);
+  const stationary = stop.actual;
+  if (car.repairPending) { car.damage = 0; car.repairPending = false; const damage = [...session.damageLedger].reverse().find(d => d.driverId === car.driverId && !d.repairedInRace); if (damage) damage.repairedInRace = true; }
   if (car.pendingPit === 'box' || planned || weatherStop) {
     if (planned) car.stintIndex += 1;
     // A decision can choose a compound, but it takes effect only after this car
     // has actually entered the pits. AI changes respond to the public surface.
     car.tyre = targetCompound;
+    car.tyreSetId = takeTyreSet(state.teams[car.teamId], car.driverId, car.tyre, state.season.roundIndex)?.id;
   }
-  car.usedCompounds.push(car.tyre); car.tyreAge = 0; car.pits += 1; car.cumulativeTime += track.pitLoss * neutral + stationary;
+  car.usedCompounds.push(car.tyre); car.tyreAge = 0; car.pits += 1; car.pitStops ??= []; car.pitStops.push({ lap: session.lap, predictedStationary: stop.predicted, actualStationary: stationary, slow: stop.slow, repair }); car.cumulativeTime += track.pitLoss * neutral + stationary;
   if (neutralActive) car.neutralStopTaken = true;
-  liveEvent(session, session.lap, 'pit', `${car.driverId} 进站，换上${state.rules.tyres[car.tyre]?.name ?? car.tyre}`, [car.driverId], car.player);
+  liveEvent(session, session.lap, stop.slow ? 'slow_stop' : 'pit', `${car.driverId} 进站，换上${state.rules.tyres[car.tyre]?.name ?? car.tyre}（预计 ${stop.predicted.toFixed(1)}s，实际 ${stationary.toFixed(1)}s${stop.slow ? '，失误' : ''}）`, [car.driverId], car.player);
   car.pendingPit = null;
   car.pendingCompound = null;
 }
@@ -910,6 +911,8 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       if (scActive) lapTime = track.baseLap * 1.35 + rng.normal(0, .05);
       else if (vscActive) lapTime = base * 1.25 + rng.normal(0, .05);
       car.cumulativeTime += lapTime; car.completedLaps = lap; car.tyreAge += 1;
+      const tyreSet = state.teams[car.teamId]?.tyreInventory?.[car.driverId]?.find(set => set.id === car.tyreSetId);
+      useTyreSet(tyreSet, 1);
       if (!scActive && !vscActive && lap > 1 && car.bestLap === null || (!scActive && !vscActive && lap > 1 && lapTime < (car.bestLap ?? Infinity))) car.bestLap = lapTime;
       const astonVibrationRetirement = !scActive && !vscActive && !session.redFlag?.active
         && car.teamId === 'aston_martin' && astonVibrationActive(state)
@@ -1162,7 +1165,7 @@ export function finishRaceSession(state: GameState, session: LiveRaceState): { r
   const classification: ClassificationEntry[] = [...ordered, ...dnfs].map((car, index) => {
     const finished = car.status === 'running';
     const gap = finished ? car.cumulativeTime - (leader?.cumulativeTime ?? car.cumulativeTime) : 0;
-    return { driverId: car.driverId, teamId: car.teamId, pos: finished ? index + 1 : null, grid: car.grid, status: finished ? 'finished' : 'dnf', laps: finished ? session.totalLaps : car.completedLaps, time: round3(car.cumulativeTime), gap: finished ? (index === 0 ? '冠军' : gapText(gap)) : 'DNF', pits: car.pits, bestLap: car.bestLap === null ? 0 : round3(car.bestLap), points: finished ? points[index] ?? 0 : 0, reason: car.reason, tyres: car.usedCompounds };
+    return { driverId: car.driverId, teamId: car.teamId, pos: finished ? index + 1 : null, grid: car.grid, status: finished ? 'finished' : 'dnf', laps: finished ? session.totalLaps : car.completedLaps, time: round3(car.cumulativeTime), gap: finished ? (index === 0 ? '冠军' : gapText(gap)) : 'DNF', pits: car.pits, bestLap: car.bestLap === null ? 0 : round3(car.bestLap), points: finished ? points[index] ?? 0 : 0, reason: car.reason, tyres: car.usedCompounds, pitStops: car.pitStops ?? [] };
   });
   if (session.fastestLap && session.kind === 'race' && state.rules.fastestLapPoint > 0) { const e = classification.find(c => c.driverId === session.fastestLap!.driverId); if (e?.pos && e.pos <= state.rules.fastestLapTopN) e.points += state.rules.fastestLapPoint; }
   const wetLaps = session.weatherHistory.filter(v => v > .25).length;

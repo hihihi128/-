@@ -25,6 +25,7 @@ export type DriverAttr = 'pace' | 'racecraft' | 'consistency' | 'tyre' | 'wet' |
 export type FacilityType = 'windTunnel' | 'cfd' | 'simulator' | 'factory';
 export type StaffRole = 'technicalDirector' | 'aeroChief' | 'raceEngineer' | 'raceEngineer2' | 'pitCrew' | 'strategist';
 export type StaffAbility = 'setup' | 'communication' | 'reaction' | 'strategy' | 'weather' | 'risk';
+export type PitCrewFocus = 'speed' | 'consistency' | 'error_control';
 
 export type Ambition = 'conservative' | 'standard' | 'aggressive';
 export type Difficulty = 'easy' | 'normal' | 'hard';
@@ -318,6 +319,8 @@ export interface Rules {
   wetCompound: Compound;
   /** 干地正赛至少使用几种不同配方 */
   mandatoryCompounds: number;
+  /** 每节练习赛后每位正式车手必须交回的轮胎组数 */
+  practiceReturnSets: number;
   ambition: Record<Ambition, AmbitionDef>;
   /** 每个比赛间隔的基础风洞时长 */
   aeroAllowanceBase: number;
@@ -555,6 +558,7 @@ export interface Project {
   facility?: FacilityType;
   driverId?: string;
   attr?: DriverAttr;
+  pitFocus?: PitCrewFocus;
   ambition?: Ambition;
   rush?: boolean;
   qty?: number;
@@ -595,6 +599,10 @@ export interface TeamState {
   operatingCost: number;
   facilities: Record<FacilityType, number>;
   staff: Record<StaffRole, StaffMember>;
+  /** 维修组专项训练水平；旧存档以综合能力初始化。 */
+  pitCrewTraining?: Record<PitCrewFocus, number>;
+  /** 每位车手独立持有的实体轮胎组。 */
+  tyreInventory?: Record<string, TyreSet[]>;
   parts: Record<PartType, TeamParts>;
   cars: CarState[];
   projects: Project[];
@@ -728,6 +736,22 @@ export interface PracticeResult {
   events: RaceEvent[];
 }
 
+/** A physical tyre set belongs to exactly one driver for one race weekend. */
+export interface TyreSet {
+  id: string;
+  compound: Compound;
+  state: 'new' | 'used';
+  laps: number;
+  returned: boolean;
+  roundIndex: number;
+}
+
+export interface PracticeReturnRequest {
+  session: number;
+  required: number;
+  driverIds: string[];
+}
+
 export interface QualiSession {
   name: string;
   entries: Array<{ driverId: string; teamId: string; time: number | null; eliminated: boolean; note?: string }>;
@@ -786,6 +810,15 @@ export interface ClassificationEntry {
   points: number;
   reason: string;
   tyres: Compound[];
+  pitStops?: PitStopRecord[];
+}
+
+export interface PitStopRecord {
+  lap: number;
+  predictedStationary: number;
+  actualStationary: number;
+  slow: boolean;
+  repair: boolean;
 }
 
 export interface RaceResult {
@@ -840,11 +873,13 @@ export interface LiveRaceCar {
   plan: DriverPlan;
   tyre: Compound;
   tyreAge: number;
+  tyreSetId?: string;
   usedCompounds: Compound[];
   plannedCompounds: Compound[];
   stints: number[];
   stintIndex: number;
   pits: number;
+  pitStops?: PitStopRecord[];
   cumulativeTime: number;
   completedLaps: number;
   status: 'running' | 'dnf';
@@ -966,6 +1001,8 @@ export interface WeekendState {
   practiceSessions: PracticeResult[];
   /** 最近一节练习赛结果，保留以兼容旧存档和调用方。 */
   practice: PracticeResult | null;
+  /** Set after each practice until the player returns the required sets. */
+  practiceReturn?: PracticeReturnRequest | null;
   sprintQualifying: QualiResult | null;
   sprint: RaceResult | null;
   qualifying: QualiResult | null;
@@ -1342,6 +1379,7 @@ export type Action =
   | { type: 'START_SEASON' }
   | { type: 'START_WEEKEND' }
   | { type: 'RUN_PRACTICE' }
+  | { type: 'RETURN_PRACTICE_TYRES'; driverId: string; setIds: string[] }
   | { type: 'RUN_SPRINT_QUALIFYING' }
   | { type: 'RUN_SPRINT' }
   | { type: 'RUN_QUALIFYING' }
@@ -1364,7 +1402,7 @@ export type Action =
   | { type: 'ORDER_UNITS'; partType: PartType; specId: string; qty: number }
   | { type: 'FIT_PART'; slot: number; partType: PartType; specId: string }
   | { type: 'UPGRADE_FACILITY'; facility: FacilityType }
-  | { type: 'TRAIN_PIT_CREW' }
+  | { type: 'TRAIN_PIT_CREW'; focus?: PitCrewFocus }
   | { type: 'TRAIN_DRIVER'; driverId: string; attr: DriverAttr }
   | { type: 'SET_NEXT_SEASON_FOCUS'; value: number }
   | { type: 'START_MCLAREN_FIX'; route: 'independent' | 'mercedes' }

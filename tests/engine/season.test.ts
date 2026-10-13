@@ -2,6 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { buildView } from '../../src/engine/view';
 import { act, advanceUntil, newTestGame, tryAct } from '../helpers';
 
+function returnPracticeTyres(s: ReturnType<typeof newTestGame>) {
+  while (s.weekend?.practiceReturn) {
+    const request = s.weekend.practiceReturn;
+    const driverId = request.driverIds[0];
+    const set = s.teams[s.meta.playerTeamId].tyreInventory![driverId].find(set => !set.returned && set.roundIndex === s.season.roundIndex)!;
+    s = act(s, { type: 'RETURN_PRACTICE_TYRES', driverId, setIds: [set.id] });
+  }
+  return s;
+}
+
 describe('开局', () => {
   it('生成合法的初始存档', () => {
     const s = newTestGame();
@@ -28,18 +38,21 @@ describe('完整赛季流程', () => {
     expect(s.weekend!.practiceSessions).toHaveLength(0);
 
     s = act(s, { type: 'RUN_PRACTICE' });
+    s = returnPracticeTyres(s);
     expect(s.season.phase).toBe('practice');
     expect(s.weekend!.practiceSessions).toHaveLength(1);
     expect(s.weekend!.practice).toBe(s.weekend!.practiceSessions[0]);
 
     s = act(s, { type: 'SET_PLAN', driverId: 'c1', plan: { practiceProgram: 'longrun' } });
     s = act(s, { type: 'RUN_PRACTICE' });
+    s = returnPracticeTyres(s);
     expect(s.season.phase).toBe('practice');
     expect(s.weekend!.practiceSessions).toHaveLength(2);
     expect(s.weekend!.practiceSessions[1].gains.c1.program).toBe('longrun');
 
     s = act(s, { type: 'SET_PLAN', driverId: 'c1', plan: { practiceProgram: 'quali_sim' } });
     s = act(s, { type: 'RUN_PRACTICE' });
+    s = returnPracticeTyres(s);
     expect(s.season.phase).toBe('qualifying');
     expect(s.weekend!.practiceSessions).toHaveLength(3);
     expect(s.weekend!.practiceSessions[2].gains.c1.program).toBe('quali_sim');
@@ -52,6 +65,7 @@ describe('完整赛季流程', () => {
     s = advanceUntil(s, x => x.season.phase === 'practice');
 
     s = act(s, { type: 'RUN_PRACTICE' });
+    s = returnPracticeTyres(s);
     expect(s.weekend!.practiceSessions).toHaveLength(1);
     expect(s.season.phase).toBe('sprint_qualifying');
   });
@@ -119,7 +133,7 @@ describe('完整赛季流程', () => {
       const v = buildView(s);
       expect(v.player.cars).toHaveLength(2);
       expect(v.standings.teams).toHaveLength(11);
-      s = s.fiaMeeting?.current ? act(s, { type: 'FIA_DEBATE', stance: 'compromise' }) : act(s, { type: 'ADVANCE' });
+      s = s.fiaMeeting?.current ? act(s, { type: 'FIA_DEBATE', stance: 'compromise' }) : s.weekend?.practiceReturn ? returnPracticeTyres(s) : act(s, { type: 'ADVANCE' });
     }
     const v = buildView(s);
     expect(v.season.phase).toBe('season_end');

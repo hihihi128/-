@@ -64,10 +64,17 @@ export function tryAct(state: GameState, action: Action) {
 }
 
 /** 一路 ADVANCE 直到满足条件 */
-export function advanceUntil(state: GameState, pred: (s: GameState) => boolean, max = 200): GameState {
+export function advanceUntil(state: GameState, pred: (s: GameState) => boolean, max = 500): GameState {
   let s = state;
   for (let i = 0; i < max && !pred(s); i++) {
     if (s.fiaMeeting?.current) s = act(s, { type: 'FIA_DEBATE', stance: 'compromise' });
+    else if (s.weekend?.practiceReturn) {
+      const team = s.teams[s.meta.playerTeamId];
+      const request = s.weekend.practiceReturn;
+      const driverId = request.driverIds[0];
+      const setIds = (team.tyreInventory?.[driverId] ?? []).filter(set => !set.returned && set.roundIndex === s.season.roundIndex).slice(0, request.required).map(set => set.id);
+      s = act(s, { type: 'RETURN_PRACTICE_TYRES', driverId, setIds });
+    }
     else s = act(s, { type: 'ADVANCE' });
   }
   if (!pred(s)) throw new Error('advanceUntil: 条件未满足');

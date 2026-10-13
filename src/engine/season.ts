@@ -17,9 +17,10 @@ import { resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
-import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, RaceResult, TeamState } from './types';
+import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, PracticeReturnRequest, RaceResult, TeamState } from './types';
 import { clamp, deepClone, money, round1, round2 } from './util';
 import { completedPracticeSessions, createWeekend, currentRound, currentTrack, practiceSessionCount, runPractice, runQualifying } from './weekend';
+import { driverTyreSets } from './tyres';
 
 const ok = (message: string): Outcome => ({ ok: true, message });
 const fail = (message: string): Outcome => ({ ok: false, message });
@@ -43,6 +44,7 @@ export function nextActionFor(state: GameState): NextAction | null {
     case 'pre_race':
       return { action: { type: 'START_WEEKEND' }, label: `进入${track?.name ?? ''}比赛周末` };
     case 'practice':
+      if (state.weekend?.practiceReturn) return null;
       return {
         action: { type: 'RUN_PRACTICE' },
         label: `进行练习赛（${(state.weekend ? completedPracticeSessions(state.weekend).length : 0) + 1}/${practiceSessionCount(state)}）`,
@@ -118,13 +120,42 @@ export function startWeekend(state: GameState, rng: Rng): Outcome {
 
 export function doPractice(state: GameState, rng: Rng): Outcome {
   if (state.season.phase !== 'practice' || !state.weekend) return fail('当前不是练习赛阶段');
+  if (state.weekend.practiceReturn) return fail('请先交回练习赛轮胎组');
   const total = practiceSessionCount(state);
   if (completedPracticeSessions(state.weekend).length >= total) return fail('本站练习赛已经结束');
   runPractice(state, rng);
   const completed = completedPracticeSessions(state.weekend).length;
+  // `runPractice` deliberately creates this request; avoid retaining the
+  // earlier null narrowing across that state-mutating call.
+  const returnRequest = state.weekend!.practiceReturn as PracticeReturnRequest | null | undefined;
+  if (!returnRequest?.driverIds.length) return advanceAfterPracticeReturns(state);
+  return ok(`第 ${completed}/${total} 节练习赛结束，请交回轮胎组`);
+}
+
+function advanceAfterPracticeReturns(state: GameState): Outcome {
+  const completed = completedPracticeSessions(state.weekend!).length;
+  const total = practiceSessionCount(state);
   if (completed < total) return ok(`第 ${completed}/${total} 节练习赛结束`);
   state.season.phase = currentRound(state)?.sprint ? 'sprint_qualifying' : 'qualifying';
   return ok(`${total} 节练习赛结束`);
+}
+
+export function returnPracticeTyres(state: GameState, driverId: string, setIds: string[]): Outcome {
+  const request = state.weekend?.practiceReturn;
+  const team = state.teams[state.meta.playerTeamId];
+  if (state.season.phase !== 'practice' || !request || !team || !request.driverIds.includes(driverId)) return fail('当前无需交回该车手的练习赛轮胎');
+  if (new Set(setIds).size !== request.required) return fail(`必须交回 ${request.required} 组轮胎`);
+  const sets = driverTyreSets(team, driverId, state.season.roundIndex);
+  const selected = setIds.map(id => sets.find(set => set.id === id));
+  if (selected.some(set => !set || set.returned)) return fail('选择中包含无效或已交回的轮胎组');
+  for (const set of selected) set!.returned = true;
+  request.driverIds = request.driverIds.filter(id => id !== driverId);
+  // JSON save cloning does not retain aliases; restore the documented legacy
+  // alias after an action so consumers of `practice` remain compatible.
+  state.weekend!.practice = completedPracticeSessions(state.weekend!).at(-1) ?? null;
+  if (request.driverIds.length) return ok('已交回轮胎组；请为另一位车手完成选择');
+  state.weekend!.practiceReturn = null;
+  return advanceAfterPracticeReturns(state);
 }
 
 export function doQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 'sprint_qualifying'): Outcome {

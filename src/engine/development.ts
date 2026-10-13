@@ -25,6 +25,7 @@ import type {
   GameState,
   PartSpec,
   PartType,
+  PitCrewFocus,
   Project,
   Rules,
   TeamState,
@@ -328,19 +329,21 @@ export function upgradeFacility(state: GameState, teamId: string, facility: Faci
 
 // ───────────────────────────── 训练 ─────────────────────────────
 
-export function previewPitTraining(state: GameState, teamId: string): SimplePreview {
+export function previewPitTraining(state: GameState, teamId: string, focus: PitCrewFocus = 'speed'): SimplePreview {
   const team = state.teams[teamId];
   const blockers: string[] = [];
   const cost = 0.4;
   if (team.projects.some(p => p.kind === 'pit_training')) blockers.push('维修组正在训练');
-  if (team.staff.pitCrew.skill >= 99) blockers.push('维修组已达极限');
+  if ((team.pitCrewTraining?.[focus] ?? team.staff.pitCrew.skill) >= 99) blockers.push('该专项已达极限');
   const money = affordError(team, cost, 'misc', state.rules);
   if (money) blockers.push(money);
-  return { ok: blockers.length === 0, blockers, cost, weeks: 2, label: '维修组进站训练' };
+  const labels: Record<PitCrewFocus, string> = { speed: '速度', consistency: '稳定性', error_control: '失误控制' };
+  return { ok: blockers.length === 0, blockers, cost, weeks: 2, label: `维修组${labels[focus]}训练` };
 }
 
-export function startPitTraining(state: GameState, teamId: string): Outcome {
-  const pv = previewPitTraining(state, teamId);
+export function startPitTraining(state: GameState, teamId: string, focus: PitCrewFocus = 'speed'): Outcome {
+  if (!['speed', 'consistency', 'error_control'].includes(focus)) return fail('未知维修组训练专项');
+  const pv = previewPitTraining(state, teamId, focus);
   if (!pv.ok) return fail(pv.blockers.join('；'));
   const team = state.teams[teamId];
   charge(team, pv.cost, 'misc', state.rules);
@@ -348,12 +351,13 @@ export function startPitTraining(state: GameState, teamId: string): Outcome {
     id: nextId(state, 'p'),
     kind: 'pit_training',
     label: pv.label,
+    pitFocus: focus,
     cost: pv.cost,
     weeksTotal: pv.weeks,
     weeksLeft: pv.weeks,
     startedAt: stamp(state),
   });
-  return ok('维修组开始进站训练（2 周）');
+  return ok(`维修组开始${pv.label}（2 周）`);
 }
 
 export function previewDriverTraining(state: GameState, teamId: string, driverId: string, attr: DriverAttr): SimplePreview & { gain: number } {
@@ -513,9 +517,14 @@ function completeProject(state: GameState, team: TeamState, p: Project, rng: Rng
     }
     case 'pit_training': {
       const s = team.staff.pitCrew;
-      const gain = Math.max(0.5, 3 * (1 - s.skill / 110));
+      const focus = p.pitFocus ?? 'speed';
+      team.pitCrewTraining ??= { speed: s.skill, consistency: s.skill, error_control: s.skill };
+      const current = team.pitCrewTraining[focus];
+      const gain = Math.max(0.5, 3 * (1 - current / 110));
+      team.pitCrewTraining[focus] = round1(clamp(current + gain, 1, 100));
+      // Keep the legacy headline rating meaningful while specialists drive timing.
       s.skill = round1(clamp(s.skill + gain, 1, 100));
-      if (team.isPlayer) addNews(state, '车队', `维修组训练结束，进站能力提升至 ${s.skill}。`);
+      if (team.isPlayer) addNews(state, '车队', `${p.label}结束，${focus === 'speed' ? '速度' : focus === 'consistency' ? '稳定性' : '失误控制'}提升至 ${team.pitCrewTraining[focus]}。`);
       break;
     }
     case 'driver_training': {

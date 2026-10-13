@@ -48,6 +48,7 @@ import type {
   RoundSummary,
 } from './types';
 import { round1 } from './util';
+import { predictedStationaryTime } from './pitstop';
 import { currentRound } from './weekend';
 import { marketCloseBlockers } from './market';
 
@@ -184,6 +185,7 @@ export interface WeekendDriverView {
   options: StrategyOption[];
   sprintOptions: StrategyOption[];
   tyreLife: Record<string, number>;
+  tyreSets: Array<{ id: string; compound: string; state: 'new' | 'used'; laps: number; returned: boolean }>;
 }
 
 export type RevealedWeather = Record<keyof WeekendState['weather'], Weather | null>;
@@ -214,7 +216,7 @@ export interface LiveRaceView {
   restart: 'standing' | 'rolling' | null;
   weather: { rain: number; surface: 'dry' | 'damp' | 'wet'; forecast: import('./types').RaceForecast };
   timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; pits: number }>;
-  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string }>;
+  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
   events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; driverNames: string[]; key: boolean }>;
   pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number } | null;
   teamOrders: import('./types').TeamOrders;
@@ -236,6 +238,7 @@ export interface WeekendView {
   practiceSessionTotal: number;
   /** Latest practice result retained for consumers of the old view shape. */
   practice: PracticeResult | null;
+  practiceReturn: { required: number; driverIds: string[] } | null;
   sprintQualifying: QualiResult | null;
   sprint: RaceResult | null;
   qualifying: QualiResult | null;
@@ -747,6 +750,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
         options: strategyOptions(state.rules, track, track.laps, ctx, { wet: false, sprint: false }).slice(0, 6),
         sprintOptions: roundDef?.sprint ? strategyOptions(state.rules, track, sprintLaps, ctx, { wet: false, sprint: true }) : [],
         tyreLife: Object.fromEntries(Object.entries(state.rules.tyres).map(([k, t]) => [k, round1(effectiveCliff(t, factor))])),
+        tyreSets: (team.tyreInventory?.[d.id] ?? []).filter(set => set.roundIndex === w.roundIndex).map(set => ({ id: set.id, compound: set.compound, state: set.state, laps: set.laps, returned: set.returned })),
       });
     }
   }
@@ -766,7 +770,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
           raceControl: live.redFlag?.active ? 'red_flag' : live.scLeft > 0 ? 'sc' : live.vscLeft > 0 ? 'vsc' : null,
           restart: live.redFlag?.restartPending ? live.redFlag.restart : null,
           weather: { rain: live.rain, surface: live.surface, forecast: live.forecast }, timing,
-          playerCars: Object.values(live.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming })),
+          playerCars: Object.values(live.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, tyreState: state.teams[c.teamId]?.tyreInventory?.[c.driverId]?.find(set => set.id === c.tyreSetId)?.state ?? 'used', damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming, predictedStationary: predictedStationaryTime(state.teams[c.teamId], c.repairPending), lastPit: c.pitStops?.at(-1) ?? null })),
           events: live.events.slice(-20).map(event => {
             const names = event.drivers.map(id => state.drivers[id]?.short ?? state.drivers[id]?.name ?? id);
             let text = event.text;
@@ -790,6 +794,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
     practiceSessions: Array.isArray(w.practiceSessions) ? w.practiceSessions : w.practice ? [w.practice] : [],
     practiceSessionTotal: state.calendar[w.roundIndex]?.sprint ? 1 : 3,
     practice: w.practice,
+    practiceReturn: w.practiceReturn ? { required: w.practiceReturn.required, driverIds: [...w.practiceReturn.driverIds] } : null,
     sprintQualifying: w.sprintQualifying,
     sprint: w.sprint,
     qualifying: w.qualifying,

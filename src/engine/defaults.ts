@@ -157,6 +157,7 @@ export const DEFAULT_RULES: Rules = {
   dryCompounds: ['soft', 'medium', 'hard'],
   wetCompound: 'inter',
   mandatoryCompounds: 2,
+  practiceReturnSets: 1,
   ambition: {
     conservative: { name: '保守', gain: 1.8, spread: 0.25, costMul: 0.75, weeksMul: 0.8, hoursMul: 0.8, relDelta: 3, units: 2 },
     standard: { name: '标准', gain: 3.2, spread: 0.45, costMul: 1, weeksMul: 1, hoursMul: 1, relDelta: 0, units: 2 },

@@ -12,6 +12,7 @@
 import { DEFAULT_RULES } from './defaults';
 import { resetPuUsage } from './powerunit';
 import { ensureMarket, openMarket } from './market';
+import { migrateTyreInventory } from './tyres';
 import type { GameState } from './types';
 import { deepClone } from './util';
 
@@ -76,6 +77,7 @@ export function migrateState(state: GameState): GameState {
   state.rules.haas ??= deepClone(DEFAULT_RULES.haas);
   state.rules.williams ??= deepClone(DEFAULT_RULES.williams);
   state.rules.randomEvents ??= deepClone(DEFAULT_RULES.randomEvents);
+  state.rules.practiceReturnSets ??= DEFAULT_RULES.practiceReturnSets;
   fillMissing(state.rules.astonMartin as unknown as Record<string, unknown>, DEFAULT_RULES.astonMartin as unknown as Record<string, unknown>);
   fillMissing(state.rules.racingBulls as unknown as Record<string, unknown>, DEFAULT_RULES.racingBulls as unknown as Record<string, unknown>);
   fillMissing(state.rules.audi as unknown as Record<string, unknown>, DEFAULT_RULES.audi as unknown as Record<string, unknown>);
@@ -106,6 +108,7 @@ export function migrateState(state: GameState): GameState {
     if (!state.weekend.practice && state.weekend.practiceSessions.length) {
       state.weekend.practice = state.weekend.practiceSessions[state.weekend.practiceSessions.length - 1];
     }
+    state.weekend.practiceReturn ??= null;
     const bias = state.weekend.supernaturalRainBias;
     if (bias !== undefined && (!Number.isFinite(bias) || bias < -0.2 || bias > 0.2)) delete state.weekend.supernaturalRainBias;
     const effects = state.weekend.supernaturalCarEffects;
@@ -146,6 +149,12 @@ export function migrateState(state: GameState): GameState {
   if (state.rules.puAllocation && !state.rules.aduo) state.rules.aduo = deepClone(DEFAULT_RULES.aduo);
   state.aduo ??= { evaluations: [] };
   for (const team of Object.values(state.teams)) {
+    const crew = team.staff.pitCrew.skill;
+    team.pitCrewTraining ??= { speed: crew, consistency: crew, error_control: crew };
+    for (const focus of ['speed', 'consistency', 'error_control'] as const) {
+      const value = team.pitCrewTraining[focus];
+      team.pitCrewTraining[focus] = Number.isFinite(value) ? Math.max(1, Math.min(100, value)) : crew;
+    }
     if (!team.staff.raceEngineer2) {
       const first = team.staff.raceEngineer;
       team.staff.raceEngineer2 = { ...deepClone(first), id: `${team.id}-raceEngineer2`, role: 'raceEngineer2', name: `${first.name || team.name}（二号车）`, salary: 0, preference: first.preference ? { ...first.preference } : undefined };
@@ -159,6 +168,7 @@ export function migrateState(state: GameState): GameState {
     team.aduoCapBonus ??= 0;
     team.aduoTier ??= 0;
   }
+  migrateTyreInventory(state);
   // 已经是 2026 规则的存档（有 puAllocation）不再补规则：玩家可能在世界书里有意删掉了某些默认项
   if (state.rules.puAllocation) return state;
   fillMissing(state.rules as unknown as Record<string, unknown>, DEFAULT_RULES as unknown as Record<string, unknown>, true);

@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue';
 import { act, money, peek, store } from '../bridge';
 import AduoCard from '../components/AduoCard.vue';
 import CarTopdown from '../components/CarTopdown.vue';
-import type { Ambition, FacilityType } from '../../../engine/types';
+import type { Ambition, FacilityType, PitCrewFocus } from '../../../engine/types';
 import type { ProjectPreview } from '../../../engine/development';
 
 const v = computed(() => store.view!);
@@ -20,6 +20,7 @@ const focus = ref(0);
 const selectedCar = computed(() => p.value.cars[0]);
 const lockedParts = computed(() => (v.value.aduo.isCustomer ? v.value.aduo.developmentParts : []));
 const abilityLabels: Record<string, string> = { setup: '调校', communication: '沟通', reaction: '反应', strategy: '策略', weather: '天气', risk: '冒险' };
+const pitFocuses: Array<[PitCrewFocus, string]> = [['speed', '速度：降低预计静止时间'], ['consistency', '稳定性：缩小时间波动'], ['error_control', '失误控制：降低慢停概率']];
 function staffAbilities(abilities: Record<string, number> | undefined): string {
   return abilities ? Object.entries(abilities).map(([key, value]) => `${abilityLabels[key] ?? key} ${value}`).join(' · ') : '综合能力';
 }
@@ -188,10 +189,14 @@ const matrix = computed(() => {
             </tr>
           </tbody>
         </table>
-        <div class="row">
-          <button class="small" :disabled="!p.pitTraining.ok || store.busy" :title="p.pitTraining.blockers.join('；')" @click="act({ type: 'TRAIN_PIT_CREW' })">
-            维修组进站训练（${{ p.pitTraining.cost }}M · {{ p.pitTraining.weeks }} 周）
-          </button>
+        <div class="stack-s">
+          <div class="small muted">维修组专项训练（${{ p.pitTraining.cost }}M · {{ p.pitTraining.weeks }} 周）</div>
+          <div class="tiny muted">当前：速度 {{ p.team.pitCrewTraining?.speed ?? p.staff.find(s => s.role === 'pitCrew')?.skill }} · 稳定性 {{ p.team.pitCrewTraining?.consistency ?? p.staff.find(s => s.role === 'pitCrew')?.skill }} · 失误控制 {{ p.team.pitCrewTraining?.error_control ?? p.staff.find(s => s.role === 'pitCrew')?.skill }}</div>
+          <div class="row wrap">
+            <button v-for="focus in pitFocuses" :key="focus[0]" class="small" :disabled="!p.pitTraining.ok || store.busy" :title="focus[1]" @click="act({ type: 'TRAIN_PIT_CREW', focus: focus[0] })">
+              {{ focus[1] }}
+            </button>
+          </div>
         </div>
         <div class="stack-s">
           <div class="small">下赛季研发投入：<b class="mono">{{ focus }}%</b> <span class="tiny muted">（新赛季新车额外获得最多 +4 性能）</span></div>
