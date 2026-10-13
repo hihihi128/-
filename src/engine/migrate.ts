@@ -154,6 +154,13 @@ export function migrateState(state: GameState): GameState {
         const engineer = car.slot === 2 ? (team?.staff.raceEngineer2 ?? team?.staff.raceEngineer) : team?.staff.raceEngineer;
         car.raceEngineerReaction ??= engineer?.abilities?.reaction ?? engineer?.skill ?? 50;
         car.raceEngineerWeather ??= engineer?.abilities?.weather ?? engineer?.skill ?? 50;
+        car.iceHealth ??= 100;
+        car.electricalHealth ??= 100;
+        car.puTemperature ??= 78;
+        car.puStatus ??= 'normal';
+        car.ersPerformance ??= 1;
+        car.iceReliability ??= car.reliability;
+        car.electricalReliability ??= car.reliability;
       }
     }
   }

@@ -194,16 +194,16 @@ const strategyLore = [
   { id: 72, team: 'cadillac', slug: 'cadillac', name: '凯迪拉克策略组', strategist: '亚历克斯·古迪纳夫', keys: ['凯迪拉克策略组', '凯迪拉克策略团队', '亚历克斯·古迪纳夫'] },
 ];
 const staffLore = [
-  { id: 73, team: 'mercedes', slug: 'mercedes', name: '梅赛德斯技术与赛道核心组', keys: ['梅赛德斯核心组', '马库斯·达德利', '彼得·博宁顿', '博宁顿'] },
-  { id: 74, team: 'mclaren', slug: 'mclaren', name: '迈凯伦技术与赛道核心组', keys: ['迈凯伦核心组', '罗布·马歇尔', '彼得·普罗德罗穆', '威尔·约瑟夫', '汤姆·斯托拉德'] },
+  { id: 73, team: 'mercedes', slug: 'mercedes', name: '梅赛德斯技术与赛道核心组', keys: ['梅赛德斯核心组', '马库斯·达德利', '彼得·博宁顿', '博宁顿', '弗雷德里克·维斯蒂'] },
+  { id: 74, team: 'mclaren', slug: 'mclaren', name: '迈凯伦技术与赛道核心组', keys: ['迈凯伦核心组', '罗布·马歇尔', '彼得·普罗德罗穆', '威尔·约瑟夫', '汤姆·斯托拉德', '莱昂纳多·福纳罗利', '帕托·奥沃德'] },
   { id: 75, team: 'red_bull', slug: 'red-bull', name: '红牛技术与赛道核心组', keys: ['詹皮耶罗·兰比亚塞', '兰比亚塞', '理查德·伍德', '角田裕毅'] },
   { id: 76, team: 'ferrari', slug: 'ferrari', name: '法拉利技术与赛道核心组', keys: ['法拉利核心组', '洛伊克·塞拉', '迭戈·通迪', '恩里科·瓜尔蒂耶里', '马泰奥·托尼纳利', '卡洛·桑蒂', '布莱恩·博齐', '安东尼奥·乔维纳兹'] },
-  { id: 77, team: 'williams', slug: 'williams', name: '威廉姆斯技术与赛道核心组', keys: ['威廉姆斯核心组', '詹姆斯·厄文', '加埃唐·热戈'] },
+  { id: 77, team: 'williams', slug: 'williams', name: '威廉姆斯技术与赛道核心组', keys: ['威廉姆斯核心组', '詹姆斯·厄文', '加埃唐·热戈', '卢克·布朗宁'] },
   { id: 78, team: 'racing_bulls', slug: 'racing-bulls', name: '小红牛技术与赛道核心组', keys: ['小红牛核心组', '亚历山大·伊利奥普洛斯', '皮埃尔·哈梅林'] },
-  { id: 79, team: 'aston_martin', slug: 'aston-martin', name: '阿斯顿·马丁技术与赛道核心组', keys: ['阿斯顿·马丁核心组', '恩里科·卡尔迪莱', '克里斯·克罗宁', '加里·甘农'] },
-  { id: 80, team: 'haas', slug: 'haas', name: '哈斯技术与赛道核心组', keys: ['哈斯核心组', '安德烈亚·德佐尔多', '劳拉·穆勒', '罗南·奥黑尔', '杰克·杜汉'] },
+  { id: 79, team: 'aston_martin', slug: 'aston-martin', name: '阿斯顿·马丁技术与赛道核心组', keys: ['阿斯顿·马丁核心组', '恩里科·卡尔迪莱', '克里斯·克罗宁', '加里·甘农', '杰克·克劳福德'] },
+  { id: 80, team: 'haas', slug: 'haas', name: '哈斯技术与赛道核心组', keys: ['哈斯核心组', '安德烈亚·德佐尔多', '劳拉·穆勒', '罗南·奥黑尔', '杰克·杜汉', '平川亮'] },
   { id: 81, team: 'audi', slug: 'audi', name: '奥迪技术与赛道核心组', keys: ['奥迪核心组', '史蒂文·佩特里克', '何塞·曼努埃尔·洛佩斯'] },
-  { id: 82, team: 'alpine', slug: 'alpine', name: '阿尔派技术与赛道核心组', keys: ['阿尔派核心组', '乔什·佩克特', '斯图尔特·巴洛'] },
+  { id: 82, team: 'alpine', slug: 'alpine', name: '阿尔派技术与赛道核心组', keys: ['阿尔派核心组', '乔什·佩克特', '斯图尔特·巴洛', '保罗·阿隆'] },
   { id: 83, team: 'cadillac', slug: 'cadillac', name: '凯迪拉克技术与赛道核心组', keys: ['凯迪拉克核心组', '约翰·霍华德', '卡洛·帕塞蒂', '周冠宇'] },
 ];
 const book = {

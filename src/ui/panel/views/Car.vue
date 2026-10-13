@@ -58,7 +58,7 @@ function orderPreview(s: StockView) {
     <div v-if="locked" class="notice warn small">🔒 {{ locked }}</div>
     <div class="notice small">
       每台车独立装件。新研发的零件只有 1~2 件时，由你决定先给哪位车手——两台车差距达到 0.4 分以上时，吃亏的车手会在正赛前表达不满（自尊心越强越明显，若你已指定优先车手则影响减轻）。
-      动力单元按车手限量（如「1/4」）：换上本赛季没用过的规格或事故后换新件都会占用配额，超出后要罚退。
+      动力单元按车手限量（如「1/4」）：换上本赛季没用过的规格或事故后换新件都会占用配额，超出后要罚退。ICE/涡轮与 MGU-K/电池会累积实体磨损；更换规格会启用新件。
       <span v-if="p.allocationGap >= 0.4" class="badge warn">当前两车差距 {{ p.allocationGap }} 分</span>
     </div>
 
@@ -84,7 +84,7 @@ function orderPreview(s: StockView) {
                     class="badge"
                     :class="{ bad: puCell(car, pt.type)!.used > puCell(car, pt.type)!.limit, warn: puCell(car, pt.type)!.used === puCell(car, pt.type)!.limit }"
                     title="本赛季该车手已启用的件数 / 配额。换上没用过的规格或事故后换新件都会计数，超出配额要罚退"
-                    >{{ puCell(car, pt.type)!.used }}/{{ puCell(car, pt.type)!.limit }}</span
+                    >{{ puCell(car, pt.type)!.used }}/{{ puCell(car, pt.type)!.limit }} · 健康 {{ Math.round(puCell(car, pt.type)!.health) }}%</span
                   >
                 </td>
                 <td>

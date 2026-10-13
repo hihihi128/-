@@ -22,7 +22,7 @@ import { createGame, type NewGameOptions } from '../engine/newgame';
 import { migrateState } from '../engine/migrate';
 import { previewContractOffer } from '../engine/market';
 import { buildStatePrompt } from '../engine/prompt';
-import { applyAiCommands, describeLog, parseAiCommands } from '../engine/protocol';
+import { applyAiCommands, describeLog, parseAiCommands, stripAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
 import { applyRandomEventResolution, setRandomEventContent } from '../engine/randomEvents';
 import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
@@ -42,10 +42,9 @@ import {
 } from './negotiation';
 import {
   parseRandomEventContent,
-  parseRandomEventMainReply,
   parseRandomEventResolution,
   randomEventGenerationPrompt,
-  randomEventMainPrompt,
+  randomEventNarrationMessage,
   randomEventResolutionPrompt,
 } from './randomEventFlow';
 import { AI_PTR, GAME_PTR, PTR, SaveStore, type RevisionInfo } from './store';
@@ -82,6 +81,8 @@ export const MANAGED_LEADERSHIP_ENTRIES = [...new Set(Object.values(PLAYER_REPLA
 interface ProcessOptions {
   type?: string;
   force?: boolean;
+  /** Random-event narration is adjudicated by the secondary API, never by inline updates. */
+  ignoreCommands?: boolean;
   /** 来自 GENERATION_ENDED 的兜底结算 */
   fallback?: boolean;
 }
@@ -187,7 +188,18 @@ export interface NegotiationResult extends Outcome {
 
 export interface RandomEventResolutionResult extends Outcome {
   event: RandomEventRecord | null;
-  mainReply: { speaker: string; reply: string } | null;
+  mainReply: string | null;
+}
+
+interface PendingRandomEventNarration {
+  chatId: string;
+  gameId: string;
+  eventId: string;
+  answer: string;
+  phase: GameState['season']['phase'];
+  year: number;
+  roundIndex: number;
+  userFloor: number;
 }
 
 interface ActiveNegotiation extends NegotiationSessionView {
@@ -254,6 +266,7 @@ export class F1Controller {
   private busy = false;
   private leadershipSyncQueue: Promise<void> = Promise.resolve();
   private specialNegotiation: ActiveNegotiation | null = null;
+  private pendingRandomEventNarration: PendingRandomEventNarration | null = null;
   /** 「继续生成」开始时被续写楼层的原文（用于只结算新续写的部分） */
   private continuing: { floor: number; text: string } | null = null;
   private listeners = new Set<(reason: string) => void>();
@@ -267,6 +280,7 @@ export class F1Controller {
   init(): void {
     this.loadSettings();
     this.store.load();
+    this.recoverInterruptedRandomEvent();
     void this.syncLeadershipWorldbook();
     const e = this.env.events;
     this.env.on(e.MESSAGE_RECEIVED, (id: number, type?: string) => void this.onMessageReceived(Number(id), type));
@@ -727,7 +741,7 @@ export class F1Controller {
   }
 
   async resolveRandomEvent(request: { eventId: unknown; answer: unknown; expectedRevisionId: unknown }): Promise<RandomEventResolutionResult> {
-    const fail = (message: string, mainReply: { speaker: string; reply: string } | null = null): RandomEventResolutionResult => ({
+    const fail = (message: string, mainReply: string | null = null): RandomEventResolutionResult => ({
       ok: false,
       message,
       event: this.stateAt()?.randomEvents?.current ?? null,
@@ -743,47 +757,114 @@ export class F1Controller {
     const event = current?.state.randomEvents?.current;
     if (!current || current.rev.id !== request.expectedRevisionId) return fail('存档版本已经变化，请刷新事件后重试');
     if (!event || event.id !== request.eventId || event.status !== 'awaiting_player') return fail('随机事件已经变化或完成');
-    const guard = {
-      chatId: this.env.chatId(), floor, gameId: current.state.gameId, revisionId: current.rev.id, revisionData: current.rev.data,
-      phase: current.state.season.phase, year: current.state.season.year, roundIndex: current.state.season.roundIndex, eventId: event.id,
-    };
-    const contextCurrent = () => {
-      const latestFloor = this.latestFloor();
-      const latest = this.store.resolve(latestFloor);
-      const latestEvent = latest?.state.randomEvents?.current;
-      return this.env.chatId() === guard.chatId && latestFloor === guard.floor && latest?.state.gameId === guard.gameId && latest.rev.id === guard.revisionId && latest.rev.data === guard.revisionData && latest.state.season.phase === guard.phase && latest.state.season.year === guard.year && latest.state.season.roundIndex === guard.roundIndex && latestEvent?.id === guard.eventId && latestEvent.status === 'awaiting_player' ? latest : null;
-    };
     const answer = request.answer.trim();
     this.busy = true;
-    let mainReply: { speaker: string; reply: string } | null = null;
     try {
-      const mainRaw = await withTimeout(this.env.generateText(randomEventMainPrompt(current.state, event, answer)), 60_000, '主 API 事件回复超时');
-      if (new TextEncoder().encode(mainRaw).byteLength > 16 * 1024) return fail('主 API 事件回复超过 16 KiB');
-      mainReply = parseRandomEventMainReply(mainRaw);
-      if (this.env.isGenerating() || !contextCurrent()) return fail('等待主 API 时存档或聊天已经变化，结果已安全丢弃', mainReply);
+      const next = deepClone(current.state);
+      const nextEvent = next.randomEvents?.current;
+      if (!nextEvent || nextEvent.id !== event.id) return fail('随机事件已经变化');
+      nextEvent.status = 'awaiting_narration';
+      nextEvent.playerAnswer = answer;
+      nextEvent.mainReply = null;
+      nextEvent.generationError = null;
+      this.store.commit(next, { floor: Math.max(0, floor), kind: 'ui', label: `${event.title}：等待主 API 剧情叙述` });
+      const pending: PendingRandomEventNarration = {
+        chatId: this.env.chatId(), gameId: current.state.gameId, eventId: event.id, answer,
+        phase: current.state.season.phase, year: current.state.season.year, roundIndex: current.state.season.roundIndex,
+        userFloor: -1,
+      };
+      this.pendingRandomEventNarration = pending;
+      await this.env.createUserMessage(randomEventNarrationMessage(current.state, event, answer));
+      pending.userFloor = this.latestFloor();
+      if (pending.userFloor <= floor) throw new Error('主 API 事件叙述消息未写入正常聊天');
+      await this.env.triggerGeneration();
+      this.notify('random_event');
+      return { ok: true, message: '已发送处理方案；主 API 正在正常聊天中叙述事件，完成后将自动交给副 API 判定。', event: this.stateAt()?.randomEvents?.current ?? null, mainReply: null };
+    } catch (error) {
+      if (this.pendingRandomEventNarration?.eventId === event.id) this.pendingRandomEventNarration = null;
+      this.restoreRandomEventForRetry(event.id, error instanceof Error ? error.message : '主 API 事件叙述请求失败');
+      return fail(error instanceof Error ? error.message : '随机事件处理失败');
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private restoreRandomEventForRetry(eventId: string, error: string, mainReply: string | null = null): void {
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    const event = current?.state.randomEvents?.current;
+    if (!current || !event || event.id !== eventId || event.status !== 'awaiting_narration') return;
+    const next = deepClone(current.state);
+    const nextEvent = next.randomEvents!.current!;
+    nextEvent.status = 'awaiting_player';
+    nextEvent.playerAnswer = null;
+    nextEvent.mainReply = mainReply;
+    nextEvent.generationError = error;
+    this.store.commit(next, { floor: Math.max(0, floor), kind: 'ui', label: `${event.title}：叙述或判定失败，可重试` });
+    this.notify('random_event');
+  }
+
+  private recoverInterruptedRandomEvent(): void {
+    const event = this.stateAt()?.randomEvents?.current;
+    if (event?.status === 'awaiting_narration') {
+      this.restoreRandomEventForRetry(event.id, '上次主 API 聊天叙述被中断，请重新提交处理方案。', event.mainReply);
+    }
+  }
+
+  private randomEventNarrationCurrent(pending: PendingRandomEventNarration, assistantFloor: number): { state: GameState; event: RandomEventRecord } | null {
+    if (this.env.chatId() !== pending.chatId || this.latestFloor() !== assistantFloor || assistantFloor !== pending.userFloor + 1) return null;
+    const current = this.store.resolve(assistantFloor);
+    const event = current?.state.randomEvents?.current;
+    if (!current || !event || event.id !== pending.eventId || event.status !== 'awaiting_narration') return null;
+    if (current.state.gameId !== pending.gameId || current.state.season.phase !== pending.phase || current.state.season.year !== pending.year || current.state.season.roundIndex !== pending.roundIndex) return null;
+    return { state: current.state, event };
+  }
+
+  private async settleRandomEventNarration(id: number): Promise<void> {
+    const pending = this.pendingRandomEventNarration;
+    if (!pending) return;
+    const current = this.randomEventNarrationCurrent(pending, id);
+    if (!current) {
+      this.pendingRandomEventNarration = null;
+      if (this.env.chatId() === pending.chatId) {
+        this.restoreRandomEventForRetry(pending.eventId, '等待主 API 剧情时聊天或存档已变化；旧消息已安全丢弃，请重新提交。');
+      }
+      return;
+    }
+    const msg = this.env.getMessage(id);
+    const mainReply = stripAiCommands(stripHud(msg?.message ?? '')).trim();
+    if (!mainReply) {
+      this.pendingRandomEventNarration = null;
+      this.restoreRandomEventForRetry(pending.eventId, '主 API 没有返回可供判定的剧情叙述');
+      return;
+    }
+    if (new TextEncoder().encode(mainReply).byteLength > 16 * 1024) {
+      this.pendingRandomEventNarration = null;
+      this.restoreRandomEventForRetry(pending.eventId, '主 API 事件叙述超过 16 KiB', mainReply);
+      return;
+    }
+    try {
       const resolutionRaw = await withTimeout(
-        this.env.generateText(randomEventResolutionPrompt(current.state, event, answer, mainReply), this.secondaryApiOptions()),
+        this.env.generateText(randomEventResolutionPrompt(current.state, current.event, pending.answer, mainReply), this.secondaryApiOptions()),
         60_000,
         '副 API 事件判定超时',
       );
-      if (new TextEncoder().encode(resolutionRaw).byteLength > 16 * 1024) return fail('副 API 事件判定超过 16 KiB', mainReply);
-      const resolution = parseRandomEventResolution(resolutionRaw, event.id);
-      const latest = contextCurrent();
-      if (this.env.isGenerating() || !latest) return fail('等待副 API 时存档或聊天已经变化，结果已安全丢弃', mainReply);
+      if (new TextEncoder().encode(resolutionRaw).byteLength > 16 * 1024) throw new Error('副 API 事件判定超过 16 KiB');
+      const resolution = parseRandomEventResolution(resolutionRaw, pending.eventId);
+      const latest = this.randomEventNarrationCurrent(pending, id);
+      if (!latest) return;
       const next = deepClone(latest.state);
       const nextEvent = next.randomEvents?.current;
-      if (!nextEvent || nextEvent.id !== event.id) return fail('随机事件已经变化', mainReply);
-      nextEvent.playerAnswer = answer;
-      nextEvent.mainReply = `${mainReply.speaker}：${mainReply.reply}`;
-      const applied = applyRandomEventResolution(next, event.id, resolution.outcome, resolution.summary, resolution.effects);
-      if (!applied.ok) return fail(applied.message, mainReply);
-      this.store.commit(next, { floor: Math.max(0, floor), kind: 'ui', label: `${event.title}：${resolution.outcome === 'resolved' ? '已解决' : '未解决'}` });
+      if (!nextEvent || nextEvent.id !== pending.eventId) return;
+      nextEvent.mainReply = mainReply;
+      const applied = applyRandomEventResolution(next, pending.eventId, resolution.outcome, resolution.summary, resolution.effects);
+      if (!applied.ok) throw new Error(applied.message);
+      this.store.commit(next, { floor: Math.max(0, id), kind: 'ui', label: `${current.event.title}：${resolution.outcome === 'resolved' ? '已解决' : '未解决'}` });
       this.notify('random_event');
-      return { ok: true, message: applied.message, event: next.randomEvents?.current ?? null, mainReply };
     } catch (error) {
-      return fail(error instanceof Error ? error.message : '随机事件处理失败', mainReply);
+      this.restoreRandomEventForRetry(pending.eventId, error instanceof Error ? error.message : '副 API 事件判定失败', mainReply);
     } finally {
-      this.busy = false;
+      if (this.pendingRandomEventNarration === pending) this.pendingRandomEventNarration = null;
     }
   }
 
@@ -1249,6 +1330,8 @@ export class F1Controller {
     this.data = null;
     this.continuing = null;
     this.specialNegotiation = null;
+    this.pendingRandomEventNarration = null;
+    this.recoverInterruptedRandomEvent();
     this.env.uninject(INJECT_ID);
     void this.syncLeadershipWorldbook();
     this.notify('chat_changed');
@@ -1278,12 +1361,13 @@ export class F1Controller {
   async onGenerationEnded(): Promise<void> {
     const last = this.latestFloor();
     const msg = this.env.getMessage(last);
-    if (msg?.role === 'assistant') await this.processAssistantMessage(last, { fallback: true });
+    if (msg?.role === 'assistant') await this.processAssistantMessage(last, { fallback: true, ignoreCommands: this.isPendingRandomEventNarrationMessage(last) });
   }
 
   async onMessageReceived(id: number, type?: string): Promise<void> {
     if (type === 'impersonate' || type === 'quiet' || type === 'first_message') return;
-    await this.processAssistantMessage(id, { type });
+    await this.processAssistantMessage(id, { type, ignoreCommands: this.isPendingRandomEventNarrationMessage(id) });
+    await this.settleRandomEventNarration(id);
   }
 
   async onMessageEdited(id: number): Promise<void> {
@@ -1293,6 +1377,11 @@ export class F1Controller {
   }
 
   private processing = new Set<number>();
+
+  private isPendingRandomEventNarrationMessage(id: number): boolean {
+    const pending = this.pendingRandomEventNarration;
+    return !!pending && !!this.randomEventNarrationCurrent(pending, id);
+  }
 
   /** 解析并结算一条 AI 回复（幂等：同样的文本不会重复结算） */
   async processAssistantMessage(id: number, opts: ProcessOptions): Promise<void> {
@@ -1352,7 +1441,7 @@ export class F1Controller {
       await this.ensureHud(id, text);
       return;
     }
-    const { commands, errors } = parseAiCommands(text);
+    const { commands, errors } = parseAiCommands(opts.ignoreCommands ? stripAiCommands(text) : text);
     const next = base.state;
     const logs = applyAiCommands(next, commands, { messageId: id });
     const narrated = takeNarration(next);

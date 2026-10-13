@@ -96,6 +96,41 @@ describe('确定性合同市场', () => {
     expect(renewal.state.market!.freeStaff[freeStaffId]).toBeUndefined();
   });
 
+  it('applies one bounded staff-morale penalty with news and narration when a replacement activates', () => {
+    const state = newTestGame();
+    state.teams.team_c.funds = 1_000_000;
+    const window = state.market!.window!;
+    const before = state.teams.team_c.staffMorale;
+    const offered = dispatch(state, {
+      type: 'OFFER_STAFF_CONTRACT', windowId: window.id, marketRevision: state.market!.revision,
+      candidateId: 'fictional-technicalDirector-1', role: 'technicalDirector', annualSalary: 100, years: 2,
+    });
+    expect(offered.ok).toBe(true);
+    offered.state.market!.window!.aiResolved = true;
+    expect(closeMarket(offered.state).ok).toBe(true);
+    expect(offered.state.teams.team_c.staffMorale).toBe(before - 2);
+    expect(offered.state.news.some(n => n.tag === '人员变动' && n.text.includes('员工士气下降 2 点'))).toBe(true);
+    expect(offered.state.narration.some(n => n.kind === 'market_personnel_morale' && n.detail.includes('员工士气下降 2 点'))).toBe(true);
+
+    // A closed market is idempotent: the activation penalty and its news fire once.
+    expect(closeMarket(offered.state).ok).toBe(true);
+    expect(offered.state.teams.team_c.staffMorale).toBe(before - 2);
+    expect(offered.state.news.filter(n => n.tag === '人员变动' && n.text.includes('员工士气下降 2 点'))).toHaveLength(1);
+  });
+
+  it('reduces morale for both teams when a projected transfer changes personnel', () => {
+    const state = newTestGame();
+    const window = state.market!.window!;
+    const aDriver = state.teams.team_a.cars[0].driverId!;
+    const cDriver = state.teams.team_c.cars[0].driverId!;
+    window.projectedRosters.team_a.raceSeats['1'] = cDriver;
+    window.projectedRosters.team_c.raceSeats['1'] = aDriver;
+    window.aiResolved = true;
+    expect(closeMarket(state).ok).toBe(true);
+    expect(state.teams.team_a.staffMorale).toBe(63);
+    expect(state.teams.team_c.staffMorale).toBe(63);
+  });
+
   it('migrates market rules on modern saves and does not mutate views', () => {
     const state = newTestGame();
     delete (state.rules as Partial<typeof state.rules>).market;

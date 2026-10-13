@@ -215,6 +215,15 @@ function finalizeLiveRace(state: GameState, rng: Rng): Outcome {
   const live = state.weekend?.liveRace;
   const completed = live && finishRaceSession(state, live);
   if (!live || !completed) return fail('比赛尚未完成');
+  for (const liveCar of Object.values(live.cars)) {
+    const car = state.teams[liveCar.teamId]?.cars.find(candidate => candidate.slot === liveCar.slot);
+    if (!car) continue;
+    car.puWear ??= {};
+    const iceSpecId = car.fitted.power_unit;
+    const ersSpecId = car.fitted.ers;
+    if (iceSpecId) car.puWear.power_unit = { specId: iceSpecId, wear: Math.max(0, 100 - (liveCar.iceHealth ?? 100)) };
+    if (ersSpecId) car.puWear.ers = { specId: ersSpecId, wear: Math.max(0, 100 - (liveCar.electricalHealth ?? 100)) };
+  }
   const { result, extras } = completed;
   applyRaceOutcome(state, result, extras, live.expectedPositions, rng);
   if (result.kind === 'race') { state.weekend!.race = result; state.weekend!.parcFerme = false; state.season.phase = 'post_race'; }

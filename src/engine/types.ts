@@ -436,6 +436,10 @@ export interface StaffMember {
   contractStart?: number;
   contractEnd?: number;
   preference?: CandidatePreference;
+  /** 候选人的主要外部赛事/项目；空值表示未特别标注。 */
+  series?: string;
+  /** 候选人简介，供人员市场展示。 */
+  description?: string;
 }
 
 export interface CandidatePreference {
@@ -495,6 +499,8 @@ export interface DriverDef {
   contractEnd: number;
   preference?: CandidatePreference;
   traits: string[];
+  /** 主要外部赛事/项目；F1 车手通常留空。 */
+  series?: string;
   description: string;
 }
 
@@ -547,6 +553,8 @@ export interface CarState {
   driverId: string | null;
   /** 当前装车：零件类型 → specId */
   fitted: Record<PartType, string>;
+  /** 动力单元实体磨损；更换为不同规格时从新件开始。旧存档没有该字段。 */
+  puWear?: Partial<Record<'power_unit' | 'ers', { specId: string; wear: number }>>;
 }
 
 export type ProjectKind = 'design' | 'manufacture' | 'facility' | 'pit_training' | 'driver_training';
@@ -655,6 +663,7 @@ export interface DriverState {
   contractEnd: number;
   preference?: CandidatePreference;
   traits: string[];
+  series?: string;
   description: string;
   stats: DriverStats;
   /** 本赛季已启用的动力单元元件数（键 = 零件类型；旧存档没有该字段） */
@@ -894,6 +903,14 @@ export interface LiveRaceCar {
   repairPending: boolean;
   energy: number;
   energyMode: EnergyMode;
+  /** 2026 动力单元实时状态。健康度与温度均为简化管理指标。 */
+  iceHealth?: number;
+  electricalHealth?: number;
+  puTemperature?: number;
+  puStatus?: 'normal' | 'hot' | 'protect' | 'critical';
+  ersPerformance?: number;
+  iceReliability?: number;
+  electricalReliability?: number;
   pendingPit: 'auto' | 'stay_out' | 'box' | null;
   /** Choice is staged until a real pit stop; never changes track position tyre instantly. */
   pendingCompound: Compound | null;
@@ -1186,7 +1203,7 @@ export interface WilliamsState {
 }
 
 export type RandomEventKind = 'none' | 'driver_injury' | 'wind_tunnel_data' | 'part_issue';
-export type RandomEventStatus = 'none' | 'pending_generation' | 'awaiting_player' | 'resolved' | 'unresolved';
+export type RandomEventStatus = 'none' | 'pending_generation' | 'awaiting_player' | 'awaiting_narration' | 'resolved' | 'unresolved';
 export type RandomEventEffectOp = 'driver_fitness' | 'driver_morale' | 'funds' | 'project_weeks' | 'part_reliability' | 'staff_skill' | 'aero_hours';
 export interface RandomEventEffect {
   op: RandomEventEffectOp;

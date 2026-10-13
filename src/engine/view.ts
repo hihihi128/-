@@ -123,7 +123,7 @@ export interface DriverView {
   isPriority: boolean;
   slot: number | null;
   /** 动力单元配额：已用 / 上限（只列出 rules.puAllocation 中的零件） */
-  pu: Array<{ type: string; name: string; used: number; limit: number }>;
+  pu: Array<{ type: string; name: string; used: number; limit: number; health: number }>;
 }
 
 export interface FerrariView {
@@ -217,7 +217,7 @@ export interface LiveRaceView {
   restart: 'standing' | 'rolling' | null;
   weather: { rain: number; surface: 'dry' | 'damp' | 'wet'; forecast: import('./types').RaceForecast };
   timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; pits: number }>;
-  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
+  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; iceHealth: number; electricalHealth: number; puTemperature: number; puStatus: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
   events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; driverNames: string[]; key: boolean }>;
   pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number } | null;
   teamOrders: import('./types').TeamOrders;
@@ -255,8 +255,8 @@ export interface MarketView {
   closeBlockers: string[];
   current: { raceSeats: Record<string, string | null>; reserveIds: string[]; staff: Record<string, string | null> } | null;
   projected: { raceSeats: Record<string, string | null>; reserveIds: string[]; staff: Record<string, string | null> } | null;
-  drivers: Array<{ id: string; name: string; teamId: string | null; role: string; overall: number; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null; acceptsReserve: boolean } }>;
-  staff: Array<{ id: string; name: string; role: string; teamId: string | null; skill: number; abilities?: import('./types').StaffMember['abilities']; salary: number; contractEnd: number; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null } }>;
+  drivers: Array<{ id: string; name: string; teamId: string | null; role: string; overall: number; salary: number; contractEnd: number; series?: string; description: string; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null; acceptsReserve: boolean } }>;
+  staff: Array<{ id: string; name: string; role: string; teamId: string | null; skill: number; abilities?: import('./types').StaffMember['abilities']; salary: number; contractEnd: number; series?: string; description?: string; preference: { askingSalary: number; preferredYears: number; desiredStrength: number; preferredTeamId: string | null } }>;
   agreements: Array<{ personId: string; toTeamId: string; role: string; annualSalary: number; endYear: number }>;
 }
 
@@ -396,6 +396,9 @@ function driverView(state: GameState, d: DriverState, positions: Map<string, num
       name: state.rules.parts[type]?.name ?? type,
       used: d.puUsed?.[type] ?? 1,
       limit,
+      health: type === 'power_unit' || type === 'ers'
+        ? Math.max(0, 100 - (car && car.puWear?.[type]?.specId === car.fitted[type] ? car.puWear[type]!.wear : 0))
+        : 100,
     })),
   };
 }
@@ -479,14 +482,14 @@ function marketView(state: GameState): MarketView {
     projected: window ? { ...window.projectedRosters[playerId], raceSeats: { ...window.projectedRosters[playerId].raceSeats }, reserveIds: [...window.projectedRosters[playerId].reserveIds], staff: { ...window.projectedRosters[playerId].staff } } : null,
     drivers: Object.values(state.drivers).map(d => {
       const p = profile(window?.candidateProfiles[d.id] ?? d.preference, d.salary, d.id);
-      return { id: d.id, name: d.name, teamId: d.teamId, role: d.role, overall: driverOverall(d), salary: d.salary, contractEnd: d.contractEnd, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId, acceptsReserve: !!p.acceptsReserve } };
+      return { id: d.id, name: d.name, teamId: d.teamId, role: d.role, overall: driverOverall(d), salary: d.salary, contractEnd: d.contractEnd, series: d.series, description: d.description, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId, acceptsReserve: !!p.acceptsReserve } };
     }),
     staff: [
       ...Object.entries(state.teams).flatMap(([teamId, team]) => Object.values(team.staff).map(s => ({ ...s, teamId }))),
       ...Object.values(market.freeStaff).map(s => ({ ...s, teamId: null })),
     ].map(s => {
       const p = profile(window?.candidateProfiles[s.id!] ?? s.preference, s.salary, s.id!);
-      return { id: s.id!, name: s.name || s.id!, role: s.role ?? '', teamId: s.teamId, skill: s.skill, abilities: s.abilities ? { ...s.abilities } : undefined, salary: s.salary, contractEnd: s.contractEnd ?? 0, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId } };
+      return { id: s.id!, name: s.name || s.id!, role: s.role ?? '', teamId: s.teamId, skill: s.skill, abilities: s.abilities ? { ...s.abilities } : undefined, salary: s.salary, contractEnd: s.contractEnd ?? 0, series: s.series, description: s.description, preference: { askingSalary: p.askingSalary, preferredYears: p.preferredYears, desiredStrength: p.desiredStrength, preferredTeamId: p.preferredTeamId } };
     }),
     agreements: (window?.agreements ?? []).filter(a => a.toTeamId === playerId || a.fromTeamId === playerId).map(a => ({ personId: a.personId, toTeamId: a.toTeamId, role: a.driverRole ?? a.staffRole ?? '', annualSalary: a.annualSalary, endYear: a.endYear })),
   };
@@ -777,7 +780,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
           raceControl: live.redFlag?.active ? 'red_flag' : live.scLeft > 0 ? 'sc' : live.vscLeft > 0 ? 'vsc' : null,
           restart: live.redFlag?.restartPending ? live.redFlag.restart : null,
           weather: { rain: live.rain, surface: live.surface, forecast: live.forecast }, timing,
-          playerCars: Object.values(live.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, tyreState: state.teams[c.teamId]?.tyreInventory?.[c.driverId]?.find(set => set.id === c.tyreSetId)?.state ?? 'used', damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming, predictedStationary: predictedStationaryTime(state.teams[c.teamId], c.repairPending), lastPit: c.pitStops?.at(-1) ?? null })),
+          playerCars: Object.values(live.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, tyreState: state.teams[c.teamId]?.tyreInventory?.[c.driverId]?.find(set => set.id === c.tyreSetId)?.state ?? 'used', damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming, iceHealth: c.iceHealth ?? 100, electricalHealth: c.electricalHealth ?? 100, puTemperature: c.puTemperature ?? 78, puStatus: c.puStatus ?? 'normal', predictedStationary: predictedStationaryTime(state.teams[c.teamId], c.repairPending), lastPit: c.pitStops?.at(-1) ?? null })),
           events: live.events.slice(-20).map(event => {
             const names = event.drivers.map(id => state.drivers[id]?.short ?? state.drivers[id]?.name ?? id);
             let text = event.text;

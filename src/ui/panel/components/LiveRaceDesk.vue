@@ -93,7 +93,7 @@ async function autoFinish() {
             <div v-for="car in [carById.get(d.id)!]" :key="d.id" class="telemetry">
               <div><span class="tiny muted">轮胎</span><b><Tyre :c="car.tyre" /> {{ car.tyreAge }} 圈 · {{ car.tyreState === 'new' ? '新胎' : '已用' }}</b></div>
               <div><span class="tiny muted">能量</span><b class="mono">{{ Math.round(car.energy) }}%</b><i class="energy"><i :style="{ width: `${car.energy}%` }"></i></i></div>
-              <div><span class="tiny muted">赛车状态</span><b :class="car.damage || car.partial ? 'neg' : 'pos'">{{ car.damage ? '前翼受损' : car.partial ? '机械异常' : '正常' }}</b></div>
+              <div><span class="tiny muted">动力单元</span><b :class="car.puStatus === 'protect' || car.puStatus === 'critical' ? 'neg' : car.puStatus === 'hot' ? 'warn' : 'pos'">{{ car.puStatus === 'critical' ? '临界降额' : car.puStatus === 'protect' ? '保护模式' : car.puStatus === 'hot' ? '温度偏高' : '正常' }} · {{ Math.round(car.puTemperature) }}°C</b><span class="tiny muted">ICE {{ Math.round(car.iceHealth) }}% · 电气 {{ Math.round(car.electricalHealth) }}%</span></div>
               <div><span class="tiny muted">进站静止</span><b class="mono">预计 {{ car.predictedStationary.toFixed(1) }}s<span v-if="car.lastPit"> · 实际 {{ car.lastPit.actualStationary.toFixed(1) }}s</span></b></div>
             </div>
             <div class="tactic-fields">

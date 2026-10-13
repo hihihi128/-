@@ -129,6 +129,18 @@ function ersFactor(team: TeamState, car: CarState, rules: GameState['rules']): n
   return Math.min(1.4, Math.max(0.6, perf / 75));
 }
 
+function puWear(car: CarState, type: 'power_unit' | 'ers', specId: string | undefined): number {
+  const stored = car.puWear?.[type];
+  return stored && stored.specId === specId ? clamp(stored.wear, 0, 85) : 0;
+}
+
+function puStatus(temperature: number): NonNullable<LiveRaceCar['puStatus']> {
+  if (temperature >= 113) return 'critical';
+  if (temperature >= 106) return 'protect';
+  if (temperature >= 98) return 'hot';
+  return 'normal';
+}
+
 /** 每场的机械故障概率（rel=85 约 4%，rel=70 约 10%） */
 function raceFailProb(rel: number): number {
   return 0.49 * Math.pow(Math.max(0.01, 1 - rel / 100), 1.32);
@@ -708,6 +720,8 @@ export function createRaceSession(
           ? [...plan.tyrePlan]
           : [rules.dryCompounds[1] ?? rules.dryCompounds[0], rules.dryCompounds[0]];
     const factor = degFactor(track, { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge });
+    const iceSpec = fittedSpec(entry.team, entry.car, 'power_unit');
+    const ersSpec = fittedSpec(entry.team, entry.car, 'ers');
     ensureDriverWeekendTyres(state, entry.team, id);
     const startingSet = takeTyreSet(entry.team, id, compounds[0], weekendTyreKey(state));
     cars[id] = {
@@ -719,7 +733,11 @@ export function createRaceSession(
       raceEngineerWeather: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'weather'),
       plan, tyre: compounds[0], tyreAge: startingSet?.laps ?? 0, tyreSetId: startingSet?.id, usedCompounds: [compounds[0]], plannedCompounds: compounds,
       stints: optimizeStints(rules, track, compounds, totalLaps, factor), stintIndex: 0, pits: 0, pitStops: [], cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
-      damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced', pendingPit: null, pendingCompound: null, stayOutUntilLap: 0,
+      damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced',
+      iceHealth: 100 - puWear(entry.car, 'power_unit', iceSpec?.id), electricalHealth: 100 - puWear(entry.car, 'ers', ersSpec?.id),
+      puTemperature: 78, puStatus: 'normal', ersPerformance: ersFactor(entry.team, entry.car, rules),
+      iceReliability: iceSpec?.rel ?? ratings.reliability, electricalReliability: ersSpec?.rel ?? ratings.reliability,
+      pendingPit: null, pendingCompound: null, stayOutUntilLap: 0,
       engineerLightRainAssessed: false, engineerWetAssessed: false, engineerWeatherSpell: 0, engineerTyreOverride: null, engineerTyreOverrideUntilLap: 0,
       neutralStopTaken: false,
     };
@@ -921,9 +939,29 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     for (const car of field) {
       const wet = session.wetness > 0.3;
       const base = track.baseLap * (1 + session.wetness * 0.12) + (100 - car.score) * rules.secPerCarPoint + (100 - (wet ? (car.skill + car.wetSkill) / 2 : car.skill)) * rules.secPerDriverPoint - car.setupBonus;
-      const energyDelta = car.energyMode === 'harvest' ? 8 : car.energyMode === 'deploy' ? -10 : 2;
+      const oldPuStatus = car.puStatus ?? 'normal';
+      const ersPerformance = car.ersPerformance ?? 1;
+      const electricalHealth = car.electricalHealth ?? 100;
+      const cooling = scActive || vscActive ? 5 : session.wetness > .3 ? 2.8 : 1.5;
+      const heatGain = car.energyMode === 'deploy' ? 5.2 : car.energyMode === 'harvest' ? -2.8 : .4;
+      car.puTemperature = clamp((car.puTemperature ?? 78) + heatGain + (car.plan.paceMode === 'push' ? 1.2 : car.plan.paceMode === 'conserve' ? -.8 : 0) - cooling, 55, 122);
+      car.puStatus = puStatus(car.puTemperature);
+      const heatLimit = car.puStatus === 'critical' ? .38 : car.puStatus === 'protect' ? .62 : car.puStatus === 'hot' ? .86 : 1;
+      const healthLimit = clamp(electricalHealth / 70, .45, 1);
+      const recovery = (car.energyMode === 'harvest' ? 7.5 : 2) * ersPerformance * healthLimit * (session.wetness > .3 ? .85 : 1);
+      const energyDelta = car.energyMode === 'deploy' ? -11 : recovery;
       car.energy = Math.max(0, Math.min(100, car.energy + energyDelta));
-      const energyTime = car.energyMode === 'harvest' ? 0.28 : car.energyMode === 'deploy' && car.energy > 0 ? -0.28 : 0;
+      const deployStrength = ersPerformance * healthLimit * heatLimit * clamp(car.energy / 30, .25, 1);
+      const energyTime = car.energyMode === 'harvest' ? .22 + .08 / Math.max(.6, ersPerformance) : car.energyMode === 'deploy' && car.energy > 0 ? -.3 * deployStrength : 0;
+      const iceWear = .012 + Math.max(0, 88 - (car.iceReliability ?? car.reliability)) * .0012 + (car.plan.paceMode === 'push' ? .012 : 0) + Math.max(0, car.puTemperature - 102) * .003;
+      const electricalWear = .014 + Math.max(0, 88 - (car.electricalReliability ?? car.reliability)) * .0014 + (car.energyMode === 'deploy' ? .018 : 0) + Math.max(0, car.puTemperature - 102) * .004;
+      car.iceHealth = clamp((car.iceHealth ?? 100) - iceWear, 0, 100);
+      car.electricalHealth = clamp((car.electricalHealth ?? 100) - electricalWear, 0, 100);
+      if ((car.puStatus === 'protect' || car.puStatus === 'critical') && oldPuStatus !== 'protect' && oldPuStatus !== 'critical') {
+        incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 的动力单元温度过高，进入保护模式`, [car.driverId], car.player));
+      } else if (car.puStatus === 'normal' && oldPuStatus !== 'normal') {
+        liveEvent(session, lap, 'damage', `${car.driverId} 的动力单元温度恢复正常`, [car.driverId], car.player);
+      }
       const paceWear = car.plan.paceMode === 'push' ? 1.15 : car.plan.paceMode === 'conserve' ? .88 : 1;
       // Fuel burn preserves the legacy early-race weight penalty; ERS deployment
       // remains useful for pace and overtaking but becomes weaker when depleted.
@@ -950,7 +988,8 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       if (!scActive && !vscActive && !session.redFlag?.active) {
         const paceRisk = car.plan.paceMode === 'push' ? 1.4 : car.plan.paceMode === 'conserve' ? .8 : 1;
         const energyRisk = car.energyMode === 'deploy' && car.energy < 15 ? 1.35 : car.energyMode === 'deploy' ? 1.12 : 1;
-        const pFail = raceFailProb(car.reliability) / session.totalLaps * paceRisk * energyRisk;
+        const puRisk = 1 + Math.max(0, 55 - Math.min(car.iceHealth ?? 100, car.electricalHealth ?? 100)) / 35 + (car.puStatus === 'critical' ? 1.4 : car.puStatus === 'protect' ? .45 : 0);
+        const pFail = raceFailProb(car.reliability) / session.totalLaps * paceRisk * energyRisk * puRisk;
         const pCrash = (.02 + (100 - car.consistency) / 100 * .06) * (1 + session.wetness) / session.totalLaps * paceRisk * energyRisk * redBullCrashMultiplier(state, car.teamId);
         const special = session.specialIncidents?.find(incident => !incident.handled && incident.driverId === car.driverId && incident.lap <= lap);
         if (special) {
@@ -976,8 +1015,9 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
             incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 的动力单元进入保护模式`, [car.driverId], true));
           }
         } else if (rng.chance(pFail)) {
-          if (rng.chance(.35) && car.partial === 0) { car.partial = rng.range(.6, 1.2); incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 赛车出现动力问题`, [car.driverId], car.player)); }
-          else { car.status = 'dnf'; car.reason = '机械故障'; incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因机械故障退赛`, [car.driverId], true)); }
+          const electrical = (car.electricalHealth ?? 100) < (car.iceHealth ?? 100);
+          if (rng.chance(.35) && car.partial === 0) { car.partial = rng.range(.6, 1.2); incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 的${electrical ? 'MGU-K 与电池系统' : '内燃机与涡轮'}进入保护模式`, [car.driverId], car.player)); }
+          else { car.status = 'dnf'; car.reason = electrical ? '高压电池或控制电子故障' : '内燃机或涡轮故障'; incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因${car.reason}退赛`, [car.driverId], true)); }
         } else if (rng.chance(pCrash * (lap === 1 ? 4 : 1))) {
           const dnf = rng.chance(.45);
           const incidentId = `${session.id}:i${session.damageLedger.length + 1}`;
@@ -1006,7 +1046,8 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       const ahead = passers[i - 1], behind = passers[i];
       const gap = behind.cumulativeTime - ahead.cumulativeTime;
       const heldTeammates = session.teamOrders.mode === 'hold' && ahead.player && behind.player && ahead.teamId === behind.teamId;
-      const ersAdvantage = behind.energyMode === 'deploy' && behind.energy > 5 ? .025 : behind.energyMode === 'harvest' ? -.01 : 0;
+      const deployQuality = (behind.ersPerformance ?? 1) * clamp((behind.electricalHealth ?? 100) / 70, .45, 1) * ((behind.puStatus === 'protect' || behind.puStatus === 'critical') ? .55 : behind.puStatus === 'hot' ? .85 : 1);
+      const ersAdvantage = behind.energyMode === 'deploy' && behind.energy > 5 ? .025 * deployQuality : behind.energyMode === 'harvest' ? -.01 : 0;
       const probability = Math.max(0, rules.overtakeModeBonus) * .03 + ersAdvantage + (behind.racecraft - ahead.racecraft) * .0015 + (behind.score - ahead.score) * .0008;
       if (heldTeammates || gap > rules.overtakeModeGap || !rng.chance(clamp(probability, .005, .22))) continue;
       if (behind.energyMode === 'deploy') behind.energy = Math.max(0, behind.energy - 5);

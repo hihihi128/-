@@ -208,7 +208,7 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(specialCtrl.stateAt()!.mercedes?.lastActionRound).toBeNull();
   });
 
-  it('随机事件由副 API 出题、主 API 回应，再由副 API 白名单结算', async () => {
+  it('随机事件通过正常聊天叙述，再将实际剧情交给副 API 白名单结算一次', async () => {
     const eventEnv = new FakeTavern(cardWorldbook());
     const eventCtrl = new F1Controller(eventEnv);
     eventCtrl.init();
@@ -221,11 +221,12 @@ describe('后端控制器（模拟酒馆环境）', () => {
     eventCtrl.updateSettings({ engineerProxyPreset: '随机事件副线', engineerModel: 'event-model' });
     const optionsSeen: unknown[] = [];
     let call = 0;
-    eventEnv.generateText = async (_prompt, options) => {
+    let resolutionPrompt = '';
+    eventEnv.generateText = async (prompt, options) => {
       optionsSeen.push(options);
       call++;
       if (call === 1) return '{"title":"车手训练冲突","prompt":"车手感到不适，但工程组希望继续长距离训练。你如何决定？","answerOptions":["降低负荷","先复查"]}';
-      if (call === 2) return '{"speaker":"车队医疗主管","reply":"我们可以立即复查，并把训练强度降低到安全范围。"}';
+      resolutionPrompt = prompt;
       return '{"eventId":"' + eventCtrl.stateAt()!.randomEvents!.current!.id + '","outcome":"resolved","summary":"医疗复查及时完成，赞助商认可车队的处理。","effects":[{"op":"funds","targetId":null,"delta":2,"reason":"赞助商提供健康计划支持"}]}';
     };
 
@@ -238,12 +239,49 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(blocked.message).toContain('随机事件');
     const funds = eventCtrl.stateAt()!.teams.haas.funds;
     const result = await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '先复查，再按医疗建议降低负荷。', expectedRevisionId: eventCtrl.status().revisionId! });
-    expect(result).toMatchObject({ ok: true, event: { status: 'resolved', playerAnswer: '先复查，再按医疗建议降低负荷。' } });
-    expect(result.mainReply?.speaker).toBe('车队医疗主管');
+    expect(result).toMatchObject({ ok: true, event: { status: 'awaiting_narration', playerAnswer: '先复查，再按医疗建议降低负荷。' } });
+    expect(eventEnv.created).toHaveLength(1);
+    expect(eventEnv.created[0]).toContain('车手训练冲突');
+    expect(eventEnv.triggered).toBe(1);
+    expect(call).toBe(1); // 主 API 不走 generateText / generateRaw
+    await eventEnv.aiReplies('医疗主管立即安排复查，并把训练强度降到安全范围。\n' + update(['{"op":"funds","delta":5,"reason":"不应送入随机事件判定"}']));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ status: 'resolved', mainReply: '医疗主管立即安排复查，并把训练强度降到安全范围。' });
+    expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds + 2);
+    expect(resolutionPrompt).toContain('医疗主管立即安排复查，并把训练强度降到安全范围。');
+    expect(resolutionPrompt).not.toContain('不应送入随机事件判定');
+    await eventEnv.fire(eventEnv.events.MESSAGE_RECEIVED, eventEnv.lastMessageId(), 'normal');
     expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds + 2);
     expect(optionsSeen[0]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
-    expect(optionsSeen[1]).toBeUndefined();
-    expect(optionsSeen[2]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
+    expect(optionsSeen[1]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
+  });
+
+  it('过期的聊天消息不会结算另一条随机事件', async () => {
+    const eventEnv = new FakeTavern(cardWorldbook());
+    const eventCtrl = new F1Controller(eventEnv);
+    eventCtrl.init();
+    await eventCtrl.loadData();
+    expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 93 })).ok).toBe(true);
+    const save = JSON.parse(eventCtrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0 };
+    expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    eventCtrl.updateSettings({ engineerProxyPreset: '随机事件副线', engineerModel: 'event-model' });
+    let calls = 0;
+    eventEnv.generateText = async () => {
+      calls++;
+      return calls === 1
+        ? '{"title":"训练冲突","prompt":"车手需要降低训练负荷。","answerOptions":["安排复查","继续训练"]}'
+        : '{"eventId":"unexpected","outcome":"resolved","summary":"不应结算","effects":[]}';
+    };
+    expect((await eventCtrl.dispatch({ type: 'START_WEEKEND' })).ok).toBe(true);
+    const event = eventCtrl.stateAt()!.randomEvents!.current!;
+    expect((await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '安排复查。', expectedRevisionId: eventCtrl.status().revisionId! })).ok).toBe(true);
+    await eventEnv.userSays('这是一条与随机事件无关的新消息。');
+    await eventEnv.aiReplies('迟到的医疗叙述。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(calls).toBe(1);
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ id: event.id, status: 'awaiting_player' });
   });
 
   it('副 API 未配置时使用本地事件，并允许无效果跳过', async () => {

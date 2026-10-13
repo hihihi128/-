@@ -127,7 +127,7 @@ export function applyRandomEventResolution(
   effects: RandomEventEffect[],
 ): { ok: boolean; message: string } {
   const event = state.randomEvents?.current;
-  if (!event || event.id !== eventId || event.status !== 'awaiting_player') return { ok: false, message: '随机事件已经变化或完成' };
+  if (!event || event.id !== eventId || !['awaiting_player', 'awaiting_narration'].includes(event.status)) return { ok: false, message: '随机事件已经变化或完成' };
   if (!summary.trim() || summary.length > 500) return { ok: false, message: '随机事件结论无效' };
   if (effects.length > 3) return { ok: false, message: '随机事件最多应用三个效果' };
   const totals = new Map<string, number>();
@@ -185,6 +185,6 @@ export function applyRandomEventResolution(
 /** Close non-blocking fallback events before the game leaves their round. */
 export function closeUnansweredRandomEvent(state: GameState): void {
   const event = state.randomEvents?.current;
-  if (event?.status !== 'awaiting_player') return;
+  if (!event || !['awaiting_player', 'awaiting_narration'].includes(event.status)) return;
   applyRandomEventResolution(state, event.id, 'unresolved', '本站结束前未处理该事件，因此没有产生额外效果。', []);
 }

@@ -24,6 +24,19 @@ const slugs: Record<string, string> = {
 };
 const strategySections = ['负责人:', '决策风格:', '数据优势:', '风险偏好:', '沟通流程:', '常见失误与剧情触发:', '叙事指引:'];
 const staffSections = ['组成人员:', '技术分工:', '赛道执行:', '储备与后备:', '内部协作:', '玩家关系:', '叙事指引:'];
+const expectedReserves: Record<string, string[]> = {
+  mercedes: ['弗雷德里克·维斯蒂'],
+  mclaren: ['莱昂纳多·福纳罗利', '帕托·奥沃德'],
+  red_bull: ['角田裕毅'],
+  ferrari: ['安东尼奥·乔维纳兹'],
+  williams: ['卢克·布朗宁'],
+  racing_bulls: [], // 角田由红牛持有，资料中仅说明共享职责，不能重复建档。
+  aston_martin: ['杰克·克劳福德'],
+  haas: ['杰克·杜汉', '平川亮'],
+  audi: [], // 官方替补尚未确认（TBC），不能用虚构人选填充。
+  alpine: ['保罗·阿隆'],
+  cadillac: ['周冠宇'],
+};
 const leadershipNames = readdirSync(dir)
   .filter(name => /^lore-leadership-.*\.md$/.test(name))
   .map(name => readFileSync(path.join(dir, name), 'utf8').match(/^<管理层资料 name="([^"]+)"/)?.[1])
@@ -115,5 +128,14 @@ describe('车队策略组与技术赛道核心组世界书', () => {
     const ferrari = source('lore-staff-ferrari.md');
     expect(ferrari).toContain('马泰奥·托尼纳利');
     expect(ferrari).toContain('恩里科·瓜尔蒂耶里');
+  });
+
+  it('按 2026 已知名单配置替补，并把奥迪的官方 TBC 例外写入资料', () => {
+    for (const team of teams) {
+      const reserves = drivers.filter(driver => driver.team === team.id && driver.role === 'reserve').map(driver => driver.name);
+      expect(reserves, team.id).toEqual(expectedReserves[team.id]);
+    }
+    expect(source('lore-staff-audi.md')).toContain('TBC');
+    expect(source('lore-staff-racing-bulls.md')).toContain('角田裕毅');
   });
 });

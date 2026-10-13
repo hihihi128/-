@@ -52,6 +52,21 @@ describe('数据解析（世界书 YAML）', () => {
     }
   });
 
+  it('提供带赛事标签和简介的 IndyCar/WEC 自由车手与工程候选人', () => {
+    const db = normalizeDatabase(cardSources()).db!;
+    for (const id of ['palou', 'newgarden', 'herta', 'fuoco', 'bamber']) {
+      const driver = db.drivers.find(d => d.id === id)!;
+      expect(driver.teamId, id).toBeNull();
+      expect(['IndyCar', 'WEC']).toContain(driver.series);
+      expect(driver.description.length, id).toBeGreaterThan(8);
+    }
+    for (const id of ['cannon', 'leena_gade', 'kyle_moyer', 'urs_kuratle']) {
+      const staff = db.staffCandidates!.find(candidate => candidate.id === id)!;
+      expect(['IndyCar', 'WEC']).toContain(staff.series);
+      expect(staff.description!.length, id).toBeGreaterThan(8);
+    }
+  });
+
   it('数据指纹稳定', () => {
     const a = normalizeDatabase(placeholderSources()).db!.signature;
     const b = normalizeDatabase(placeholderSources()).db!.signature;

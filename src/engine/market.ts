@@ -298,6 +298,50 @@ function detachProjected(roster: MarketRoster, id: string): void {
   for (const role of STAFF_ROLES) if (roster.staff[role] === id) roster.staff[role] = null;
 }
 
+function rosterPersonnel(state: GameState, teamId: string): Set<string> {
+  const team = state.teams[teamId];
+  return new Set([
+    ...team.cars.map(car => car.driverId).filter((id): id is string => Boolean(id)),
+    ...Object.values(state.drivers).filter(driver => driver.teamId === teamId && driver.role === 'reserve').map(driver => driver.id),
+    ...Object.values(team.staff).map(staff => staff.id).filter((id): id is string => Boolean(id)),
+  ]);
+}
+
+function projectedPersonnel(roster: MarketRoster): Set<string> {
+  return new Set([
+    ...Object.values(roster.raceSeats).filter((id): id is string => Boolean(id)),
+    ...roster.reserveIds,
+    ...Object.values(roster.staff).filter((id): id is string => Boolean(id)),
+  ]);
+}
+
+function personName(state: GameState, id: string): string {
+  return state.drivers[id]?.name ?? staffById(state, id)?.staff.name ?? id;
+}
+
+/** Personnel changes disrupt established working relationships, once at activation. */
+function applyPersonnelMorale(state: GameState, window: MarketWindow, beforeByTeam: Record<string, Set<string>>): void {
+  for (const [teamId, roster] of Object.entries(window.projectedRosters)) {
+    const before = beforeByTeam[teamId];
+    const after = projectedPersonnel(roster);
+    const leaving = [...before].filter(id => !after.has(id));
+    const joining = [...after].filter(id => !before.has(id));
+    const changes = Math.max(leaving.length, joining.length);
+    if (!changes) continue;
+
+    const penalty = Math.min(8, changes * 2);
+    const team = state.teams[teamId];
+    team.staffMorale = round1(clamp(team.staffMorale - penalty, 0, 100));
+    const movement = [
+      joining.length ? `加入：${joining.map(id => personName(state, id)).join('、')}` : '',
+      leaving.length ? `离开：${leaving.map(id => personName(state, id)).join('、')}` : '',
+    ].filter(Boolean).join('；');
+    const detail = `${team.name} 的合同市场人员变动已生效（${movement}）。磨合与交接使员工士气下降 ${penalty} 点。`;
+    addNews(state, '人员变动', detail);
+    addNarration(state, 'market_personnel_morale', '阵容变动的磨合期', detail);
+  }
+}
+
 function acceptOffer(state: GameState, teamId: string, quote: ContractQuote, kind: 'driver' | 'staff', staffRole?: StaffRole): MarketOutcome {
   if (quote.blockers.length) return fail(quote.blockers[0]);
   if (quote.candidateDecision !== 'accept') return fail('候选人拒绝了当前报价');
@@ -381,6 +425,7 @@ export function marketCloseBlockers(state: GameState): string[] {
 export function closeMarket(state: GameState): MarketOutcome {
   const market = ensureMarket(state); const window = market.window;
   if (!window) return ok('没有待关闭的合同市场');
+  if (window.status === 'closed') return ok(`${window.targetYear} 赛季阵容与员工合同已生效`);
   const blockers = marketCloseBlockers(state); if (blockers.length) return fail(blockers[0]);
   for (const escrow of window.escrow) {
     if (escrow.settled) continue;
@@ -395,6 +440,7 @@ export function closeMarket(state: GameState): MarketOutcome {
   const staffPool = new Map<string, StaffMember>();
   for (const team of Object.values(state.teams)) for (const staff of Object.values(team.staff)) if (staff.id) staffPool.set(staff.id, { ...staff });
   for (const staff of Object.values(market.freeStaff)) if (staff.id) staffPool.set(staff.id, { ...staff });
+  const moraleBefore = Object.fromEntries(state.teamOrder.map(teamId => [teamId, rosterPersonnel(state, teamId)]));
   for (const d of Object.values(state.drivers)) { d.teamId = null; d.role = 'reserve'; }
   const employedStaff = new Set<string>();
   for (const [teamId, roster] of Object.entries(window.projectedRosters)) {
@@ -417,6 +463,9 @@ export function closeMarket(state: GameState): MarketOutcome {
   // Rebuild the free pool after every destination is installed. Staff no longer
   // employed by a projected roster remain available exactly once.
   market.freeStaff = Object.fromEntries([...staffPool.entries()].filter(([id]) => !employedStaff.has(id)));
+  // Apply once, after the complete projected roster is installed. The bounded
+  // effect is based on the pre-activation ownership snapshot above.
+  applyPersonnelMorale(state, window, moraleBefore);
   window.status = 'closed'; market.revision++;
   return ok(`${window.targetYear} 赛季阵容与员工合同已生效`);
 }

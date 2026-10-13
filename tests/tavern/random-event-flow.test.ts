@@ -1,16 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { applyRandomEventResolution, closeUnansweredRandomEvent, setRandomEventContent, triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
 import { Rng } from '../../src/engine/rng';
-import { parseRandomEventContent, parseRandomEventMainReply, parseRandomEventResolution } from '../../src/tavern/randomEventFlow';
+import { parseRandomEventContent, parseRandomEventResolution, randomEventNarrationMessage } from '../../src/tavern/randomEventFlow';
 import { newTestGame } from '../helpers';
 
 describe('随机事件双 API 协议', () => {
-  it('严格解析副 API 事件和主 API 角色回复', () => {
+  it('严格解析副 API 事件，并让主 API 正常聊天叙述', () => {
     expect(parseRandomEventContent('{"title":"供应商争议","prompt":"一批部件检测结果不一致，你如何处理？","answerOptions":["停用并复查","继续使用"]}')).toEqual({
       title: '供应商争议', prompt: '一批部件检测结果不一致，你如何处理？', answerOptions: ['停用并复查', '继续使用'],
     });
-    expect(parseRandomEventMainReply('{"speaker":"质量主管","reply":"我建议先隔离问题批次。"}')).toEqual({ speaker: '质量主管', reply: '我建议先隔离问题批次。' });
     expect(() => parseRandomEventContent('{"title":"错误","prompt":"问题","answerOptions":["一个"],"constructor":true}')).toThrow('字段不正确');
+    const state = newTestGame(3);
+    const event = { ...state.randomEvents?.current, id: 'event-1', title: '供应商争议', prompt: '一批部件检测结果不一致。' } as any;
+    expect(randomEventNarrationMessage(state, event, '停用并复查')).toContain('不要返回 JSON');
   });
 
   it('只接受匹配事件 ID 和白名单效果', () => {

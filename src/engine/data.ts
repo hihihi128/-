@@ -452,6 +452,8 @@ function normalizeStaff(ctx: Ctx, raw: unknown, path: string): Record<StaffRole,
       salary: ctx.num(m, 'salary', `${path}.${role}`, { def: 1, min: 0 }),
       contractStart: Math.round(ctx.num(m, 'contractStart', `${path}.${role}`, { def: 0 })),
       contractEnd: Math.round(ctx.num(m, 'contractEnd', `${path}.${role}`, { def: 0 })),
+      series: ctx.str(m, 'series', `${path}.${role}`),
+      description: ctx.str(m, 'description', `${path}.${role}`),
     };
   }
   return out;
@@ -566,6 +568,7 @@ function normalizeDriver(ctx: Ctx, raw: unknown, index: number): DriverDef | nul
     contractStart: Math.round(ctx.num(raw, 'contractStart', path, { def: 0 })),
     contractEnd: Math.round(ctx.num(raw, 'contractEnd', path, { def: 0 })),
     traits: ctx.strArr(raw, 'traits'),
+    series: ctx.str(raw, 'series', path),
     description: ctx.str(raw, 'description', path),
   };
 }
@@ -707,7 +710,7 @@ export function normalizeDatabase(sources: RawSource[]): NormalizeResult & { can
     if (!(STAFF_ROLES as readonly string[]).includes(role)) { ctx.err(`staffCandidates[${i}].role`, '员工岗位无效'); return; }
     const id = ctx.str(raw, 'id', `staffCandidates[${i}]`, { required: true });
     if (!id) return;
-    staffCandidates.push({ id, role: role as StaffRole, name: ctx.str(raw, 'name', `staffCandidates[${i}]`, { def: id }), skill: ctx.num(raw, 'skill', `staffCandidates[${i}]`, { def: 60, min: 1, max: 100 }), abilities: normalizeStaffAbilities(ctx, raw.abilities, `staffCandidates[${i}].abilities`), salary: ctx.num(raw, 'salary', `staffCandidates[${i}]`, { def: 1, min: 0 }), contractStart: 0, contractEnd: 0 });
+    staffCandidates.push({ id, role: role as StaffRole, name: ctx.str(raw, 'name', `staffCandidates[${i}]`, { def: id }), skill: ctx.num(raw, 'skill', `staffCandidates[${i}]`, { def: 60, min: 1, max: 100 }), abilities: normalizeStaffAbilities(ctx, raw.abilities, `staffCandidates[${i}].abilities`), salary: ctx.num(raw, 'salary', `staffCandidates[${i}]`, { def: 1, min: 0 }), contractStart: 0, contractEnd: 0, series: ctx.str(raw, 'series', `staffCandidates[${i}]`), description: ctx.str(raw, 'description', `staffCandidates[${i}]`) });
   });
   const trackItems: Array<{ item: TrackDef; source: string }> = [];
   rawLists.tracks.forEach((r, i) => {

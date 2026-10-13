@@ -49,29 +49,25 @@ export function parseRandomEventContent(raw: string): RandomEventContent {
   };
 }
 
-export function randomEventMainPrompt(state: GameState, event: RandomEventRecord, answer: string): string {
+/** User message that asks the normal SillyTavern chat to narrate the decision. */
+export function randomEventNarrationMessage(state: GameState, event: RandomEventRecord, answer: string): string {
   const team = state.teams[state.meta.playerTeamId];
   return [
-    `你在 F1 车队管理模拟器中扮演 ${team.name} 内与事件直接相关的专业人员。`,
+    '【F1M 随机事件叙述请求】',
+    `你正在继续 ${team.name} 的正常剧情。请围绕以下随机事件和领队决定写一段完整、自然的中文叙事。`,
+    `事件 ID：${event.id}`,
     `事件：${event.title}。${event.prompt}`,
-    `玩家领队的回答：${answer}`,
-    '请根据专业立场给出真实反应，指出方案如何执行、主要风险和团队是否接受。不要自行宣布游戏数值变化。',
-    'speaker 最多 40 字，reply 最多 320 字。只返回 JSON，不要代码块：{"speaker":"角色或部门","reply":"回应"}',
+    `领队决定：${answer}`,
+    '写出相关人员的反应、具体执行和主要风险；保持专业且与当前剧情衔接。不要编造游戏数值变化、不要返回 JSON 或代码块，也不要输出 <F1M_UPDATE> 指令。',
   ].join('\n');
 }
 
-export function parseRandomEventMainReply(raw: string): { speaker: string; reply: string } {
-  const value = jsonObject(raw);
-  if (!exact(value, ['speaker', 'reply'])) throw new Error('主 API 回复字段不正确');
-  return { speaker: text(value.speaker, '主 API 发言人', 40), reply: text(value.reply, '主 API 回复', 320) };
-}
-
-export function randomEventResolutionPrompt(state: GameState, event: RandomEventRecord, answer: string, mainReply: { speaker: string; reply: string }): string {
+export function randomEventResolutionPrompt(state: GameState, event: RandomEventRecord, answer: string, mainReply: string): string {
   return [
-    '你是 F1 车队管理模拟器的随机事件裁判。根据玩家方案与车队角色回应，判定事件是否解决。',
+    '你是 F1 车队管理模拟器的随机事件裁判。根据玩家方案与主聊天实际生成的剧情，判定事件是否解决。',
     `eventId=${event.id}；事件=${event.title}：${event.prompt}`,
     `玩家回答=${answer}`,
-    `主 API 角色回应=${mainReply.speaker}：${mainReply.reply}`,
+    `主 API 实际剧情=${mainReply}`,
     `可用目标资料=${JSON.stringify(randomEventContext(state))}`,
     'outcome 只能是 resolved 或 unresolved。summary 最多 300 字。effects 最多 3 项，可以为空。',
     '允许 op 与范围：driver_fitness/driver_morale -12..12；funds -5..5；project_weeks -2..2；part_reliability -8..8；staff_skill -3..3；aero_hours -8..8。delta 不能为 0。',
