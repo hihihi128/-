@@ -1310,7 +1310,7 @@ export type Action =
   | { type: 'RUN_SPRINT' }
   | { type: 'RUN_QUALIFYING' }
   | { type: 'RUN_RACE' }
-  | { type: 'START_RACE'; kind: 'race' | 'sprint' }
+  | { type: 'START_RACE'; kind: 'race' | 'sprint'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'ADVANCE_RACE'; sessionId: string; expectedRevision: number; until: 'next_lap' | 'next_decision' }
   | { type: 'SET_RACE_TACTICS'; sessionId: string; expectedRevision: number; drivers: Array<{ driverId: string; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }
   | { type: 'RESOLVE_RACE_DECISION'; sessionId: string; expectedRevision: number; windowId: string; drivers: Array<{ driverId: string; pit: 'auto' | 'stay_out' | 'box'; compound?: Compound; repairWing?: boolean; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }

@@ -20,6 +20,28 @@ describe('resumable live race', () => {
     expect(redFlagProbability('dnf', .8, 2, .5)).toBeGreaterThan(redFlagProbability('dnf', 0, 1, .5));
   });
 
+  it('applies valid batch AI plans and locally replaces only invalid cars', () => {
+    const ready = raceReady();
+    const aiIds = Object.values(ready.teams)
+      .filter(team => !team.isPlayer)
+      .flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+    expect(aiIds.length).toBeGreaterThan(1);
+    const [generatedId, invalidId] = aiIds;
+    const dry = ready.rules.dryCompounds;
+    const state = act(ready, {
+      type: 'START_RACE',
+      kind: 'race',
+      aiPlans: {
+        [generatedId]: { tyrePlan: [dry[0], dry[1]], paceMode: 'push', pitTiming: 'late', scReaction: false },
+        [invalidId]: { tyrePlan: ['not-a-tyre' as any], paceMode: 'push', pitTiming: 'late', scReaction: false },
+      },
+    });
+    const live = state.weekend!.liveRace!;
+    expect(live.cars[generatedId].plan).toMatchObject({ tyrePlan: [dry[0], dry[1]], paceMode: 'push', pitTiming: 'late', scReaction: false });
+    expect(live.cars[invalidId].plan.tyrePlan).not.toEqual(['not-a-tyre']);
+    expect(live.cars[invalidId].plan.strategySource).toBe('engineer');
+  });
+
   it('allows a free tyre change during a red flag and schedules the selected restart', () => {
     const state = act(raceReady(), { type: 'START_RACE', kind: 'race' });
     const live = state.weekend!.liveRace!;

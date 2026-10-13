@@ -10,7 +10,7 @@ import { strategyDisobedienceChance, teammateRelationship, willDisobeyStrategy }
 import { driverName } from './log';
 import { activeEntries, carRatings, fittedSpec, raceSkill, trackScore } from './ratings';
 import { Rng } from './rng';
-import { raceEngineerFor, staffAbility } from './staff';
+import { raceEngineerFor, staffAbility, strategyDecisionSkill } from './staff';
 import { redBullCrashMultiplier, specialFailureChance } from './teamSpecials';
 import { applyAudiStartDrop, astonVibrationActive } from './nextTeamSpecials';
 import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from './raceWeather';
@@ -632,7 +632,13 @@ function expectedLivePositions(state: GameState): Record<string, number> {
 }
 
 /** Starts a serializable session and stops at the grid choice. */
-export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sprint', expectedPositions = expectedLivePositions(state)): LiveRaceState {
+export function createRaceSession(
+  state: GameState,
+  rng: Rng,
+  kind: 'race' | 'sprint',
+  expectedPositions = expectedLivePositions(state),
+  aiPlans: Record<string, Partial<DriverPlan>> = {},
+): LiveRaceState {
   const w = state.weekend!;
   const track = currentTrack(state);
   const rules = state.rules;
@@ -657,7 +663,34 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
   for (const [index, id] of grid.entries()) {
     const entry = entries.find(e => e.driver.id === id)!;
     const ratings = carRatings(entry.team, entry.car, rules);
-    let plan = entry.team.isPlayer ? { ...planOf(state, id) } : { ...DEFAULT_PLAN, strategySource: 'engineer' as const };
+    let plan: DriverPlan;
+    if (entry.team.isPlayer) {
+      plan = { ...planOf(state, id) };
+    } else {
+      const setup = w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
+      const baseContext = { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: 'balanced' as const, knowledge: setup.tyreKnowledge };
+      const options = strategyOptions(rules, track, totalLaps, baseContext, { wet: false, sprint: kind === 'sprint' });
+      const decision = strategyDecisionSkill(entry.team, entry.car.slot);
+      const localIndex = decision >= 88 ? 0 : decision >= 74 ? Math.min(1, options.length - 1) : Math.min(2, options.length - 1);
+      const gridPosition = index + 1;
+      const local: DriverPlan = {
+        ...DEFAULT_PLAN,
+        strategySource: 'engineer',
+        tyrePlan: kind === 'race' ? [...(options[localIndex]?.compounds ?? options[0]?.compounds ?? rules.dryCompounds.slice(0, 2))] : 'auto',
+        sprintTyre: kind === 'sprint' ? options[localIndex]?.compounds[0] ?? rules.dryCompounds[1] ?? rules.dryCompounds[0] : 'auto',
+        paceMode: gridPosition > Math.ceil(grid.length * 0.65) && entry.driver.attrs.racecraft >= 75 ? 'push' : entry.driver.attrs.consistency < 68 ? 'conserve' : 'balanced',
+        pitTiming: decision >= 84 ? 'early' : decision < 65 ? 'late' : 'standard',
+        scReaction: decision >= 68,
+      };
+      const proposed = aiPlans[id];
+      const validTyres = proposed?.tyrePlan !== 'auto' && Array.isArray(proposed?.tyrePlan) && !validatePlan(rules, proposed.tyrePlan, false);
+      const validPace = proposed?.paceMode === 'conserve' || proposed?.paceMode === 'balanced' || proposed?.paceMode === 'push';
+      const validTiming = proposed?.pitTiming === 'early' || proposed?.pitTiming === 'standard' || proposed?.pitTiming === 'late';
+      const validReaction = typeof proposed?.scReaction === 'boolean';
+      plan = kind === 'race' && validTyres && validPace && validTiming && validReaction
+        ? { ...local, tyrePlan: [...proposed.tyrePlan as Compound[]], paceMode: proposed.paceMode!, pitTiming: proposed.pitTiming!, scReaction: proposed.scReaction! }
+        : local;
+    }
     const instructed = entry.team.isPlayer && (plan.tyrePlan !== 'auto' || plan.paceMode !== 'balanced' || plan.pitTiming !== 'standard');
     if (instructed && willDisobeyStrategy(entry.driver, playerRelationship, `${sessionId}:pre-race:${id}`)) {
       plan = { ...plan, paceMode: entry.driver.ego >= 50 ? 'push' : 'conserve', pitTiming: 'late', scReaction: false };

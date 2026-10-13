@@ -172,7 +172,7 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
     case 'RUN_RACE':
       return doRace(state, rng, 'race');
     case 'START_RACE':
-      return startLiveRace(state, rng, action.kind);
+      return startLiveRace(state, rng, action.kind, action.aiPlans);
     case 'ADVANCE_RACE':
       return advanceLiveRace(state, rng, action.sessionId, action.expectedRevision, action.until);
     case 'SET_RACE_TACTICS': {

@@ -17,7 +17,7 @@ import { resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
-import type { Action, CarState, DriverState, GameState, PartSpec, RaceResult, TeamState } from './types';
+import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, RaceResult, TeamState } from './types';
 import { clamp, deepClone, money, round1, round2 } from './util';
 import { createWeekend, currentRound, currentTrack, runPractice, runQualifying } from './weekend';
 
@@ -147,11 +147,11 @@ export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'): Out
 }
 
 /** Creates an interactive session. Launch effects are applied only once. */
-export function startLiveRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'): Outcome {
+export function startLiveRace(state: GameState, rng: Rng, kind: 'race' | 'sprint', aiPlans?: Record<string, Partial<DriverPlan>>): Outcome {
   if (state.season.phase !== kind || !state.weekend) return fail(`当前不是${LABELS.phase[kind]}阶段`);
   if (state.weekend.liveRace) return fail('比赛已经开始');
   if (kind === 'race') applyAllocationFairness(state);
-  state.weekend.liveRace = createRaceSession(state, rng, kind, expectedPositions(state));
+  state.weekend.liveRace = createRaceSession(state, rng, kind, expectedPositions(state), aiPlans);
   return ok(`${LABELS.phase[kind]}已发车，等待起跑策略确认`);
 }
 

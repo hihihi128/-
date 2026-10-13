@@ -47,6 +47,24 @@ interface ProcessOptions {
   fallback?: boolean;
 }
 
+interface AiGridStrategyCandidate {
+  driverId: string;
+  options: ReturnType<typeof strategyOptions>;
+}
+
+interface AiGridStrategyResult {
+  plans: Record<string, Partial<DriverPlan>>;
+  generated: number;
+  fallback: number;
+}
+
+function parseJsonObject(text: string): unknown {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) throw new Error('策略 API 没有返回 JSON');
+  return JSON.parse(text.slice(start, end + 1));
+}
+
 export interface Settings {
   inject: boolean;
   injectDepth: number;
@@ -471,16 +489,116 @@ export class F1Controller {
     if (!cur) return { ok: false, message: '还没有开局' };
     this.busy = true;
     try {
-      const res = dispatch(cur.state, action);
+      let preparedAction = action;
+      let strategySummary = '';
+      if (action.type === 'START_RACE' && action.kind === 'race' && cur.state.season.phase === 'race' && cur.state.weekend && !cur.state.weekend.liveRace) {
+        const prepared = await this.prepareAiGridStrategies(cur.state);
+        preparedAction = { ...action, aiPlans: prepared.plans };
+        strategySummary = `；赛前策略：API ${prepared.generated} 辆，本地补全 ${prepared.fallback} 辆`;
+      }
+      const res = dispatch(cur.state, preparedAction);
       if (!res.ok) return { ok: false, message: res.message };
       this.store.commit(res.state, { floor: Math.max(0, floor), kind: 'ui', label: res.message });
       this.notify('action');
       if (this.settings.autoNarrate && isSimulation(action) && res.state.narration.length) {
         void this.requestNarration();
       }
-      return { ok: true, message: res.message };
+      return { ok: true, message: `${res.message}${strategySummary}` };
     } finally {
       this.busy = false;
+    }
+  }
+
+  /**
+   * One batch API request assigns distinct plans to every non-player car.
+   * Missing, duplicated, or invalid rows are omitted so the engine can fill
+   * only those cars with its deterministic team/driver-aware local strategy.
+   */
+  private async prepareAiGridStrategies(state: GameState): Promise<AiGridStrategyResult> {
+    const weekend = state.weekend;
+    const round = weekend && state.calendar[weekend.roundIndex];
+    const track = round && state.tracks[round.trackId];
+    if (!weekend || !track) return { plans: {}, generated: 0, fallback: 0 };
+
+    const entries = Object.values(state.teams).flatMap(team => team.cars.flatMap(car => {
+      const driver = car.driverId ? state.drivers[car.driverId] : null;
+      return driver ? [{ team, car, driver }] : [];
+    }));
+    const activeIds = new Set(entries.map(entry => entry.driver.id));
+    const grid = (weekend.qualifying?.grid ?? []).filter(id => activeIds.has(id));
+    for (const entry of [...entries].sort((a, b) => trackScore(carRatings(b.team, b.car, state.rules, 'disclosed'), track) - trackScore(carRatings(a.team, a.car, state.rules, 'disclosed'), track))) {
+      if (!grid.includes(entry.driver.id)) grid.push(entry.driver.id);
+    }
+    const candidates: AiGridStrategyCandidate[] = entries
+      .filter(entry => !entry.team.isPlayer)
+      .map(entry => {
+        const setup = weekend.setup[entry.driver.id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
+        const ratings = carRatings(entry.team, entry.car, state.rules, 'disclosed');
+        return {
+          driverId: entry.driver.id,
+          options: strategyOptions(state.rules, track, track.laps, {
+            driverTyre: entry.driver.attrs.tyre,
+            carTyre: ratings.tyre,
+            paceMode: 'balanced',
+            knowledge: setup.tyreKnowledge,
+          }, { wet: false, sprint: false }).slice(0, 5),
+        };
+      });
+    const byDriver = new Map(candidates.map(candidate => [candidate.driverId, candidate]));
+    const expected = candidates.length;
+    if (!expected) return { plans: {}, generated: 0, fallback: 0 };
+
+    const rows = entries.filter(entry => !entry.team.isPlayer).map(entry => {
+      const candidate = byDriver.get(entry.driver.id)!;
+      const engineer = raceEngineerFor(entry.team, entry.car.slot);
+      const options = candidate.options.map((option, index) => `${index}:${option.compounds.join('-')}/${option.stops}停/${option.stints.join('-')}圈`).join('；');
+      return [
+        `driverId=${entry.driver.id}；车手=${entry.driver.name}；车队=${entry.team.name}；发车位=P${grid.indexOf(entry.driver.id) + 1}`,
+        `策略师=${entry.team.staff.strategist.name}(${entry.team.staff.strategist.skill})；比赛工程师=${engineer.name}；本车策略判断=${strategyDecisionSkill(entry.team, entry.car.slot)}`,
+        `车手特性：轮胎管理${entry.driver.attrs.tyre}，稳定性${entry.driver.attrs.consistency}，缠斗${entry.driver.attrs.racecraft}；候选=${options}`,
+      ].join('；');
+    });
+    const rainWindow = weekend.forecast.raceRainWindow;
+    const prompt = [
+      '你是 F1 全场策略总监。请为下面每一辆 AI 赛车独立选择赛前策略。不同车队和车手不能机械地使用相同方案。',
+      `赛道=${track.name}；圈数=${track.laps}；正赛降雨概率=${Math.round(weekend.forecast.race * 100)}%；公开降雨窗口=${rainWindow ? `${rainWindow[0]}-${rainWindow[1]}圈` : '无明确窗口'}。`,
+      '综合发车位、候选方案、策略部门能力、比赛工程师和车手特性。强队不必总选同一候选；落后车辆可以更激进。',
+      ...rows,
+      '只输出一个 JSON 对象，不要代码块或解释。格式：',
+      '{"strategies":[{"driverId":"车手ID","option":0,"paceMode":"conserve|balanced|push","pitTiming":"early|standard|late","scReaction":true}]}',
+      `strategies 必须包含全部 ${expected} 辆 AI 赛车，每个 driverId 只出现一次。option 必须使用该车候选编号。`,
+    ].join('\n');
+
+    const api = this.settings.engineerApi;
+    if (api === 'secondary' && !this.settings.engineerProxyPreset) return { plans: {}, generated: 0, fallback: expected };
+    try {
+      const generated = await this.env.generateText(prompt, api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined);
+      const parsed = parseJsonObject(generated) as { strategies?: unknown };
+      if (!Array.isArray(parsed.strategies)) return { plans: {}, generated: 0, fallback: expected };
+      const plans: Record<string, Partial<DriverPlan>> = {};
+      for (const value of parsed.strategies) {
+        if (!value || typeof value !== 'object') continue;
+        const row = value as Record<string, unknown>;
+        const driverId = typeof row.driverId === 'string' ? row.driverId : '';
+        const candidate = byDriver.get(driverId);
+        const optionIndex = typeof row.option === 'number' && Number.isInteger(row.option) ? row.option : -1;
+        const option = candidate?.options[optionIndex];
+        if (!candidate || !option || plans[driverId]) continue;
+        if (row.paceMode !== 'conserve' && row.paceMode !== 'balanced' && row.paceMode !== 'push') continue;
+        if (row.pitTiming !== 'early' && row.pitTiming !== 'standard' && row.pitTiming !== 'late') continue;
+        if (typeof row.scReaction !== 'boolean') continue;
+        plans[driverId] = {
+          strategySource: 'engineer',
+          tyrePlan: [...option.compounds],
+          paceMode: row.paceMode,
+          pitTiming: row.pitTiming,
+          scReaction: row.scReaction,
+        };
+      }
+      const count = Object.keys(plans).length;
+      return { plans, generated: count, fallback: expected - count };
+    } catch {
+      return { plans: {}, generated: 0, fallback: expected };
     }
   }
 
