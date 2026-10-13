@@ -208,7 +208,7 @@ teams:
     funds: 80
     sponsorIncome: 5.2
     operatingCost: 2.4
-    targetPosition: 5
+    targetPosition: 8
     facilities: { windTunnel: 3, cfd: 4, simulator: 4, factory: 4 }
     staff:
       technicalDirector: { name: 帕特·弗莱, skill: 82, salary: 2.2 }

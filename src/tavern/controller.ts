@@ -103,6 +103,11 @@ export interface DataReport {
   entries: string[];
   issues: DataIssue[];
   teams: Array<{ id: string; name: string; color: string; targetPosition: number; description: string; special: string; drivers: string[] }>;
+  specialRules?: {
+    astonMartin: { vibrationInterval: number; vibrationRetireChance: number };
+    racingBulls: { recallChance: number };
+    audi: { startDropMin: number; startDropMax: number };
+  };
   summary: string;
 }
 
@@ -417,6 +422,11 @@ export class F1Controller {
         special: t.special,
         drivers: (db?.drivers ?? []).filter(d => d.teamId === t.id && d.role === 'race').map(d => d.name),
       })),
+      specialRules: db ? {
+        astonMartin: { vibrationInterval: db.rules.astonMartin.vibrationInterval, vibrationRetireChance: db.rules.astonMartin.vibrationRetireChance },
+        racingBulls: { recallChance: db.rules.racingBulls.recallChance },
+        audi: { startDropMin: db.rules.audi.startDropMin, startDropMax: db.rules.audi.startDropMax },
+      } : undefined,
       summary: db ? `${db.teams.length} 支车队 · ${db.drivers.length} 名车手 · ${db.tracks.length} 条赛道 · ${db.calendar.length} 站` : '无数据',
     };
   }

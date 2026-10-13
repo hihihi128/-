@@ -141,17 +141,17 @@ onMounted(load);
     <div v-else-if="special === 'aston_martin'" class="card notice special-team small stack-s">
       <b>阿斯顿·马丁 · 本田振动危机</b>
       <div>老斯特罗尔撤掉 Jonathan Wheatley，并让玩家与纽维收拾预计垫底的 AMR26。</div>
-      <ul class="tiny"><li>首批 ADUO 动力单元到货前，每十圈以 25% 概率触发保护性退赛。</li><li>公开车手安全数据可加速 ADUO，但会激化本田与纽维的矛盾。</li><li>必须兼顾兰斯·斯特罗尔与阿隆索粉丝，并承受西班牙媒体持续施压。</li></ul>
+      <ul class="tiny"><li>首批 ADUO 动力单元到货前，每{{ report?.specialRules?.astonMartin.vibrationInterval ?? 10 }}圈以 {{ Math.round((report?.specialRules?.astonMartin.vibrationRetireChance ?? .25) * 100) }}% 概率触发保护性退赛。</li><li>公开车手安全数据可加速 ADUO，但会激化本田与纽维的矛盾。</li><li>必须兼顾兰斯·斯特罗尔与阿隆索粉丝，并承受西班牙媒体持续施压。</li></ul>
     </div>
     <div v-else-if="special === 'racing_bulls'" class="card notice special-team small stack-s">
       <b>小红牛 · 临时车手调用</b>
       <div>玩家担任副领队，辅佐艾伦·佩尔曼。</div>
-      <ul class="tiny"><li>每个比赛周末有 5% 概率被红牛调走一名正式车手。</li><li>事件发生后，必须从储备车手中选择一人顶替一站。</li></ul>
+      <ul class="tiny"><li>每个比赛周末有 {{ Math.round((report?.specialRules?.racingBulls.recallChance ?? .05) * 100) }}% 概率被红牛调走一名正式车手。</li><li>事件发生后，必须从储备车手中选择一人顶替一站。</li></ul>
     </div>
     <div v-else-if="special === 'audi'" class="card notice special-team small stack-s">
       <b>奥迪 · 涡轮与 ADUO 联盟</b>
       <div>比诺托负责技术，玩家作为副领队处理围场政治。</div>
-      <ul class="tiny"><li>修复涡轮前，两台车起步会随机丢失两到三个位置。</li><li>可与马丁、梅奔或法拉利结盟，共同向 FIA 争取 ADUO。</li></ul>
+      <ul class="tiny"><li>修复涡轮前，两台车起步会随机丢失 {{ report?.specialRules?.audi.startDropMin ?? 2 }}–{{ report?.specialRules?.audi.startDropMax ?? 3 }} 个位置。</li><li>可与马丁、梅奔或法拉利结盟，共同向 FIA 争取 ADUO。</li></ul>
     </div>
     <div v-else-if="selectedTeam?.id === 'cadillac'" class="card notice special-team small stack-s">
       <b>凯迪拉克 · 从零开始</b>

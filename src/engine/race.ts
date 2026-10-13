@@ -869,7 +869,10 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       else if (vscActive) lapTime = base * 1.25 + rng.normal(0, .05);
       car.cumulativeTime += lapTime; car.completedLaps = lap; car.tyreAge += 1;
       if (!scActive && !vscActive && lap > 1 && car.bestLap === null || (!scActive && !vscActive && lap > 1 && lapTime < (car.bestLap ?? Infinity))) car.bestLap = lapTime;
-      const astonVibrationRetirement = car.teamId === 'aston_martin' && astonVibrationActive(state) && lap % state.rules.astonMartin.vibrationInterval === 0 && rng.chance(state.rules.astonMartin.vibrationRetireChance);
+      const astonVibrationRetirement = !scActive && !vscActive && !session.redFlag?.active
+        && car.teamId === 'aston_martin' && astonVibrationActive(state)
+        && lap % state.rules.astonMartin.vibrationInterval === 0
+        && rng.chance(state.rules.astonMartin.vibrationRetireChance);
       if (astonVibrationRetirement) {
         car.status = 'dnf';
         car.reason = '危险振动达到手部损伤阈值，车队强制退赛';
