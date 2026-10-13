@@ -2,7 +2,7 @@
  * 内存版「酒馆」：在浏览器开发页与 Node 测试中模拟酒馆助手接口、聊天楼层、swipe 与事件。
  */
 import YAML from 'yaml';
-import type { ChatMsg, TavernEnv, WorldbookText } from '../src/tavern/env';
+import type { ChatMsg, TavernEnv, TextGenerationOptions, WorldbookText } from '../src/tavern/env';
 
 type Fn = (...args: any[]) => any;
 
@@ -19,13 +19,14 @@ export class FakeTavern implements TavernEnv {
   messages: Msg[] = [];
   chatVars: Record<string, any> = {};
   scriptVars: Record<string, any> = {};
+  localSecrets: Record<string, string> = {};
   listeners = new Map<string, Fn[]>();
   generating = false;
   injected = new Map<string, { content: string; depth: number; role: string; scan: boolean }>();
   toasts: Array<[string, string]> = [];
   created: string[] = [];
   triggered = 0;
-  generated: Array<{ prompt: string; options?: { proxyPreset?: string; model?: string } }> = [];
+  generated: Array<{ prompt: string; options?: TextGenerationOptions }> = [];
   worldbook: WorldbookText[];
   emitted: string[] = [];
 
@@ -57,12 +58,14 @@ export class FakeTavern implements TavernEnv {
   getMessageSwipeVars(id: number) { const m = this.messages[id]; return m ? clone(m.swipes.map((_, i) => m.variables[i] ?? {})) : []; }
   getScriptVars() { return clone(this.scriptVars); }
   setScriptVars(v: Record<string, any>) { this.scriptVars = clone(v); }
+  getLocalSecret(name: string) { return this.localSecrets[name] ?? ''; }
+  setLocalSecret(name: string, value: string) { if (value) this.localSecrets[name] = value; else delete this.localSecrets[name]; }
   lastMessageId() { return this.messages.length - 1; }
   getMessage(id: number): ChatMsg | null { const m = this.messages[id]; return m ? { message_id: id, role: m.role, message: m.swipes[m.swipe_id], is_hidden: false } : null; }
   async setMessageText(id: number, text: string) { const m = this.messages[id]; m.swipes[m.swipe_id] = text; }
   async createUserMessage(text: string) { this.created.push(text); this.messages.push({ role: 'user', swipes: [text], swipe_id: 0, variables: [{}] }); await this.fire(this.events.MESSAGE_SENT, this.messages.length - 1); }
   async triggerGeneration() { this.triggered++; }
-  async generateText(prompt: string, options?: { proxyPreset?: string; model?: string }) {
+  async generateText(prompt: string, options?: TextGenerationOptions) {
     this.generated.push({ prompt, options: clone(options) });
     return '工程师建议采用这套方案，并根据赛道变化保留临场调整空间。';
   }

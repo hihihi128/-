@@ -92,9 +92,20 @@ export interface Settings {
   engineerApi: 'main' | 'secondary';
   engineerProxyPreset: string;
   engineerApiUrl: string;
-  engineerApiKey: string;
   engineerModel: string;
 }
+
+export interface SettingsView extends Settings {
+  /** Write-only input. The saved key is never returned through window.F1Manager. */
+  engineerApiKey: string;
+  hasEngineerApiKey: boolean;
+}
+
+export type SettingsPatch = Partial<Settings> & {
+  engineerApiKey?: string;
+  clearEngineerApiKey?: boolean;
+  hasEngineerApiKey?: boolean;
+};
 
 export const DEFAULT_SETTINGS: Settings = {
   inject: true,
@@ -109,7 +120,6 @@ export const DEFAULT_SETTINGS: Settings = {
   engineerApi: 'main',
   engineerProxyPreset: '',
   engineerApiUrl: '',
-  engineerApiKey: '',
   engineerModel: '',
 };
 
@@ -182,6 +192,7 @@ export interface HudView {
 export class F1Controller {
   store: SaveStore;
   settings: Settings = { ...DEFAULT_SETTINGS };
+  private engineerApiKey = '';
   data: (NormalizeResult & { canStart: boolean; origin: string; entries: string[] }) | null = null;
   private busy = false;
   /** 「继续生成」开始时被续写楼层的原文（用于只结算新续写的部分） */
@@ -210,48 +221,74 @@ export class F1Controller {
   }
 
   loadSettings(): void {
-    const raw = this.env.getScriptVars()?.settings ?? {};
-    this.settings = { ...DEFAULT_SETTINGS, ...raw };
+    const vars = this.env.getScriptVars() ?? {};
+    const raw = vars.settings ?? {};
+    this.engineerApiKey = this.env.getLocalSecret('secondary-api-key');
+    if (!this.engineerApiKey && typeof raw.engineerApiKey === 'string' && raw.engineerApiKey.trim()) {
+      this.engineerApiKey = raw.engineerApiKey.trim();
+      this.env.setLocalSecret('secondary-api-key', this.engineerApiKey);
+    }
+    const { engineerApiKey: _legacyKey, hasEngineerApiKey: _legacyFlag, clearEngineerApiKey: _legacyClear, ...safeRaw } = raw;
+    this.settings = { ...DEFAULT_SETTINGS, ...safeRaw };
+    if (_legacyKey !== undefined || _legacyFlag !== undefined || _legacyClear !== undefined) this.env.setScriptVars({ ...vars, settings: this.settings });
     this.store.opts.maxRevisions = this.settings.maxRevisions;
   }
 
-  updateSettings(patch: Partial<Settings>): Settings {
-    const next = { ...this.settings, ...patch };
+  updateSettings(patch: SettingsPatch): SettingsView {
+    const { engineerApiKey, clearEngineerApiKey, hasEngineerApiKey: _ignoredFlag, ...safePatch } = patch;
+    const next = { ...this.settings, ...safePatch };
     next.injectDepth = Math.max(0, Math.min(20, Math.round(Number(next.injectDepth) || 0)));
     next.maxRevisions = Math.max(8, Math.min(200, Math.round(Number(next.maxRevisions) || DEFAULT_SETTINGS.maxRevisions)));
     if (!['system', 'user', 'assistant'].includes(next.injectRole)) next.injectRole = 'system';
     if (!['main', 'secondary'].includes(next.engineerApi)) next.engineerApi = 'main';
     next.engineerProxyPreset = String(next.engineerProxyPreset ?? '').trim();
     next.engineerApiUrl = String(next.engineerApiUrl ?? '').trim();
-    next.engineerApiKey = String(next.engineerApiKey ?? '').trim();
     next.engineerModel = String(next.engineerModel ?? '').trim();
+    const settingsError = next.engineerApi === 'secondary' ? this.secondaryApiError(next) : null;
+    if (settingsError) throw new Error(settingsError);
+    if (clearEngineerApiKey) {
+      this.engineerApiKey = '';
+      this.env.setLocalSecret('secondary-api-key', '');
+    } else if (typeof engineerApiKey === 'string' && engineerApiKey.trim()) {
+      this.engineerApiKey = engineerApiKey.trim();
+      this.env.setLocalSecret('secondary-api-key', this.engineerApiKey);
+    }
     this.settings = next;
     this.store.opts.maxRevisions = next.maxRevisions;
     const vars = this.env.getScriptVars() ?? {};
     this.env.setScriptVars({ ...vars, settings: next });
     if (!next.inject) this.env.uninject(INJECT_ID);
     this.notify('settings');
-    return next;
+    return this.settingsView();
   }
 
-  private secondaryApiError(): string | null {
-    if (this.settings.engineerProxyPreset) return null;
-    if (!this.settings.engineerApiUrl) return '请先在设置中填写副 API 站点，或填写代理预设名称';
+  settingsView(): SettingsView {
+    return { ...this.settings, engineerApiKey: '', hasEngineerApiKey: !!this.engineerApiKey };
+  }
+
+  private secondaryApiError(settings: Settings = this.settings): string | null {
+    if (settings.engineerProxyPreset) return null;
+    if (!settings.engineerApiUrl) return '请先在设置中填写副 API 站点，或填写代理预设名称';
     try {
-      const url = new URL(this.settings.engineerApiUrl);
+      const url = new URL(settings.engineerApiUrl);
       if (url.protocol !== 'http:' && url.protocol !== 'https:') throw new Error('protocol');
     } catch {
       return '副 API 站点必须是有效的 http:// 或 https:// 地址';
     }
-    if (!this.settings.engineerModel) return '使用副 API 站点时必须填写模型名称';
+    if (!settings.engineerModel) return '使用副 API 站点时必须填写模型名称';
     return null;
   }
 
   private secondaryApiOptions(): TextGenerationOptions {
+    if (this.settings.engineerProxyPreset) {
+      return {
+        proxyPreset: this.settings.engineerProxyPreset,
+        ...(this.settings.engineerModel ? { model: this.settings.engineerModel } : {}),
+      };
+    }
     return {
-      ...(this.settings.engineerProxyPreset ? { proxyPreset: this.settings.engineerProxyPreset } : {}),
       ...(this.settings.engineerApiUrl ? { apiUrl: this.settings.engineerApiUrl } : {}),
-      ...(this.settings.engineerApiKey ? { apiKey: this.settings.engineerApiKey } : {}),
+      ...(this.engineerApiKey ? { apiKey: this.engineerApiKey } : {}),
       ...(this.settings.engineerModel ? { model: this.settings.engineerModel } : {}),
     };
   }
@@ -303,7 +340,7 @@ export class F1Controller {
       fallback: resolved?.fallback ?? false,
       revisions: this.store.revisionCount,
       storeSize: this.store.totalSize,
-      settings: { ...this.settings, engineerApiKey: '' },
+      settings: this.settingsView(),
       data: this.data
         ? {
             canStart: this.data.canStart,

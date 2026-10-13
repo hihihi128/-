@@ -34,6 +34,9 @@ export interface TavernEnv {
   getMessageSwipeVars(id: number): Array<Record<string, any>>;
   getScriptVars(): Record<string, any>;
   setScriptVars(vars: Record<string, any>): void;
+  /** Device-local secret storage. Values must never be written into card or save variables. */
+  getLocalSecret(name: string): string;
+  setLocalSecret(name: string, value: string): void;
   lastMessageId(): number;
   getMessage(id: number): ChatMsg | null;
   setMessageText(id: number, text: string): Promise<void>;
@@ -120,6 +123,17 @@ export function createTavernEnv(): TavernEnv {
     },
     getScriptVars: () => getVariables({ type: 'script' }) ?? {},
     setScriptVars: v => replaceVariables(v, { type: 'script' }),
+    getLocalSecret: name => {
+      try {
+        return localStorage.getItem(`f1m:secret:${name}`) ?? '';
+      } catch {
+        return '';
+      }
+    },
+    setLocalSecret: (name, value) => {
+      if (value) localStorage.setItem(`f1m:secret:${name}`, value);
+      else localStorage.removeItem(`f1m:secret:${name}`);
+    },
     lastMessageId: () => {
       try {
         return getLastMessageId();
@@ -143,14 +157,15 @@ export function createTavernEnv(): TavernEnv {
     },
     generateText: async (prompt, options) => {
       if (typeof generateRaw !== 'function') throw new Error('当前酒馆助手版本不支持独立生成');
-      const customApi = options && (options.proxyPreset || options.apiUrl || options.apiKey || options.model)
-        ? {
-            ...(options.proxyPreset ? { proxy_preset: options.proxyPreset } : {}),
-            ...(options.apiUrl ? { apiurl: options.apiUrl, source: 'openai' } : {}),
-            ...(options.apiKey ? { key: options.apiKey } : {}),
-            ...(options.model ? { model: options.model } : {}),
-          }
-        : undefined;
+      const customApi = options?.proxyPreset
+        ? { proxy_preset: options.proxyPreset, ...(options.model ? { model: options.model } : {}) }
+        : options && (options.apiUrl || options.apiKey || options.model)
+          ? {
+              ...(options.apiUrl ? { apiurl: options.apiUrl, source: 'openai' } : {}),
+              ...(options.apiKey ? { key: options.apiKey } : {}),
+              ...(options.model ? { model: options.model } : {}),
+            }
+          : undefined;
       return String(await generateRaw({
         user_input: '请给出策略建议。',
         should_stream: false,

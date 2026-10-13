@@ -2,12 +2,12 @@
 import { computed, onMounted, ref } from 'vue';
 import { call, peek, store, toast } from '../bridge';
 import type { RevisionInfo } from '../../../tavern/store';
-import type { Settings } from '../../../tavern/controller';
+import type { SettingsPatch, SettingsView } from '../../../tavern/controller';
 
 const v = computed(() => store.view!);
 const st = computed(() => store.status);
 const revisions = ref<RevisionInfo[]>([]);
-const settings = ref<Settings | null>(null);
+const settings = ref<SettingsView | null>(null);
 const importText = ref('');
 const promptPreview = ref('');
 const showApiKey = ref(false);
@@ -28,8 +28,15 @@ async function restore(r: RevisionInfo) {
 
 async function save() {
   if (!settings.value) return;
-  const saved = await call(a => a.setSettings({ ...settings.value! }), false);
+  const patch: SettingsPatch = { ...settings.value };
+  const saved = await call(a => a.setSettings(patch), false);
   if (saved) toast('ok', '设置已保存');
+  load();
+}
+
+async function clearApiKey() {
+  const saved = await call(a => a.setSettings({ clearEngineerApiKey: true }), false);
+  if (saved) toast('ok', '副 API Key 已清除');
   load();
 }
 
@@ -156,15 +163,16 @@ function kb(n: number) {
         <label class="field">副 API 站点（OpenAI 兼容）<input v-model="settings.engineerApiUrl" type="url" inputmode="url" placeholder="https://api.example.com/v1" /></label>
         <label class="field">副 API Key
           <span class="api-key-row">
-            <input v-model="settings.engineerApiKey" :type="showApiKey ? 'text' : 'password'" autocomplete="new-password" placeholder="sk-…" />
-            <button type="button" class="small ghost" @click="showApiKey = !showApiKey">{{ showApiKey ? '隐藏' : '显示' }}</button>
+            <input v-model="settings.engineerApiKey" :type="showApiKey ? 'text' : 'password'" autocomplete="new-password" :placeholder="settings.hasEngineerApiKey ? '已在本设备保存；留空则保持不变' : 'sk-…'" />
+            <button v-if="settings.engineerApiKey" type="button" class="small ghost" @click="showApiKey = !showApiKey">{{ showApiKey ? '隐藏' : '显示' }}</button>
+            <button v-else-if="settings.hasEngineerApiKey" type="button" class="small ghost danger" @click="clearApiKey">清除</button>
           </span>
         </label>
         <label class="field">副 API 模型<input v-model="settings.engineerModel" type="text" placeholder="例如 gpt-4o-mini" /></label>
         <label class="field">代理预设名称（可选，高级）<input v-model="settings.engineerProxyPreset" type="text" placeholder="留空则使用上面的站点和 Key" /></label>
       </div>
       <div class="tiny muted">副 API 可直接填写 OpenAI 兼容站点、Key 和模型。若填写代理预设，酒馆助手会优先使用该预设。</div>
-      <div class="tiny muted">Key 保存在本角色脚本变量中，不会写入游戏存档或导出的存档文件。请勿在共享设备保存 Key。</div>
+      <div class="tiny muted">Key 仅保存在本设备浏览器中，不会写入角色卡、游戏存档或导出的存档文件。其他同源脚本仍可能访问浏览器数据，请勿在共享设备保存 Key。</div>
       <div class="row" style="justify-content: flex-end"><button class="primary small" @click="save">保存设置</button></div>
     </div>
 

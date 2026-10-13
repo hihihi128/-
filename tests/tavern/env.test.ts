@@ -37,7 +37,7 @@ describe('酒馆环境独立生成', () => {
     });
 
     expect(generateRaw).toHaveBeenCalledWith(expect.objectContaining({
-      custom_api: expect.objectContaining({ proxy_preset: '副线预设' }),
+      custom_api: { proxy_preset: '副线预设', model: 'test-model' },
     }));
   });
 });

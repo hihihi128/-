@@ -7,7 +7,7 @@
  */
 import type { NewGameOptions } from '../engine/newgame';
 import type { Action, Ambition, ContractOfferTerms, DriverAttr, FacilityType, StaffRole } from '../engine/types';
-import { VERSION, type F1Controller, type Settings } from './controller';
+import { VERSION, type F1Controller, type SettingsPatch } from './controller';
 import type { PanelHost } from './panelHost';
 
 export function createApi(ctrl: F1Controller, panel: () => PanelHost | null) {
@@ -29,8 +29,8 @@ export function createApi(ctrl: F1Controller, panel: () => PanelHost | null) {
     restoreRevision: (id: string) => ctrl.restoreRevision(id),
     exportSave: () => ctrl.exportSave(),
     importSave: (text: string) => ctrl.importSave(text),
-    getSettings: () => ({ ...ctrl.settings }),
-    setSettings: (patch: Partial<Settings>) => ctrl.updateSettings(patch),
+    getSettings: () => ctrl.settingsView(),
+    setSettings: (patch: SettingsPatch) => ctrl.updateSettings(patch),
     requestNarration: (text?: string) => ctrl.requestNarration(text),
     requestEngineerStrategy: (driverId: string, api?: 'main' | 'secondary') => ctrl.requestEngineerStrategy(driverId, api),
     requestPerfectStrategy: (driverId: string, api?: 'main' | 'secondary') => ctrl.requestPerfectStrategy(driverId, api),

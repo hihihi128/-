@@ -80,7 +80,10 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(direct.ok).toBe(true);
     expect(env.generated.at(-1)?.options).toEqual({ apiUrl: 'https://api.example.com/v1', apiKey: 'secret-key', model: 'direct-model' });
     expect(ctrl.status().settings.engineerApiKey).toBe('');
-    expect(ctrl.settings.engineerApiKey).toBe('secret-key');
+    expect(ctrl.settingsView()).toMatchObject({ engineerApiKey: '', hasEngineerApiKey: true });
+    expect(env.localSecrets['secondary-api-key']).toBe('secret-key');
+    expect(JSON.stringify(env.scriptVars)).not.toContain('secret-key');
+    expect(ctrl.exportSave()).not.toContain('secret-key');
 
     const contextual = ctrl.stateAt()!;
     contextual.weekend!.forecast.race = 0.72;
@@ -123,11 +126,20 @@ describe('后端控制器（模拟酒馆环境）', () => {
 
   it('validates direct secondary API settings before generation', async () => {
     for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
-    ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: '', engineerApiUrl: 'not-a-url', engineerModel: 'test-model' });
-    expect((await ctrl.requestEngineerStrategy('c1')).message).toContain('有效的 http:// 或 https:// 地址');
+    expect(() => ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: '', engineerApiUrl: 'not-a-url', engineerModel: 'test-model' })).toThrow('有效的 http:// 或 https:// 地址');
 
-    ctrl.updateSettings({ engineerApiUrl: 'https://api.example.com/v1', engineerModel: '' });
-    expect((await ctrl.requestEngineerStrategy('c1')).message).toContain('必须填写模型名称');
+    expect(() => ctrl.updateSettings({ engineerApi: 'secondary', engineerApiUrl: 'https://api.example.com/v1', engineerModel: '' })).toThrow('必须填写模型名称');
+  });
+
+  it('migrates a legacy script-variable key into device-local storage and scrubs it', () => {
+    const legacyEnv = new FakeTavern();
+    legacyEnv.scriptVars.settings = { engineerApi: 'secondary', engineerProxyPreset: '', engineerApiUrl: 'https://api.example.com/v1', engineerApiKey: 'legacy-secret', engineerModel: 'legacy-model' };
+    const legacyController = new F1Controller(legacyEnv);
+    legacyController.init();
+
+    expect(legacyEnv.localSecrets['secondary-api-key']).toBe('legacy-secret');
+    expect(JSON.stringify(legacyEnv.scriptVars)).not.toContain('legacy-secret');
+    expect(legacyController.settingsView()).toMatchObject({ engineerApiKey: '', hasEngineerApiKey: true });
   });
 
   it('工程师 API 失败时仍自动应用基础策略', async () => {
