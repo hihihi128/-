@@ -859,7 +859,20 @@ export class F1Controller {
       const latest = this.randomEventNarrationCurrent(pending, id);
       const visibleReply = stripAiCommands(stripHud(this.env.getMessage(id)?.message ?? '')).trim();
       if (!latest || visibleReply !== mainReply) {
-        this.restoreRandomEventForRetry(pending.eventId, '副 API 判定期间聊天内容发生变化；旧判定已安全丢弃，请重新提交。', mainReply);
+        // The edited assistant floor may not carry a persisted revision yet.
+        // Restore from the validated narration snapshot instead of looking the
+        // latest floor up again, otherwise the event can remain stranded in
+        // awaiting_narration after its prose changes during adjudication.
+        const retry = deepClone(latest?.state ?? current.state);
+        const retryEvent = retry.randomEvents?.current;
+        if (retryEvent?.id === pending.eventId && retryEvent.status === 'awaiting_narration') {
+          retryEvent.status = 'awaiting_player';
+          retryEvent.playerAnswer = null;
+          retryEvent.mainReply = mainReply;
+          retryEvent.generationError = '副 API 判定期间聊天内容发生变化；旧判定已安全丢弃，请重新提交。';
+          this.store.commit(retry, { floor: Math.max(0, id), kind: 'ui', label: `${retryEvent.title}：叙述或判定失败，可重试` });
+          this.notify('random_event');
+        } else this.restoreRandomEventForRetry(pending.eventId, '副 API 判定期间聊天内容发生变化；旧判定已安全丢弃，请重新提交。', mainReply);
         return;
       }
       const next = deepClone(latest.state);
@@ -1384,8 +1397,20 @@ export class F1Controller {
     const msg = this.env.getMessage(last);
     if (msg?.role === 'assistant') {
       const randomEventNarration = this.isPendingRandomEventNarrationMessage(last);
+      const visibleReply = stripAiCommands(stripHud(msg.message ?? '')).trim();
       await this.processAssistantMessage(last, { fallback: true, ignoreCommands: randomEventNarration });
-      if (randomEventNarration) await this.settleRandomEventNarration(last);
+      if (randomEventNarration) {
+        // A cancelled stream can leave SillyTavern's placeholder without ever
+        // emitting MESSAGE_RECEIVED. It is not narration and must never reach
+        // the secondary adjudicator.
+        if (!visibleReply || visibleReply === STREAM_PLACEHOLDER) {
+          const pending = this.pendingRandomEventNarration;
+          if (pending) {
+            this.pendingRandomEventNarration = null;
+            this.restoreRandomEventForRetry(pending.eventId, '主 API 没有返回可供判定的剧情叙述');
+          }
+        } else await this.settleRandomEventNarration(last);
+      }
     }
   }
 
@@ -1403,6 +1428,16 @@ export class F1Controller {
   }
 
   async onMessageEdited(id: number): Promise<void> {
+    // Editing narration while it is awaiting adjudication invalidates the exact
+    // prose that the secondary API is judging. Abort it immediately rather
+    // than leaving the event dependent on a later asynchronous response.
+    const pending = this.pendingRandomEventNarration;
+    if (pending && this.randomEventNarrationCurrent(pending, id)) {
+      this.pendingRandomEventNarration = null;
+      this.adjudicatingRandomEventId = null;
+      this.restoreRandomEventForRetry(pending.eventId, '副 API 判定期间聊天内容发生变化；旧判定已安全丢弃，请重新提交。');
+      return;
+    }
     // 只有最新楼层的编辑会重新结算（中间楼层的修改不重算后续楼层）
     if (id !== this.latestFloor()) return;
     await this.processAssistantMessage(id, { type: 'edit' });
