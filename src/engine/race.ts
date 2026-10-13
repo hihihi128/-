@@ -788,7 +788,10 @@ function weatherTyreCost(rules: GameState['rules'], compound: Compound, wetness:
 
 function weatherTyreChangeWorthwhile(rules: GameState['rules'], current: Compound, target: Compound, wetness: number): boolean {
   if (target === current || (!rules.tyres[current]?.wet && !rules.tyres[target]?.wet)) return false;
-  return weatherTyreCost(rules, target, wetness) + .25 < weatherTyreCost(rules, current, wetness);
+  // Keep a small hysteresis band so short showers do not cause tyre ping-pong,
+  // while still allowing the full-wet → intermediate crossover after water
+  // begins to drain.
+  return weatherTyreCost(rules, target, wetness) + .2 < weatherTyreCost(rules, current, wetness);
 }
 
 function replacementCompound(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound {
