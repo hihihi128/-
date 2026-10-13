@@ -24,12 +24,13 @@ import { previewContractOffer } from '../engine/market';
 import { buildStatePrompt } from '../engine/prompt';
 import { applyAiCommands, describeLog, parseAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
+import { applyRandomEventResolution, setRandomEventContent } from '../engine/randomEvents';
 import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
 import { strategyOptions } from '../engine/strategy';
 import { applySupernaturalCommands, effectiveSetup, parseSupernaturalCommands, SUPERNATURAL_LIMITS } from '../engine/supernatural';
 import { dismissalReason } from '../engine/teamSpecials';
-import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, StaffRole } from '../engine/types';
-import { hashString, money, round1 } from '../engine/util';
+import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, RandomEventRecord, StaffRole } from '../engine/types';
+import { deepClone, hashString, money, round1 } from '../engine/util';
 import { buildView, supernaturalAvailability, type GameView } from '../engine/view';
 import type { TavernEnv, TextGenerationOptions } from './env';
 import {
@@ -39,6 +40,14 @@ import {
   parseNegotiationReply,
   type NegotiationSessionView,
 } from './negotiation';
+import {
+  parseRandomEventContent,
+  parseRandomEventMainReply,
+  parseRandomEventResolution,
+  randomEventGenerationPrompt,
+  randomEventMainPrompt,
+  randomEventResolutionPrompt,
+} from './randomEventFlow';
 import { AI_PTR, GAME_PTR, PTR, SaveStore, type RevisionInfo } from './store';
 
 export const HUD_TAG = '<F1M_HUD/>';
@@ -174,6 +183,11 @@ export interface SupernaturalInterventionResult extends Outcome {
 
 export interface NegotiationResult extends Outcome {
   session: NegotiationSessionView | null;
+}
+
+export interface RandomEventResolutionResult extends Outcome {
+  event: RandomEventRecord | null;
+  mainReply: { speaker: string; reply: string } | null;
 }
 
 interface ActiveNegotiation extends NegotiationSessionView {
@@ -671,6 +685,16 @@ export class F1Controller {
       }
       const res = dispatch(cur.state, preparedAction);
       if (!res.ok) return { ok: false, message: res.message };
+      const pendingEvent = res.state.randomEvents?.current;
+      if (pendingEvent?.status === 'pending_generation') {
+        const guard = { chatId: this.env.chatId(), gameId: cur.state.gameId, revisionId: cur.rev.id, revisionData: cur.rev.data, floor };
+        await this.prepareRandomEventContent(res.state, pendingEvent);
+        const currentFloor = this.latestFloor();
+        const current = this.store.resolve(currentFloor);
+        if (this.env.chatId() !== guard.chatId || currentFloor !== guard.floor || !current || current.state.gameId !== guard.gameId || current.rev.id !== guard.revisionId || current.rev.data !== guard.revisionData) {
+          return { ok: false, message: '等待随机事件副 API 时存档或聊天已经变化，结果已安全丢弃' };
+        }
+      }
       this.store.commit(res.state, { floor: Math.max(0, floor), kind: 'ui', label: res.message });
       this.notify('action');
       if (this.settings.autoNarrate && isSimulation(action) && res.state.narration.length) {
@@ -680,6 +704,104 @@ export class F1Controller {
     } finally {
       this.busy = false;
     }
+  }
+
+  private async prepareRandomEventContent(state: GameState, event: RandomEventRecord): Promise<void> {
+    const fallback = { title: event.title, prompt: event.prompt, answerOptions: [...event.answerOptions] };
+    const configError = this.secondaryApiError();
+    if (configError) {
+      setRandomEventContent(state, event.id, fallback, configError);
+      return;
+    }
+    try {
+      const generated = await withTimeout(
+        this.env.generateText(randomEventGenerationPrompt(state, event), this.secondaryApiOptions()),
+        45_000,
+        '随机事件副 API 请求超时',
+      );
+      if (new TextEncoder().encode(generated).byteLength > 16 * 1024) throw new Error('随机事件副 API 返回超过 16 KiB');
+      setRandomEventContent(state, event.id, parseRandomEventContent(generated));
+    } catch (error) {
+      setRandomEventContent(state, event.id, fallback, error instanceof Error ? error.message : '随机事件副 API 请求失败');
+    }
+  }
+
+  async resolveRandomEvent(request: { eventId: unknown; answer: unknown; expectedRevisionId: unknown }): Promise<RandomEventResolutionResult> {
+    const fail = (message: string, mainReply: { speaker: string; reply: string } | null = null): RandomEventResolutionResult => ({
+      ok: false,
+      message,
+      event: this.stateAt()?.randomEvents?.current ?? null,
+      mainReply,
+    });
+    if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
+    if (typeof request.eventId !== 'string' || typeof request.expectedRevisionId !== 'string') return fail('随机事件请求缺少有效标识');
+    if (typeof request.answer !== 'string' || !request.answer.trim() || request.answer.trim().length > 1000) return fail('事件回答必须为 1–1000 个非空字符');
+    const secondaryError = this.secondaryApiError();
+    if (secondaryError) return fail(secondaryError);
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    const event = current?.state.randomEvents?.current;
+    if (!current || current.rev.id !== request.expectedRevisionId) return fail('存档版本已经变化，请刷新事件后重试');
+    if (!event || event.id !== request.eventId || event.status !== 'awaiting_player') return fail('随机事件已经变化或完成');
+    const guard = {
+      chatId: this.env.chatId(), floor, gameId: current.state.gameId, revisionId: current.rev.id, revisionData: current.rev.data,
+      phase: current.state.season.phase, year: current.state.season.year, roundIndex: current.state.season.roundIndex, eventId: event.id,
+    };
+    const contextCurrent = () => {
+      const latestFloor = this.latestFloor();
+      const latest = this.store.resolve(latestFloor);
+      const latestEvent = latest?.state.randomEvents?.current;
+      return this.env.chatId() === guard.chatId && latestFloor === guard.floor && latest?.state.gameId === guard.gameId && latest.rev.id === guard.revisionId && latest.rev.data === guard.revisionData && latest.state.season.phase === guard.phase && latest.state.season.year === guard.year && latest.state.season.roundIndex === guard.roundIndex && latestEvent?.id === guard.eventId && latestEvent.status === 'awaiting_player' ? latest : null;
+    };
+    const answer = request.answer.trim();
+    this.busy = true;
+    let mainReply: { speaker: string; reply: string } | null = null;
+    try {
+      const mainRaw = await withTimeout(this.env.generateText(randomEventMainPrompt(current.state, event, answer)), 60_000, '主 API 事件回复超时');
+      if (new TextEncoder().encode(mainRaw).byteLength > 16 * 1024) return fail('主 API 事件回复超过 16 KiB');
+      mainReply = parseRandomEventMainReply(mainRaw);
+      if (this.env.isGenerating() || !contextCurrent()) return fail('等待主 API 时存档或聊天已经变化，结果已安全丢弃', mainReply);
+      const resolutionRaw = await withTimeout(
+        this.env.generateText(randomEventResolutionPrompt(current.state, event, answer, mainReply), this.secondaryApiOptions()),
+        60_000,
+        '副 API 事件判定超时',
+      );
+      if (new TextEncoder().encode(resolutionRaw).byteLength > 16 * 1024) return fail('副 API 事件判定超过 16 KiB', mainReply);
+      const resolution = parseRandomEventResolution(resolutionRaw, event.id);
+      const latest = contextCurrent();
+      if (this.env.isGenerating() || !latest) return fail('等待副 API 时存档或聊天已经变化，结果已安全丢弃', mainReply);
+      const next = deepClone(latest.state);
+      const nextEvent = next.randomEvents?.current;
+      if (!nextEvent || nextEvent.id !== event.id) return fail('随机事件已经变化', mainReply);
+      nextEvent.playerAnswer = answer;
+      nextEvent.mainReply = `${mainReply.speaker}：${mainReply.reply}`;
+      const applied = applyRandomEventResolution(next, event.id, resolution.outcome, resolution.summary, resolution.effects);
+      if (!applied.ok) return fail(applied.message, mainReply);
+      this.store.commit(next, { floor: Math.max(0, floor), kind: 'ui', label: `${event.title}：${resolution.outcome === 'resolved' ? '已解决' : '未解决'}` });
+      this.notify('random_event');
+      return { ok: true, message: applied.message, event: next.randomEvents?.current ?? null, mainReply };
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : '随机事件处理失败', mainReply);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  skipRandomEvent(request: { eventId: unknown; expectedRevisionId: unknown }): RandomEventResolutionResult {
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    const event = current?.state.randomEvents?.current;
+    if (this.busy || this.env.isGenerating()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', event: event ?? null, mainReply: null };
+    if (!current || typeof request.expectedRevisionId !== 'string' || current.rev.id !== request.expectedRevisionId) return { ok: false, message: '存档版本已经变化，请刷新事件后重试', event: event ?? null, mainReply: null };
+    if (!event || typeof request.eventId !== 'string' || event.id !== request.eventId || event.status !== 'awaiting_player') return { ok: false, message: '随机事件已经变化或完成', event: event ?? null, mainReply: null };
+    const next = deepClone(current.state);
+    const nextEvent = next.randomEvents!.current!;
+    nextEvent.playerAnswer = '玩家选择跳过本次随机事件。';
+    const applied = applyRandomEventResolution(next, event.id, 'unresolved', '车队暂时搁置了这项问题，本次不应用额外增益或减益。', []);
+    if (!applied.ok) return { ok: false, message: applied.message, event, mainReply: null };
+    this.store.commit(next, { floor: Math.max(0, floor), kind: 'ui', label: `${event.title}：已跳过` });
+    this.notify('random_event');
+    return { ok: true, message: applied.message, event: nextEvent, mainReply: null };
   }
 
   /**

@@ -52,6 +52,19 @@ export function migrateState(state: GameState): GameState {
   if (state.haas === undefined) state.haas = null;
   if (state.williams === undefined) state.williams = null;
   state.randomEvents ??= { lastRoundKey: null, current: null, history: [] };
+  const randomRecords = [...state.randomEvents.history, ...(state.randomEvents.current ? [state.randomEvents.current] : [])];
+  for (let index = 0; index < randomRecords.length; index++) {
+    const record = randomRecords[index];
+    record.id ??= `legacy-random-event-${record.roundKey}-${index}`;
+    record.status ??= record.kind === 'none' ? 'none' : 'resolved';
+    record.prompt ??= record.detail;
+    record.answerOptions ??= [];
+    record.playerAnswer ??= null;
+    record.mainReply ??= null;
+    record.outcomeSummary ??= record.status === 'resolved' ? record.detail : null;
+    record.effects ??= [];
+    record.generationError ??= null;
+  }
   if (state.audi) state.audi.alliance = Boolean(state.audi.alliance);
   state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, log: [] };
   if (state.mclaren) state.mclaren.weeksTotal ??= state.mclaren.weeksLeft;

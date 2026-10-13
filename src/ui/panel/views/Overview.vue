@@ -3,6 +3,7 @@ import { computed } from 'vue';
 import Bar from '../components/Bar.vue';
 import Kpi from '../components/Kpi.vue';
 import NegotiationPanel from '../components/NegotiationPanel.vue';
+import RandomEventPanel from '../components/RandomEventPanel.vue';
 import { act, call, money, pct, store } from '../bridge';
 
 const v = computed(() => store.view!);
@@ -22,7 +23,6 @@ const au = computed(() => v.value.audi);
 const alpine = computed(() => v.value.alpine);
 const haas = computed(() => v.value.haas);
 const williams = computed(() => v.value.williams);
-const randomEvent = computed(() => v.value.randomEvents?.current ?? null);
 const fia = computed(() => v.value.fiaMeeting);
 const fiaIssue: Record<string, string> = { aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
 const driverLabel = (id?: string) => v.value.drivers.find((driver: any) => driver.id === id)?.name ?? id ?? '-';
@@ -167,10 +167,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <div class="tiny muted">每站只能确定一次预算方向。设施和研发动作必须符合本站方向。</div>
     </div>
 
-    <div v-if="randomEvent" class="card stack-s special-card">
-      <div class="spread"><h3>本站随机事件</h3><span class="badge" :class="randomEvent.kind === 'none' ? 'ok' : 'warn'">{{ randomEvent.kind === 'none' ? '无事发生' : '已触发' }}</span></div>
-      <b>{{ randomEvent.title }}</b><div class="small">{{ randomEvent.detail }}</div>
-    </div>
+    <RandomEventPanel />
 
     <div v-if="fia?.current" class="card stack-s fia-meeting">
       <div class="spread"><h3>FIA 领队座谈会</h3><span class="badge warn">第 {{ fia.current.index }} 次会议</span></div>

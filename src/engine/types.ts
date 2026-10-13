@@ -1145,11 +1145,28 @@ export interface WilliamsState {
 }
 
 export type RandomEventKind = 'none' | 'driver_injury' | 'wind_tunnel_data' | 'part_issue';
+export type RandomEventStatus = 'none' | 'pending_generation' | 'awaiting_player' | 'resolved' | 'unresolved';
+export type RandomEventEffectOp = 'driver_fitness' | 'driver_morale' | 'funds' | 'project_weeks' | 'part_reliability' | 'staff_skill' | 'aero_hours';
+export interface RandomEventEffect {
+  op: RandomEventEffectOp;
+  targetId: string | null;
+  delta: number;
+  reason: string;
+}
 export interface RandomEventRecord {
+  id: string;
   roundKey: string;
   kind: RandomEventKind;
+  status: RandomEventStatus;
   title: string;
   detail: string;
+  prompt: string;
+  answerOptions: string[];
+  playerAnswer: string | null;
+  mainReply: string | null;
+  outcomeSummary: string | null;
+  effects: RandomEventEffect[];
+  generationError: string | null;
 }
 export interface RandomEventState {
   lastRoundKey: string | null;

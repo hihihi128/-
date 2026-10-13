@@ -208,6 +208,41 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(specialCtrl.stateAt()!.mercedes?.lastActionRound).toBeNull();
   });
 
+  it('随机事件由副 API 出题、主 API 回应，再由副 API 白名单结算', async () => {
+    const eventEnv = new FakeTavern(cardWorldbook());
+    const eventCtrl = new F1Controller(eventEnv);
+    eventCtrl.init();
+    await eventCtrl.loadData();
+    expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 91 })).ok).toBe(true);
+    const save = JSON.parse(eventCtrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0 };
+    expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    eventCtrl.updateSettings({ engineerProxyPreset: '随机事件副线', engineerModel: 'event-model' });
+    const optionsSeen: unknown[] = [];
+    let call = 0;
+    eventEnv.generateText = async (_prompt, options) => {
+      optionsSeen.push(options);
+      call++;
+      if (call === 1) return '{"title":"车手训练冲突","prompt":"车手感到不适，但工程组希望继续长距离训练。你如何决定？","answerOptions":["降低负荷","先复查"]}';
+      if (call === 2) return '{"speaker":"车队医疗主管","reply":"我们可以立即复查，并把训练强度降低到安全范围。"}';
+      return '{"eventId":"' + eventCtrl.stateAt()!.randomEvents!.current!.id + '","outcome":"resolved","summary":"医疗复查及时完成，赞助商认可车队的处理。","effects":[{"op":"funds","targetId":null,"delta":2,"reason":"赞助商提供健康计划支持"}]}';
+    };
+
+    const started = await eventCtrl.dispatch({ type: 'START_WEEKEND' });
+    expect(started.ok).toBe(true);
+    const event = eventCtrl.stateAt()!.randomEvents!.current!;
+    expect(event).toMatchObject({ status: 'awaiting_player', title: '车手训练冲突' });
+    const funds = eventCtrl.stateAt()!.teams.haas.funds;
+    const result = await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '先复查，再按医疗建议降低负荷。', expectedRevisionId: eventCtrl.status().revisionId! });
+    expect(result).toMatchObject({ ok: true, event: { status: 'resolved', playerAnswer: '先复查，再按医疗建议降低负荷。' } });
+    expect(result.mainReply?.speaker).toBe('车队医疗主管');
+    expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds + 2);
+    expect(optionsSeen[0]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
+    expect(optionsSeen[1]).toBeUndefined();
+    expect(optionsSeen[2]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
+  });
+
   it('validates direct secondary API settings before generation', async () => {
     for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
     expect(() => ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: '', engineerApiUrl: 'not-a-url', engineerModel: 'test-model' })).toThrow('有效的 http:// 或 https:// 地址');

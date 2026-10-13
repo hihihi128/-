@@ -4,7 +4,7 @@ import { supplyCustomers } from '../../src/engine/aduo';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
 import { afterManagementRace, applyAlpinePuPenalty, completeAlpineDriverExit, completeWilliamsHandover } from '../../src/engine/managementSpecials';
-import { triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
+import { applyRandomEventResolution, setRandomEventContent, triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
 import { Rng } from '../../src/engine/rng';
 import type { Action, GameState } from '../../src/engine/types';
 import { buildView } from '../../src/engine/view';
@@ -129,8 +129,9 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     const before = state.teams.haas.cars.map(car => state.drivers[car.driverId!].fitness);
     triggerWeekendRandomEvent(state, new Rng(9));
     expect(state.randomEvents?.current?.kind).toBe('driver_injury');
+    expect(state.randomEvents?.current?.status).toBe('pending_generation');
     expect(state.randomEvents?.history).toHaveLength(1);
-    expect(state.teams.haas.cars.map(car => state.drivers[car.driverId!].fitness)).not.toEqual(before);
+    expect(state.teams.haas.cars.map(car => state.drivers[car.driverId!].fitness)).toEqual(before);
     triggerWeekendRandomEvent(state, new Rng(10));
     expect(state.randomEvents?.history).toHaveLength(1);
 
@@ -141,7 +142,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     expect(state.randomEvents?.history).toHaveLength(2);
   });
 
-  it('风洞数据异常会延长空气动力研发项目，并保留已完成的进度', () => {
+  it('风洞事件只有在双 API 判定后才改变项目，并保留已完成的进度', () => {
     let state = game('haas');
     state = run(state, { type: 'START_PROJECT', partType: 'floor', ambition: 'standard' }).state;
     const project = state.teams.haas.projects.at(-1)!;
@@ -151,6 +152,9 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
 
     triggerWeekendRandomEvent(state, new Rng(12));
     expect(state.randomEvents?.current?.kind).toBe('wind_tunnel_data');
+    const event = state.randomEvents!.current!;
+    expect(setRandomEventContent(state, event.id, { title: event.title, prompt: event.prompt, answerOptions: ['复核', '继续'] })).toBe(true);
+    expect(applyRandomEventResolution(state, event.id, 'unresolved', '复核失败，项目需要延期。', [{ op: 'project_weeks', targetId: project.id, delta: 1, reason: '数据仍不一致' }]).ok).toBe(true);
     expect(project).toMatchObject({ weeksLeft: before.weeksLeft + 1, weeksTotal: before.weeksTotal + 1 });
     expect(project.weeksTotal - project.weeksLeft).toBe(before.elapsed);
   });

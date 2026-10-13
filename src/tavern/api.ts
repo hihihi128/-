@@ -39,6 +39,8 @@ export function createApi(ctrl: F1Controller, panel: () => PanelHost | null) {
     startSpecialNegotiation: (request: { kind: import('./negotiation').NegotiationKind; api?: 'main' | 'secondary' }) => ctrl.startSpecialNegotiation(request),
     sendSpecialNegotiationTurn: (request: { text: string; sessionId: string }) => ctrl.sendSpecialNegotiationTurn(request),
     cancelSpecialNegotiation: () => ctrl.cancelSpecialNegotiation(),
+    resolveRandomEvent: (request: { eventId: string; answer: string; expectedRevisionId: string }) => ctrl.resolveRandomEvent(request),
+    skipRandomEvent: (request: { eventId: string; expectedRevisionId: string }) => ctrl.skipRandomEvent(request),
     /** 强制重新结算最新一条 AI 回复的指令 */
     reprocessLatest: async () => {
       const last = ctrl.latestFloor();
