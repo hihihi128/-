@@ -17,13 +17,37 @@ const BTN_PANEL = 'F1管理面板';
 const BTN_NARRATE = 'AI叙述';
 
 let panel: PanelHost | null = null;
+let unsubscribePanelStatus: (() => void) | null = null;
 
 function init(): void {
+  unsubscribePanelStatus?.();
+  unsubscribePanelStatus = null;
+  panel?.destroy();
+  panel = null;
   const env = createTavernEnv();
   const ctrl = new F1Controller(env);
   ctrl.init();
   const doc = env.hostDocument();
   if (doc) panel = new PanelHost(doc, PANEL_HTML);
+  const updatePanelStatus = () => {
+    const status = ctrl.status();
+    const hud = ctrl.hud(ctrl.latestFloor());
+    const view = ctrl.view();
+    panel?.updateStatus({
+      hasGame: status.hasGame,
+      teamLabel: hud.team?.name,
+      teamColor: hud.team?.color,
+      year: view?.season.year,
+      round: view ? view.season.roundIndex + 1 : undefined,
+      roundCount: view?.season.rounds,
+      trackLabel: hud.season?.track,
+      phaseLabel: view?.season.phaseLabel,
+      pendingNarration: hud.pending,
+      generating: status.generating,
+    });
+  };
+  unsubscribePanelStatus = ctrl.subscribe(updatePanelStatus);
+  updatePanelStatus();
   const api = createApi(ctrl, () => panel);
   env.exposeGlobal('F1Manager', api);
   env.ensureButtons([BTN_PANEL, BTN_NARRATE]);
@@ -45,6 +69,8 @@ $(() => {
 });
 
 $(window).on('pagehide', () => {
+  unsubscribePanelStatus?.();
+  unsubscribePanelStatus = null;
   panel?.destroy();
   panel = null;
   try {
