@@ -40,20 +40,27 @@ describe('resumable live race', () => {
     const freeCompound = state.rules.dryCompounds.at(-1)!;
     const oldPits = changed.pits;
     const oldTime = changed.cumulativeTime;
+    changed.damage = 1.2;
+    changed.repairPending = true;
+    live.damageLedger.push({ id: 'red-repair', incidentId: 'red-incident', driverId: changed.driverId, teamId: changed.teamId, slot: changed.slot, cause: 'collision', severity: 'wing', affectedPartTypes: ['front_wing'], repairedInRace: false });
     const result = act(state, {
       type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
-      drivers: playerCars.map((car, index) => index === 0 ? { driverId: car.driverId, pit: 'box' as const, compound: freeCompound } : { driverId: car.driverId, pit: 'auto' as const }),
+      drivers: playerCars.map((car, index) => index === 0 ? { driverId: car.driverId, pit: 'box' as const, compound: freeCompound, repairWing: true } : { driverId: car.driverId, pit: 'auto' as const }),
     });
     const resumed = result.weekend!.liveRace!;
     expect(resumed.cars[changed.driverId].tyre).toBe(freeCompound);
     expect(resumed.cars[changed.driverId].pits).toBe(oldPits);
     expect(resumed.cars[changed.driverId].cumulativeTime).toBe(oldTime);
+    expect(resumed.cars[changed.driverId].damage).toBe(0);
+    expect(resumed.cars[changed.driverId].repairPending).toBe(false);
+    expect(resumed.damageLedger.find(record => record.id === 'red-repair')?.repairedInRace).toBe(true);
     expect(resumed.cars[changed.driverId].stintIndex).toBe(1);
     expect(resumed.cars[engineerControlled.driverId].tyreAge).toBe(0);
     expect(resumed.cars[engineerControlled.driverId].stintIndex).toBe(engineerStint + 1);
     expect(resumed.cars[engineerControlled.driverId].plannedCompounds.length).toBeGreaterThan(resumed.cars[engineerControlled.driverId].stintIndex + 1);
     expect(resumed.redFlag).toMatchObject({ active: false, restartPending: true, restart: 'standing' });
     expect(resumed.events.some(event => event.type === 'restart')).toBe(true);
+    expect(resumed.events.some(event => event.text.includes('免费更换前翼'))).toBe(true);
   });
 
   it('compresses the field only after every car completes the red-flag trigger lap', () => {

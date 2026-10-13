@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 describe('strategy mode interface', () => {
   const weekend = readFileSync(resolve(__dirname, '../../src/ui/panel/views/Weekend.vue'), 'utf8');
   const newGame = readFileSync(resolve(__dirname, '../../src/ui/panel/views/NewGame.vue'), 'utf8');
+  const liveRace = readFileSync(resolve(__dirname, '../../src/ui/panel/components/LiveRaceDesk.vue'), 'utf8');
 
   it('shows only player and engineer strategy modes', () => {
     expect(weekend).toContain('玩家自己做策略');
@@ -19,5 +20,11 @@ describe('strategy mode interface', () => {
     expect(weekend).toContain('工程师给的策略不一定靠谱');
     expect(newGame).toContain('策略部门历史表现不稳定');
     expect(weekend).toContain('当前策略人员的判断或风险偏好不稳定');
+  });
+
+  it('shows direct red-flag tyre choices and free wing repair', () => {
+    expect(liveRace).toContain('选择重启轮胎');
+    expect(liveRace).toContain('换 {{ v.labels.tyres[compound]?.name ?? compound }}');
+    expect(liveRace).toContain('红旗下免费更换前翼');
   });
 });

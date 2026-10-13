@@ -602,6 +602,15 @@ function freeRedFlagTyreChange(state: GameState, session: LiveRaceState, car: Li
   liveEvent(session, session.lap, 'pit', `${car.driverId} 在红旗暂停期间免费换上${state.rules.tyres[compound]?.name ?? compound}`, [car.driverId], car.player);
 }
 
+function freeRedFlagWingRepair(session: LiveRaceState, car: LiveRaceCar): void {
+  if (!car.repairPending) return;
+  car.damage = 0;
+  car.repairPending = false;
+  const damage = [...session.damageLedger].reverse().find(record => record.driverId === car.driverId && record.affectedPartTypes.includes('front_wing') && !record.repairedInRace);
+  if (damage) damage.repairedInRace = true;
+  liveEvent(session, session.lap, 'damage', `${car.driverId} 在红旗暂停期间免费更换前翼`, [car.driverId], car.player);
+}
+
 function playerCars(session: LiveRaceState): LiveRaceCar[] {
   return liveCars(session).filter(c => c.player && c.status === 'running');
 }
@@ -956,7 +965,10 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       break;
     }
     if (session.redFlag?.active) {
-      for (const car of liveCars(session).filter(car => car.status === 'running')) freeRedFlagTyreChange(state, session, car, replacementCompound(state, session, car));
+      for (const car of liveCars(session).filter(car => car.status === 'running')) {
+        freeRedFlagTyreChange(state, session, car, replacementCompound(state, session, car));
+        freeRedFlagWingRepair(session, car);
+      }
       session.redFlag.active = false;
       session.redFlag.restartPending = true;
       liveEvent(session, lap, 'restart', `${session.redFlag.restart === 'standing' ? '静态' : '滚动'}重启程序开始`, [], true);
@@ -1010,7 +1022,7 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
       car.pendingCompound = choice.compound;
       if (!window.reasons.includes('red_flag')) car.plannedCompounds[car.stintIndex + 1] = choice.compound;
     }
-    if (choice.repairWing && car.repairPending) car.pendingPit = 'box';
+    if (choice.repairWing && car.repairPending && !window.reasons.includes('red_flag')) car.pendingPit = 'box';
     if (choice.paceMode && ['conserve', 'balanced', 'push'].includes(choice.paceMode)) car.plan.paceMode = choice.paceMode as import('./types').PaceMode;
     if (choice.energyMode) car.energyMode = choice.energyMode;
     if (choice.pitTiming) car.plan.pitTiming = choice.pitTiming;
@@ -1022,10 +1034,12 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
     for (const choice of drivers) {
       const car = session.cars[choice.driverId];
       if (choice.pit === 'box' && choice.compound) freeRedFlagTyreChange(state, session, car, choice.compound);
+      if (choice.repairWing) freeRedFlagWingRepair(session, car);
     }
     const interactive = new Set(playerControlledCars(session).map(car => car.driverId));
     for (const car of liveCars(session).filter(car => car.status === 'running' && !interactive.has(car.driverId))) {
       freeRedFlagTyreChange(state, session, car, replacementCompound(state, session, car));
+      freeRedFlagWingRepair(session, car);
     }
     session.redFlag.active = false;
     session.redFlag.restartPending = true;
