@@ -14,7 +14,7 @@ const teams = YAML.parse(readFileSync(path.join(dir, 'data-teams.yaml'), 'utf8')
     aeroChief: { name?: string };
     raceEngineer: { name: string };
     raceEngineer2: { name: string };
-    strategist: { name: string };
+    strategist: { name: string; abilities: { risk: number } };
   };
 }>;
 const drivers = YAML.parse(readFileSync(path.join(dir, 'data-drivers.yaml'), 'utf8')).drivers as Array<{ name: string; team: string; role: string }>;
@@ -28,6 +28,20 @@ const leadershipNames = readdirSync(dir)
   .filter(name => /^lore-leadership-.*\.md$/.test(name))
   .map(name => readFileSync(path.join(dir, name), 'utf8').match(/^<管理层资料 name="([^"]+)"/)?.[1])
   .filter((name): name is string => Boolean(name));
+const mechanicFragments = [
+  '获得 ADUO 前的动力单元故障',
+  '软件适配完成前的动力单元异常放电',
+  '赛车准备不足会提高车手失误概率',
+  'GP 与迈凯伦的谈判',
+  '偏袒任何一位车手都会引发',
+  '预算方向每周在设施',
+  '正式车手可能被红牛临时调走',
+  '振动风险触发强制退赛',
+  '丰田影响力达到阈值',
+  '联盟进度决定动力单元性能',
+  '通过政治联盟争取动力单元补偿',
+  '长期忽视加斯利会让他赛季后离队',
+];
 
 function source(file: string): string {
   return readFileSync(path.join(dir, file), 'utf8');
@@ -50,8 +64,24 @@ describe('车队策略组与技术赛道核心组世界书', () => {
       expect(text.startsWith(`<策略组资料 team="${team.name.replace('车队', '')}" year="2026">`), file).toBe(true);
       expect(text.trimEnd().endsWith('</策略组资料>'), file).toBe(true);
       expect(text.includes(team.staff.strategist.name), `${file}: ${team.staff.strategist.name}`).toBe(true);
+      expect(text.split(team.staff.strategist.name).length, `${file}: 负责人需有独立表达风格`).toBeGreaterThanOrEqual(3);
       expect(text.includes('玩家关系与专属机制只在实时数据表明玩家执掌本队时生效'), file).toBe(true);
+      expect(text.includes('人员与能力以实时数据为准；负责人更换后，策略风格随之调整。'), file).toBe(true);
+      const riskLine = text.match(/风险偏好:\n- ([^\n]+)/)?.[1] ?? '';
+      const risk = team.staff.strategist.abilities.risk;
+      const expectedLabel = risk <= 69 ? '偏低' : risk <= 72 ? '中等，' : risk <= 77 ? '中等偏高' : '高，';
+      expect(riskLine, `${file}: risk=${risk}`).toContain(expectedLabel);
       for (const heading of strategySections) expect(text.includes(heading), `${file}: ${heading}`).toBe(true);
+    }
+  });
+
+  it('玩家专属机制在具体规则行显式限定车队作用域', () => {
+    for (const file of [...strategyFiles, ...staffFiles]) {
+      for (const line of source(file).split('\n')) {
+        if (mechanicFragments.some(fragment => line.includes(fragment))) {
+          expect(line, `${file}: ${line}`).toMatch(/^- 玩家执掌本队时，/);
+        }
+      }
     }
   });
 
@@ -76,5 +106,9 @@ describe('车队策略组与技术赛道核心组世界书', () => {
         expect(text.includes(reserve.name), `${file} 应包含储备车手 ${reserve.name}`).toBe(true);
       }
     }
+
+    const ferrari = source('lore-staff-ferrari.md');
+    expect(ferrari).toContain('马泰奥·托尼纳利');
+    expect(ferrari).toContain('恩里科·瓜尔蒂耶里');
   });
 });

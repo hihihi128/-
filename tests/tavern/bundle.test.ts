@@ -124,7 +124,7 @@ function setupWindow() {
 describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backend.js）', () => {
   it('生成卡包含车队、车手、管理层、策略组和核心组资料', () => {
     const card = JSON.parse(readFileSync(CARD, 'utf8'));
-    const entries = card.data.character_book.entries as Array<{ comment: string; content: string; enabled: boolean; keys: string[] }>;
+    const entries = card.data.character_book.entries as Array<{ id: number; insertion_order: number; comment: string; content: string; enabled: boolean; keys: string[] }>;
     const teams = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M资料]') && entry.comment.includes('车队（2026）'));
     const drivers = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M资料]') && entry.content.startsWith('<车手资料'));
     const leaders = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M管理层]'));
@@ -139,6 +139,18 @@ describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backen
     expect(leaders.every(entry => entry.content.startsWith('<管理层资料') && entry.keys.length >= 2)).toBe(true);
     expect(strategies.every(entry => entry.content.startsWith('<策略组资料') && entry.keys.length >= 3)).toBe(true);
     expect(staffGroups.every(entry => entry.content.startsWith('<核心人员组资料') && entry.keys.length >= 3)).toBe(true);
+    expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
+    expect(new Set(entries.map(entry => entry.comment)).size).toBe(entries.length);
+    expect(new Set(entries.map(entry => entry.insertion_order)).size).toBe(entries.length);
+    const redBullStrategy = strategies.find(entry => entry.comment.includes('[red_bull]'))!;
+    const racingBullsStrategy = strategies.find(entry => entry.comment.includes('[racing_bulls]'))!;
+    const redBullStaff = staffGroups.find(entry => entry.comment.includes('[red_bull]'))!;
+    const racingBullsStaff = staffGroups.find(entry => entry.comment.includes('[racing_bulls]'))!;
+    expect(redBullStrategy.keys).not.toContain('红牛策略组');
+    expect(redBullStaff.keys).not.toContain('红牛核心组');
+    expect(redBullStrategy.keys.some(key => racingBullsStrategy.keys.some(other => other.includes(key)))).toBe(false);
+    expect(redBullStaff.keys.some(key => racingBullsStaff.keys.some(other => other.includes(key)))).toBe(false);
+    expect(drivers.find(entry => entry.comment.includes('夏尔·勒克莱尔'))?.keys).not.toContain('夏尔');
     const comments = new Set(leaders.map(entry => entry.comment));
     for (const name of Object.values(PLAYER_REPLACED_LEADERSHIP).flat()) expect(comments.has(name), name).toBe(true);
     expect(teams.every(entry => entry.content.includes('实时数据表明玩家执掌本队时生效'))).toBe(true);
