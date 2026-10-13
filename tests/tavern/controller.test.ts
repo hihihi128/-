@@ -492,21 +492,26 @@ describe('管理层世界书同步', () => {
     const env = new FakeTavern(cardWorldbook());
     env.worldbook.push(
       { name: stella, content: '', book: 'F1 领队模拟器', enabled: true },
-      { name: wolff, content: '', book: 'F1 领队模拟器', enabled: true },
+      { name: wolff, content: '', book: 'F1 领队模拟器', enabled: false },
     );
     const ctrl = new F1Controller(env);
     ctrl.init();
 
     expect((await ctrl.newGame({ playerTeamId: 'mclaren', seed: 7 })).ok).toBe(true);
     expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
-    expect(env.worldbook.find(entry => entry.name === wolff)?.enabled).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === wolff)?.enabled).toBe(false);
     const mclarenSave = ctrl.exportSave()!;
 
     expect((await ctrl.newGame({ playerTeamId: 'mercedes', seed: 8 })).ok).toBe(true);
     expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(true);
-    expect(env.worldbook.find(entry => entry.name === wolff)?.enabled).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === wolff)?.enabled).toBe(false);
 
     expect((await ctrl.importSave(mclarenSave)).ok).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
+
+    env.worldbook.find(entry => entry.name === stella)!.enabled = true;
+    await env.fire(env.events.CHAT_CHANGED);
+    await new Promise(resolve => setTimeout(resolve, 0));
     expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
   });
 

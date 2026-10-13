@@ -24,6 +24,7 @@ describe('管理层世界书', () => {
     for (const file of files) {
       const text = readFileSync(path.join(dir, file), 'utf8');
       expect(text.trimEnd().endsWith('</管理层资料>'), file).toBe(true);
+      expect(text.includes('玩家关系与专属机制只在实时数据表明玩家执掌本队时生效'), file).toBe(true);
       for (const heading of required) expect(text.includes(heading), `${file}: ${heading}`).toBe(true);
     }
   });

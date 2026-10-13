@@ -61,6 +61,7 @@ export const PLAYER_REPLACED_LEADERSHIP: Readonly<Record<string, readonly string
   alpine: [],
   cadillac: [],
 };
+export const MANAGED_LEADERSHIP_ENTRIES = [...new Set(Object.values(PLAYER_REPLACED_LEADERSHIP).flat())];
 
 interface ProcessOptions {
   type?: string;
@@ -87,12 +88,12 @@ function parseJsonObject(text: string): unknown {
   return JSON.parse(text.slice(start, end + 1));
 }
 
-async function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+async function withTimeout<T>(promise: Promise<T>, ms: number, message = '策略 API 请求超时'): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
     return await Promise.race([
       promise,
-      new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error('策略 API 请求超时')), ms); }),
+      new Promise<T>((_, reject) => { timer = setTimeout(() => reject(new Error(message)), ms); }),
     ]);
   } finally {
     if (timer) clearTimeout(timer);
@@ -244,16 +245,20 @@ export class F1Controller {
 
   private syncLeadershipWorldbook(state: GameState | null = this.stateAt()): Promise<void> {
     const disabled = state ? PLAYER_REPLACED_LEADERSHIP[state.meta.playerTeamId] ?? [] : [];
-    this.leadershipSyncQueue = this.leadershipSyncQueue
+    const run = this.leadershipSyncQueue
       .catch(() => undefined)
       .then(async () => {
         try {
-          await this.env.syncWorldbookEntryStates(LEADERSHIP_PREFIX, [...disabled]);
-        } catch {
-          // Older Tavern Helper versions and embedded-only character books can be read-only.
+          const result = await this.env.syncWorldbookEntryStates(LEADERSHIP_PREFIX, MANAGED_LEADERSHIP_ENTRIES, [...disabled]);
+          if (result.failed) console.warn(`[F1M] ${result.failed} 个世界书同步失败`);
+        } catch (error) {
+          console.warn('[F1M] 管理层世界书同步失败', error);
         }
       });
-    return this.leadershipSyncQueue;
+    this.leadershipSyncQueue = run;
+    return withTimeout(run, 3000, '管理层世界书同步超时').catch(error => {
+      console.warn('[F1M] 管理层世界书同步超时；游戏操作继续执行', error);
+    });
   }
 
   loadSettings(): void {

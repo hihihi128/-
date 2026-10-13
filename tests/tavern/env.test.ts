@@ -69,20 +69,37 @@ describe('酒馆环境世界书写入', () => {
     vi.stubGlobal('getWorldbook', async () => structuredClone(entries));
     vi.stubGlobal('replaceWorldbook', replaceWorldbook);
 
-    const result = await createTavernEnv().syncWorldbookEntryStates('[F1M管理层]', [entries[1].name]);
+    const result = await createTavernEnv().syncWorldbookEntryStates('[F1M管理层]', [entries[0].name, entries[1].name], [entries[1].name]);
 
-    expect(result).toEqual({ found: 2, changed: 2 });
+    expect(result).toEqual({ found: 2, changed: 2, failed: 0 });
     expect(replaceWorldbook).toHaveBeenCalledTimes(1);
     expect(replaceWorldbook).toHaveBeenCalledWith('F1 领队模拟器', [
       { ...entries[0], enabled: true },
       { ...entries[1], enabled: false },
       entries[2],
-    ], { render: 'none' });
+    ], { render: 'debounced' });
   });
 
   it('缺少世界书写入 API 时安全跳过', async () => {
     vi.stubGlobal('getWorldbook', async () => []);
-    const result = await createTavernEnv().syncWorldbookEntryStates('[F1M管理层]', []);
-    expect(result).toEqual({ found: 0, changed: 0 });
+    const result = await createTavernEnv().syncWorldbookEntryStates('[F1M管理层]', [], []);
+    expect(result).toEqual({ found: 0, changed: 0, failed: 0 });
+  });
+
+  it('不改动脚本未管理的条目，且无变化时不写回世界书', async () => {
+    const managed = '[F1M管理层] [mclaren:principal] 安德里亚·斯特拉';
+    const manual = '[F1M管理层] [mercedes:principal] 托托·沃尔夫';
+    const replaceWorldbook = vi.fn(async () => undefined);
+    vi.stubGlobal('getCharWorldbookNames', () => ({ primary: 'book', additional: [] }));
+    vi.stubGlobal('getGlobalWorldbookNames', () => ['book']);
+    vi.stubGlobal('getWorldbook', async () => [
+      { uid: 42, name: managed, content: '', enabled: false },
+      { uid: 40, name: manual, content: '', enabled: false },
+    ]);
+    vi.stubGlobal('replaceWorldbook', replaceWorldbook);
+
+    const result = await createTavernEnv().syncWorldbookEntryStates('[F1M管理层]', [managed], [managed]);
+    expect(result).toEqual({ found: 1, changed: 0, failed: 0 });
+    expect(replaceWorldbook).not.toHaveBeenCalled();
   });
 });

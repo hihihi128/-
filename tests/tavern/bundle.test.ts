@@ -6,6 +6,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { JSDOM } from 'jsdom';
 import YAML from 'yaml';
+import { PLAYER_REPLACED_LEADERSHIP } from '../../src/tavern/controller';
 import { describe, expect, it } from 'vitest';
 import { diskWorldbook } from './fakeEnv';
 
@@ -132,6 +133,8 @@ describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backen
     expect(leaders).toHaveLength(22);
     expect(new Set(leaders.map(entry => entry.comment.match(/^\[F1M管理层\] \[([^:]+):/)?.[1])).size).toBe(11);
     expect(leaders.every(entry => entry.content.startsWith('<管理层资料') && entry.keys.length >= 2)).toBe(true);
+    const comments = new Set(leaders.map(entry => entry.comment));
+    for (const name of Object.values(PLAYER_REPLACED_LEADERSHIP).flat()) expect(comments.has(name), name).toBe(true);
     expect(teams.every(entry => entry.content.includes('实时数据表明玩家执掌本队时生效'))).toBe(true);
     expect(teams.every(entry => entry.keys.length >= 2)).toBe(true);
     expect(drivers.every(entry => entry.keys.length >= 4)).toBe(true);

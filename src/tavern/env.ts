@@ -54,7 +54,7 @@ export interface TavernEnv {
   /** 读取名字以 prefix 开头的世界书条目（角色卡绑定的世界书 → 全局世界书 → 角色卡内嵌世界书） */
   readWorldbookEntries(prefix: string): Promise<{ entries: WorldbookText[]; origin: string }>;
   /** 恢复 prefix 下的所有条目，再禁用 disabledNames 中的精确条目名。缺少写入 API 时安全跳过。 */
-  syncWorldbookEntryStates(prefix: string, disabledNames: string[]): Promise<{ found: number; changed: number }>;
+  syncWorldbookEntryStates(prefix: string, managedNames: string[], disabledNames: string[]): Promise<{ found: number; changed: number; failed: number }>;
   parseYaml(text: string): unknown;
   on(event: string, fn: (...args: any[]) => void): void;
   emit(event: string, ...args: any[]): void;
@@ -248,8 +248,9 @@ export function createTavernEnv(): TavernEnv {
       }
       return { entries: out, origin: out.length ? '角色卡内嵌世界书' : '未找到' };
     },
-    syncWorldbookEntryStates: async (prefix, disabledNames) => {
-      if (typeof getWorldbook !== 'function' || typeof replaceWorldbook !== 'function') return { found: 0, changed: 0 };
+    syncWorldbookEntryStates: async (prefix, managedNames, disabledNames) => {
+      if (typeof getWorldbook !== 'function' || typeof replaceWorldbook !== 'function') return { found: 0, changed: 0, failed: 0 };
+      const managed = new Set(managedNames.map(name => name.trim()));
       const disabled = new Set(disabledNames.map(name => name.trim()));
       const books: string[] = [];
       try {
@@ -266,13 +267,14 @@ export function createTavernEnv(): TavernEnv {
       }
       let found = 0;
       let changed = 0;
+      let failed = 0;
       for (const book of books) {
         try {
           const entries = await getWorldbook(book);
           let bookChanged = false;
           for (const entry of entries) {
             const name = entry.name?.trim() ?? '';
-            if (!name.startsWith(prefix)) continue;
+            if (!name.startsWith(prefix) || !managed.has(name)) continue;
             found++;
             const enabled = !disabled.has(name);
             if (entry.enabled === enabled) continue;
@@ -280,12 +282,13 @@ export function createTavernEnv(): TavernEnv {
             changed++;
             bookChanged = true;
           }
-          if (bookChanged) await replaceWorldbook(book, entries, { render: 'none' });
+          if (bookChanged) await replaceWorldbook(book, entries, { render: 'debounced' });
         } catch {
           /* 世界书不存在、只读或当前助手版本不支持写入 */
+          failed++;
         }
       }
-      return { found, changed };
+      return { found, changed, failed };
     },
     parseYaml: text => YAML.parse(text),
     on: (e, fn) => {

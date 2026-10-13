@@ -28,7 +28,7 @@ export class FakeTavern implements TavernEnv {
   triggered = 0;
   generated: Array<{ prompt: string; options?: TextGenerationOptions }> = [];
   worldbook: WorldbookText[];
-  worldbookSyncs: Array<{ prefix: string; disabledNames: string[] }> = [];
+  worldbookSyncs: Array<{ prefix: string; managedNames: string[]; disabledNames: string[] }> = [];
   emitted: string[] = [];
 
   events = {
@@ -77,20 +77,21 @@ export class FakeTavern implements TavernEnv {
   uninject(id: string) { this.injected.delete(id); }
   registerMacro() {}
   async readWorldbookEntries(prefix: string) { const entries = this.worldbook.filter(e => e.name.startsWith(prefix)); return { entries, origin: '测试世界书' }; }
-  async syncWorldbookEntryStates(prefix: string, disabledNames: string[]) {
-    this.worldbookSyncs.push({ prefix, disabledNames: [...disabledNames] });
+  async syncWorldbookEntryStates(prefix: string, managedNames: string[], disabledNames: string[]) {
+    this.worldbookSyncs.push({ prefix, managedNames: [...managedNames], disabledNames: [...disabledNames] });
+    const managed = new Set(managedNames);
     const disabled = new Set(disabledNames);
     let found = 0;
     let changed = 0;
     for (const entry of this.worldbook) {
-      if (!entry.name.startsWith(prefix)) continue;
+      if (!entry.name.startsWith(prefix) || !managed.has(entry.name.trim())) continue;
       found++;
       const enabled = !disabled.has(entry.name);
       if (entry.enabled === enabled) continue;
       entry.enabled = enabled;
       changed++;
     }
-    return { found, changed };
+    return { found, changed, failed: 0 };
   }
   parseYaml(text: string) { return YAML.parse(text); }
   on(event: string, fn: Fn) { const arr = this.listeners.get(event) ?? []; arr.push(fn); this.listeners.set(event, arr); }
