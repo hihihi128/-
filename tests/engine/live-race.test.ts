@@ -51,6 +51,7 @@ describe('resumable live race', () => {
     expect(resumed.cars[changed.driverId].stintIndex).toBe(1);
     expect(resumed.cars[engineerControlled.driverId].tyreAge).toBe(0);
     expect(resumed.cars[engineerControlled.driverId].stintIndex).toBe(engineerStint + 1);
+    expect(resumed.cars[engineerControlled.driverId].plannedCompounds.length).toBeGreaterThan(resumed.cars[engineerControlled.driverId].stintIndex + 1);
     expect(resumed.redFlag).toMatchObject({ active: false, restartPending: true, restart: 'standing' });
     expect(resumed.events.some(event => event.type === 'restart')).toBe(true);
   });

@@ -18,6 +18,6 @@ describe('strategy mode interface', () => {
     expect(newGame).toContain('工程师给的策略不一定靠谱');
     expect(weekend).toContain('工程师给的策略不一定靠谱');
     expect(newGame).toContain('策略部门历史表现不稳定');
-    expect(weekend).toContain('策略部门历史表现不稳定');
+    expect(weekend).toContain('当前策略人员的判断或风险偏好不稳定');
   });
 });

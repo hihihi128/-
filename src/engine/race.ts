@@ -585,8 +585,14 @@ function compressRedFlagField(session: LiveRaceState): void {
 
 function freeRedFlagTyreChange(state: GameState, session: LiveRaceState, car: LiveRaceCar, compound: Compound): void {
   const nextStint = car.stintIndex + 1;
-  car.plannedCompounds[nextStint] = compound;
-  car.stints[nextStint] = Math.max(1, session.totalLaps - session.completedLaps);
+  const remainingLaps = Math.max(1, session.totalLaps - session.completedLaps);
+  const remainingCompounds = [compound, ...car.plannedCompounds.slice(nextStint + 1)];
+  const tyreLife = (state.rules.tyres[compound]?.cliff ?? remainingLaps) * car.tyreFactor;
+  if (!state.rules.tyres[compound]?.wet && remainingLaps > tyreLife && remainingCompounds.length === 1) {
+    remainingCompounds.push(state.rules.dryCompounds.find(candidate => candidate !== compound) ?? compound);
+  }
+  car.plannedCompounds.splice(nextStint, car.plannedCompounds.length - nextStint, ...remainingCompounds);
+  car.stints.splice(nextStint, car.stints.length - nextStint, ...optimizeStints(state.rules, currentTrack(state), remainingCompounds, remainingLaps, car.tyreFactor));
   car.stintIndex = nextStint;
   car.tyre = compound;
   car.tyreAge = 0;

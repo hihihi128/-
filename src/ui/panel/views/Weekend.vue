@@ -94,7 +94,7 @@ const strategyRiskTeam = computed(() => {
   const engineers = staff.filter(member => member.role === 'raceEngineer' || member.role === 'raceEngineer2');
   return (strategist?.abilities?.strategy ?? strategist?.skill ?? 100) < 72
     || (strategist?.abilities?.weather ?? strategist?.skill ?? 100) < 72
-    || (strategist?.abilities?.risk ?? 0) >= 82
+    || (strategist?.abilities?.risk ?? 70) >= 82
     || engineers.some(engineer => (engineer.abilities?.reaction ?? engineer.skill) < 74 || (engineer.abilities?.weather ?? engineer.skill) < 74);
 });
 
@@ -225,7 +225,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
           <div class="block stack-s">
             <div class="label">正赛策略</div>
             <div class="notice bad small"><b>注意：工程师给的策略不一定靠谱。</b> 选择“听工程师”后，方案会自动应用并在比赛中执行。</div>
-            <div v-if="strategyRiskTeam" class="notice warn tiny"><b>高风险提示：</b>本车队策略部门历史表现不稳定，雨战判断尤其需要谨慎。</div>
+            <div v-if="strategyRiskTeam" class="notice warn tiny"><b>高风险提示：</b>当前策略人员的判断或风险偏好不稳定，雨战决策尤其需要谨慎。</div>
             <div class="row wrap">
               <div class="seg">
                 <button :class="{ on: d.plan.strategySource !== 'engineer' }" :disabled="done.race || store.busy" @click="usePlayerStrategy(d)">玩家自己做策略</button>

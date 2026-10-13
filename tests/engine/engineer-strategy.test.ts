@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { act, advanceUntil, newTestGame } from '../helpers';
 import { engineerDecisionRoll, engineerWeatherRisk } from '../../src/engine/race';
+import { staffAbility } from '../../src/engine/staff';
 
 describe('engineer strategy execution', () => {
+  it('uses neutral risk for legacy staff without specialist abilities', () => {
+    expect(staffAbility({ name: 'legacy', skill: 95, salary: 1 }, 'risk')).toBe(70);
+  });
   it('derives wet-weather risks from personal abilities rather than team identity', () => {
     expect(engineerWeatherRisk(72, 70, 84, .3)).toMatchObject({ preference: 'soft', holdLaps: 2 });
     expect(engineerWeatherRisk(90, 88, 68, .7)).toMatchObject({ preference: 'medium', holdLaps: 1 });
