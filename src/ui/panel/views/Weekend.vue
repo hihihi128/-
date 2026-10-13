@@ -268,7 +268,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
             <div v-if="strategyRiskTeam" class="notice warn tiny"><b>高风险提示：</b>当前策略人员的判断或风险偏好不稳定，雨战决策尤其需要谨慎。</div>
             <div class="row wrap">
               <div class="seg">
-                <button :class="{ on: d.plan.strategySource === 'player' }" :disabled="done.race || store.busy" @click="usePlayerStrategy(d)">玩家自己做策略</button>
+                <button :class="{ on: (d.plan.strategySource ?? 'player') === 'player' }" :disabled="done.race || store.busy" @click="usePlayerStrategy(d)">玩家自己做策略</button>
                 <button :class="{ on: d.plan.strategySource === 'engineer' }" :disabled="done.race || store.busy" @click="askEngineer(d)">听工程师</button>
               </div>
               <select :value="engineerApiFor(d.driverId)" class="small" :disabled="store.busy" @change="engineerApi[d.driverId] = ($event.target as HTMLSelectElement).value as 'main' | 'secondary'">
@@ -276,7 +276,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
               </select>
             </div>
             <div class="plans">
-              <div v-if="d.plan.strategySource === 'player'" class="plan on">
+              <div v-if="(d.plan.strategySource ?? 'player') === 'player'" class="plan on">
                 <span class="badge">玩家</span>
                 <span class="small">自定轮胎方案</span>
                 <span class="row grow wrap" style="gap: 4px">
@@ -306,7 +306,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
               <span v-for="(life, c) in d.tyreLife" :key="c" class="row" style="gap: 3px"><Tyre :c="String(c)" />{{ life }}</span>
             </div>
           </div>
-          <div v-if="d.plan.strategySource === 'player'" class="block row">
+          <div v-if="(d.plan.strategySource ?? 'player') === 'player'" class="block row">
             <div>
               <div class="label">驾驶模式</div>
               <div class="seg">
