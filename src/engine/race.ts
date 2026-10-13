@@ -719,6 +719,7 @@ export function createRaceSession(
       cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
       damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced', pendingPit: null, pendingCompound: null, stayOutUntilLap: 0,
       engineerLightRainAssessed: false, engineerWetAssessed: false, engineerWeatherSpell: 0, engineerTyreOverride: null, engineerTyreOverrideUntilLap: 0,
+      neutralStopTaken: false,
     };
     if (entry.team.isPlayer) lapChart[id] = [];
   }
@@ -845,7 +846,10 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const targetMismatch = tyreMismatch(state.rules, { ...car, tyre: targetCompound }, session.wetness);
   const weatherStop = engineerOverride || (car.tyreAge >= 2 && targetCompound !== car.tyre && currentMismatch > 1.2 && targetMismatch + .35 < currentMismatch);
   const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
-  const neutralOpportunity = car.plan.scReaction && (session.scLeft > 0 || session.vscLeft > 0) && planned && car.tyreAge >= 2 && targetCompound !== car.tyre;
+  const neutralActive = session.scLeft > 0 || session.vscLeft > 0;
+  if (!neutralActive) car.neutralStopTaken = false;
+  const neutralOpportunity = car.plan.scReaction && neutralActive && !car.neutralStopTaken && planned
+    && car.tyreAge >= Math.max(2, Math.round(pitTriggerLap(car) * .5)) && targetCompound !== car.tyre;
   const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || neutralOpportunity || (planned && car.tyreAge >= pitTriggerLap(car))));
   if (!shouldPit) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
@@ -858,6 +862,7 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
     car.tyre = targetCompound;
   }
   car.usedCompounds.push(car.tyre); car.tyreAge = 0; car.pits += 1; car.cumulativeTime += track.pitLoss * neutral + stationary;
+  if (neutralActive) car.neutralStopTaken = true;
   liveEvent(session, session.lap, 'pit', `${car.driverId} 进站，换上${state.rules.tyres[car.tyre]?.name ?? car.tyre}`, [car.driverId], car.player);
   car.pendingPit = null;
   car.pendingCompound = null;

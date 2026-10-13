@@ -61,11 +61,38 @@ describe('resumable live race', () => {
       live.cars[id].plannedCompounds = [dry[0], dry[1]];
       live.cars[id].stints = [20, live.totalLaps - 20];
       live.cars[id].stintIndex = 0;
-      live.cars[id].tyreAge = 3;
+      live.cars[id].tyreAge = 10;
     }
     advanceRaceSession(state, live, 'next_lap');
     expect(live.cars[aiIds[0]].pits).toBe(1);
     expect(live.cars[aiIds[1]].pits).toBe(0);
+  });
+
+  it('does not stop too early or twice during one safety-car period', () => {
+    const ready = raceReady();
+    const aiId = Object.values(ready.teams).find(team => !team.isPlayer)!.cars[0].driverId!;
+    const dry = ready.rules.dryCompounds;
+    const state = act(ready, { type: 'START_RACE', kind: 'race', aiPlans: {
+      [aiId]: { tyrePlan: [dry[0], dry[1], dry[2] ?? dry[0]], paceMode: 'balanced', pitTiming: 'standard', scReaction: true },
+    } });
+    const live = state.weekend!.liveRace!;
+    const car = live.cars[aiId];
+    live.pendingDecision = null;
+    live.stage = 'ready';
+    live.scLeft = 4;
+    car.tyre = dry[0];
+    car.plannedCompounds = [dry[0], dry[1], dry[2] ?? dry[0]];
+    car.stints = [20, 20, live.totalLaps - 40];
+    car.stintIndex = 0;
+    car.tyreAge = 3;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(car.pits).toBe(0);
+    car.tyreAge = 10;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(car.pits).toBe(1);
+    car.tyreAge = 10;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(car.pits).toBe(1);
   });
 
   it('allows a free tyre change during a red flag and schedules the selected restart', () => {

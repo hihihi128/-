@@ -866,6 +866,8 @@ export interface LiveRaceCar {
   engineerWeatherSpell?: number;
   engineerTyreOverride?: Compound | null;
   engineerTyreOverrideUntilLap?: number;
+  /** Prevents repeated opportunistic stops during one SC/VSC period. */
+  neutralStopTaken?: boolean;
 }
 
 export interface RaceDamageRecord {
