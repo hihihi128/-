@@ -180,6 +180,32 @@ const leadershipLore = [
   { id: 60, team: 'cadillac', role: 'co_principal', slug: 'cadillac-graeme-lowdon', name: '格雷姆·洛登', keys: ['格雷姆·洛登', '洛登', 'Graeme Lowdon'] },
   { id: 61, team: 'cadillac', role: 'technical', slug: 'cadillac-nick-chester', name: '尼克·切斯特', keys: ['尼克·切斯特', '切斯特', 'Nick Chester'] },
 ];
+const strategyLore = [
+  { id: 62, team: 'mercedes', slug: 'mercedes', name: '梅赛德斯策略组', strategist: '罗茜·韦特', keys: ['梅赛德斯策略组', '梅赛德斯策略团队', '罗茜·韦特'] },
+  { id: 63, team: 'mclaren', slug: 'mclaren', name: '迈凯伦策略组', strategist: '兰迪普·辛格', keys: ['迈凯伦策略组', '迈凯伦策略团队', '兰迪普·辛格'] },
+  { id: 64, team: 'red_bull', slug: 'red-bull', name: '红牛策略组', strategist: '汉娜·施密茨', keys: ['红牛策略组', '红牛策略团队', '汉娜·施密茨'] },
+  { id: 65, team: 'ferrari', slug: 'ferrari', name: '法拉利策略组', strategist: '拉文·贾恩', keys: ['法拉利策略组', '法拉利策略团队', '拉文·贾恩'] },
+  { id: 66, team: 'williams', slug: 'williams', name: '威廉姆斯策略组', strategist: '夏尔-安托万·弗洛朗坦', keys: ['威廉姆斯策略组', '威廉姆斯策略团队', '夏尔-安托万·弗洛朗坦'] },
+  { id: 67, team: 'racing_bulls', slug: 'racing-bulls', name: '小红牛策略组', strategist: '马蒂厄·迪布瓦-卢卡', keys: ['小红牛策略组', '小红牛策略团队', '马蒂厄·迪布瓦-卢卡'] },
+  { id: 68, team: 'aston_martin', slug: 'aston-martin', name: '阿斯顿·马丁策略组', strategist: '彼得·霍尔', keys: ['阿斯顿·马丁策略组', '阿斯顿·马丁策略团队', '彼得·霍尔'] },
+  { id: 69, team: 'haas', slug: 'haas', name: '哈斯策略组', strategist: '卡琳·克里德利希', keys: ['哈斯策略组', '哈斯策略团队', '卡琳·克里德利希'] },
+  { id: 70, team: 'audi', slug: 'audi', name: '奥迪策略组', strategist: '里特维克·达南贾亚·雷迪', keys: ['奥迪策略组', '奥迪策略团队', '里特维克·达南贾亚·雷迪'] },
+  { id: 71, team: 'alpine', slug: 'alpine', name: '阿尔派策略组', strategist: '奥里奥尔·伊塞恩', keys: ['阿尔派策略组', '阿尔派策略团队', '奥里奥尔·伊塞恩'] },
+  { id: 72, team: 'cadillac', slug: 'cadillac', name: '凯迪拉克策略组', strategist: '亚历克斯·古迪纳夫', keys: ['凯迪拉克策略组', '凯迪拉克策略团队', '亚历克斯·古迪纳夫'] },
+];
+const staffLore = [
+  { id: 73, team: 'mercedes', slug: 'mercedes', name: '梅赛德斯技术与赛道核心组', keys: ['梅赛德斯核心组', '马库斯·达德利', '彼得·博宁顿'] },
+  { id: 74, team: 'mclaren', slug: 'mclaren', name: '迈凯伦技术与赛道核心组', keys: ['迈凯伦核心组', '罗布·马歇尔', '彼得·普罗德罗穆', '威尔·约瑟夫', '汤姆·斯托拉德'] },
+  { id: 75, team: 'red_bull', slug: 'red-bull', name: '红牛技术与赛道核心组', keys: ['红牛核心组', '詹皮耶罗·兰比亚塞', '理查德·伍德', '角田裕毅'] },
+  { id: 76, team: 'ferrari', slug: 'ferrari', name: '法拉利技术与赛道核心组', keys: ['法拉利核心组', '洛伊克·塞拉', '迭戈·通迪', '卡洛·桑蒂', '布莱恩·博齐', '安东尼奥·乔维纳兹'] },
+  { id: 77, team: 'williams', slug: 'williams', name: '威廉姆斯技术与赛道核心组', keys: ['威廉姆斯核心组', '詹姆斯·厄文', '加埃唐·热戈'] },
+  { id: 78, team: 'racing_bulls', slug: 'racing-bulls', name: '小红牛技术与赛道核心组', keys: ['小红牛核心组', '亚历山大·伊利奥普洛斯', '皮埃尔·哈梅林'] },
+  { id: 79, team: 'aston_martin', slug: 'aston-martin', name: '阿斯顿·马丁技术与赛道核心组', keys: ['阿斯顿·马丁核心组', '恩里科·卡尔迪莱', '克里斯·克罗宁', '加里·甘农'] },
+  { id: 80, team: 'haas', slug: 'haas', name: '哈斯技术与赛道核心组', keys: ['哈斯核心组', '安德烈亚·德佐尔多', '劳拉·穆勒', '罗南·奥黑尔', '杰克·杜汉'] },
+  { id: 81, team: 'audi', slug: 'audi', name: '奥迪技术与赛道核心组', keys: ['奥迪核心组', '史蒂文·佩特里克', '何塞·曼努埃尔·洛佩斯'] },
+  { id: 82, team: 'alpine', slug: 'alpine', name: '阿尔派技术与赛道核心组', keys: ['阿尔派核心组', '乔什·佩克特', '斯图尔特·巴洛'] },
+  { id: 83, team: 'cadillac', slug: 'cadillac', name: '凯迪拉克技术与赛道核心组', keys: ['凯迪拉克核心组', '约翰·霍华德', '卡洛·帕塞蒂', '周冠宇'] },
+];
 const book = {
   name: BOOK_NAME,
   entries: [
@@ -193,6 +219,8 @@ const book = {
     ...teamLore.map((lore, index) => entry(lore.id, `[F1M资料] ${lore.name}`, readCard(`${wb}/lore-${lore.slug}.md`), { keys: lore.keys, order: 201 + index })),
     ...driverLore.map((lore, index) => entry(lore.id, `[F1M资料] ${lore.name}`, readCard(`${wb}/lore-driver-${lore.slug}.md`), { keys: lore.keys, order: 220 + index })),
     ...leadershipLore.map((lore, index) => entry(lore.id, `[F1M管理层] [${lore.team}:${lore.role}] ${lore.name}`, readCard(`${wb}/lore-leadership-${lore.slug}.md`), { keys: lore.keys, order: 260 + index })),
+    ...strategyLore.map((lore, index) => entry(lore.id, `[F1M策略组] [${lore.team}] ${lore.name}`, readCard(`${wb}/lore-strategy-${lore.slug}.md`), { keys: lore.keys, order: 300 + index })),
+    ...staffLore.map((lore, index) => entry(lore.id, `[F1M核心组] [${lore.team}] ${lore.name}`, readCard(`${wb}/lore-staff-${lore.slug}.md`), { keys: lore.keys, order: 320 + index })),
   ],
 };
 
