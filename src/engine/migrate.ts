@@ -183,7 +183,10 @@ export function migrateState(state: GameState): GameState {
   if (!state.rules.fullWetCompound) {
     const defaultKey = DEFAULT_RULES.fullWetCompound;
     const existing = state.rules.tyres[defaultKey];
-    state.rules.fullWetCompound = existing && (!existing.wet || defaultKey === state.rules.wetCompound) ? 'full_wet' : defaultKey;
+    let fallbackKey = 'full_wet';
+    let suffix = 2;
+    while (state.rules.tyres[fallbackKey] || fallbackKey === state.rules.wetCompound) fallbackKey = `full_wet_${suffix++}`;
+    state.rules.fullWetCompound = existing && (!existing.wet || defaultKey === state.rules.wetCompound) ? fallbackKey : defaultKey;
     state.rules.tyres[state.rules.fullWetCompound] ??= deepClone(DEFAULT_RULES.tyres[DEFAULT_RULES.fullWetCompound]);
   }
   if (state.rules.tyres[state.rules.wetCompound]?.name === '雨胎') state.rules.tyres[state.rules.wetCompound].name = '半雨胎';

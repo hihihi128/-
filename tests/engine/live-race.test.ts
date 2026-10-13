@@ -90,6 +90,15 @@ describe('resumable live race', () => {
 
     live.pendingDecision = null;
     live.stage = 'ready';
+    live.wetness = .68;
+    live.surface = 'wet';
+    live.weatherTrajectory[live.completedLaps] = .5;
+    car.tyreAge = 6;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(car.tyre).toBe(state.rules.wetCompound);
+
+    live.pendingDecision = null;
+    live.stage = 'ready';
     live.wetness = .08;
     live.surface = 'damp';
     live.weatherTrajectory[live.completedLaps] = 0;
