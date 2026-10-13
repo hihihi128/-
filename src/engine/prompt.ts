@@ -88,10 +88,6 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   const aduo = aduoLine(state);
   if (aduo) L.push(aduo);
   if (state.meta.selectionReason) L.push(`玩家被选中的原因（玩家自述）：${state.meta.selectionReason}`);
-  if (state.meta.supernaturalMode) {
-    const pending = state.supernatural.pendingWeather;
-    L.push(`【已保存的超自然人格】本局仅可由面板中的手动干预请求执行引擎限定效果${pending ? `；本站公开降雨倾向已调整 ${Math.round(pending.rainBias * 100)} 个百分点` : ''}。普通叙事绝不能调用、暗示或输出超自然操作，仍只使用既有受限叙事协议。`);
-  }
   if (state.ferrari) {
     const f = state.ferrari;
     const fr = rules.ferrari;

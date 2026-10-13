@@ -295,6 +295,7 @@ export interface GameView {
     enabled: boolean;
     available: boolean;
     reason: string | null;
+    categories: Record<'people' | 'team' | 'research' | 'weather' | 'setup', { available: boolean; reason: string | null }>;
     targets: { drivers: Array<{ id: string; name: string; role: string; attrs: GameState['drivers'][string]['attrs'] }>; staff: Array<{ id: string; name: string; role: string }>; projects: Array<{ id: string; label: string; weeksLeft: number }> };
     pendingWeather: { rainBias: number; year: number; roundIndex: number } | null;
     caps: typeof SUPERNATURAL_LIMITS;
@@ -791,16 +792,34 @@ function buildWeekendView(state: GameState): WeekendView | null {
   };
 }
 
-function supernaturalView(state: GameState): GameView['supernatural'] {
+export function supernaturalAvailability(state: GameState): Pick<GameView['supernatural'], 'available' | 'reason' | 'categories'> {
   const team = state.teams[state.meta.playerTeamId];
   const blocked = !state.meta.supernaturalMode ? '本存档未在开局时启用超自然模式'
     : !team ? '玩家车队不可用'
-      : dismissalReason(state) ? '已被撤职，不能干预'
-        : state.weekend?.liveRace ? '实时比赛进行中，不能干预' : null;
+    : dismissalReason(state) ? '已被撤职，不能干预'
+        : state.season.phase === 'season_end' ? '赛季已经结束，不能干预'
+          : state.weekend?.liveRace ? '实时比赛进行中，不能干预' : null;
+  const category = (available: boolean, reason: string | null) => ({ available: !blocked && available, reason: blocked ?? (available ? null : reason) });
+  const currentWeekend = state.weekend?.roundIndex === state.season.roundIndex ? state.weekend : null;
   return {
-    enabled: state.meta.supernaturalMode,
     available: !blocked,
     reason: blocked,
+    categories: {
+      people: category(true, null),
+      team: category(true, null),
+      research: category(['preseason', 'pre_race', 'post_race'].includes(state.season.phase), '仅可在季前、赛前或赛后推进研发'),
+      weather: category(['preseason', 'pre_race'].includes(state.season.phase) && !currentWeekend, '仅可在当前比赛周末创建前调整天气倾向'),
+      setup: category(!!currentWeekend && state.season.phase !== 'post_race', '需要当前未完成比赛周末中的赛车'),
+    },
+  };
+}
+
+function supernaturalView(state: GameState): GameView['supernatural'] {
+  const team = state.teams[state.meta.playerTeamId];
+  const availability = supernaturalAvailability(state);
+  return {
+    enabled: state.meta.supernaturalMode,
+    ...availability,
     targets: {
       drivers: team ? Object.values(state.drivers).filter(driver => driver.teamId === team.id && (driver.role === 'race' || driver.role === 'reserve')).map(driver => ({ id: driver.id, name: driver.name, role: driver.role, attrs: { ...driver.attrs } })) : [],
       staff: team ? Object.entries(team.staff).filter(([, staff]) => !!staff.id).map(([role, staff]) => ({ id: staff.id!, name: staff.name, role })) : [],

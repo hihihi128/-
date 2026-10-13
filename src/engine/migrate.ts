@@ -33,7 +33,7 @@ export function migrateState(state: GameState): GameState {
   // This is deliberately before the modern-save return: old or malformed saves
   // must never opt into a privileged mode merely by being loaded.
   if (state.meta) state.meta.supernaturalMode = state.meta.supernaturalMode === true;
-  state.supernatural ??= { pendingWeather: null };
+  if (!state.supernatural || typeof state.supernatural !== 'object' || Array.isArray(state.supernatural)) state.supernatural = { pendingWeather: null };
   const pending = state.supernatural.pendingWeather;
   if (!pending || !Number.isFinite(pending.year) || !Number.isInteger(pending.roundIndex) || !Number.isFinite(pending.rainBias)) {
     state.supernatural.pendingWeather = null;

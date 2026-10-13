@@ -1,4 +1,5 @@
 import { dismissalReason } from './teamSpecials';
+import { staffAbility } from './staff';
 import type { AiLogEntry, DriverAttr, GameState, SetupState, StaffAbility } from './types';
 import { clamp, pushCapped, round1, round2, stamp } from './util';
 
@@ -128,6 +129,9 @@ export function applySupernaturalCommands(state: GameState, rows: unknown[], inv
     return Math.sign(requested) * allowed;
   };
   const numeric = (value: number, delta: number, min: number, max: number) => round1(clamp(value + delta, min, max));
+  const inRequestedDirection = (requested: number, min: number, max: number) => requested > 0
+    ? Math.max(0, Math.min(requested, max))
+    : Math.min(0, Math.max(requested, min));
 
   for (const raw of rows) {
     const command = commandFrom(raw);
@@ -161,8 +165,13 @@ export function applySupernaturalCommands(state: GameState, rows: unknown[], inv
     }
     if (command.op === 'funds') {
       if ((team.funds <= 0 && command.delta < 0) || (team.funds >= 500 && command.delta > 0)) { reject(command.op, team.id, command.delta, command.reason, '当前资金只能向合法范围改善'); continue; }
-      const allowed = apply('funds', clamp(command.delta, -team.funds, 500 - team.funds), SUPERNATURAL_LIMITS.funds);
-      const after = round2(clamp(team.funds + allowed, 0, 500)); const actual = round2(after - team.funds); team.funds = after;
+      // Legacy saves can legitimately contain debt or an over-cap balance.
+      // Move those by the requested bounded delta; do not snap them to a bound.
+      const bounded = team.funds >= 0 && team.funds <= 500
+        ? inRequestedDirection(command.delta, -team.funds, 500 - team.funds)
+        : command.delta;
+      const allowed = apply('funds', bounded, SUPERNATURAL_LIMITS.funds);
+      const after = round2(team.funds + allowed); const actual = round2(after - team.funds); team.funds = after;
       if (!actual) reject(command.op, team.id, command.delta, command.reason, '资金已饱和或本次额度已用尽');
       else { changed = true; log({ op: command.op, target: team.id, requested: command.delta, applied: actual, reason: command.reason, ok: true, note: actual !== command.delta ? '已按上限或边界裁剪' : '' }); }
       continue;
@@ -178,7 +187,7 @@ export function applySupernaturalCommands(state: GameState, rows: unknown[], inv
     if (command.op === 'staff_skill') {
       const member = Object.values(team.staff).find(staff => staff.id === command.staffId);
       if (!member) { reject(command.op, command.staffId, command.delta, command.reason, '目标必须是当前受雇员工'); continue; }
-      const before = command.field === 'skill' ? member.skill : (member.abilities?.[command.field] ?? member.skill);
+      const before = command.field === 'skill' ? member.skill : staffAbility(member, command.field);
       const allowed = apply(`staff_skill:${command.staffId}`, clamp(command.delta, 1 - before, 100 - before), SUPERNATURAL_LIMITS.staffSkill);
       const after = numeric(before, allowed, 1, 100); const actual = round1(after - before);
       if (command.field === 'skill') member.skill = after;
@@ -192,14 +201,15 @@ export function applySupernaturalCommands(state: GameState, rows: unknown[], inv
       const project = team.projects.find(item => item.id === command.projectId && item.kind === 'design');
       if (!project || researchProject && researchProject !== project.id) { reject(command.op, command.projectId, command.weeks, command.reason, '只能推进当前车队的一项设计项目'); continue; }
       researchProject = project.id;
-      const allowed = Math.min(command.weeks, SUPERNATURAL_LIMITS.researchWeeks, Math.max(0, project.weeksLeft - 1));
+      const potential = Math.min(command.weeks, Math.max(0, project.weeksLeft - 1));
+      const allowed = apply('research_progress', potential, SUPERNATURAL_LIMITS.researchWeeks);
       if (!allowed) { reject(command.op, project.id, command.weeks, command.reason, '项目已到最后一周，不能提前交付'); continue; }
       project.weeksLeft -= allowed; changed = true;
       log({ op: command.op, target: project.id, requested: command.weeks, applied: allowed, reason: command.reason, ok: true, note: allowed !== command.weeks ? '已按一周和最后一周边界裁剪' : '' });
       continue;
     }
     if (command.op === 'weather_tendency') {
-      if ((state.season.phase !== 'preseason' && state.season.phase !== 'pre_race') || state.weekend) { reject(command.op, '', command.delta, command.reason, '只能在进入本站周末前调整公开降雨倾向'); continue; }
+      if ((state.season.phase !== 'preseason' && state.season.phase !== 'pre_race') || state.weekend?.roundIndex === state.season.roundIndex) { reject(command.op, '', command.delta, command.reason, '只能在进入本站周末前调整公开降雨倾向'); continue; }
       const pending = state.supernatural.pendingWeather;
       const old = pending && pending.year === state.season.year && pending.roundIndex === state.season.roundIndex ? pending.rainBias : 0;
       const allowed = apply('weather_tendency', clamp(command.delta, -SUPERNATURAL_LIMITS.weatherPending - old, SUPERNATURAL_LIMITS.weatherPending - old), SUPERNATURAL_LIMITS.weatherTendency);
@@ -218,14 +228,12 @@ export function applySupernaturalCommands(state: GameState, rows: unknown[], inv
       const before = effect[command.field];
       const minOffset = Math.max(-SUPERNATURAL_LIMITS.carSetupOffset, -natural[command.field]);
       const maxOffset = Math.min(SUPERNATURAL_LIMITS.carSetupOffset, 100 - natural[command.field]);
-      const allowed = apply(`car_setup:${command.driver}:${command.field}`, clamp(command.delta, minOffset - before, maxOffset - before), SUPERNATURAL_LIMITS.carSetup);
-      const offset = round1(clamp(before + allowed, -SUPERNATURAL_LIMITS.carSetupOffset, SUPERNATURAL_LIMITS.carSetupOffset));
-      const effective = clamp(natural[command.field] + offset, 0, 100);
-      const normalized = round1(effective - natural[command.field]);
-      const actual = round1(normalized - before);
+      const allowed = apply(`car_setup:${command.driver}:${command.field}`, inRequestedDirection(command.delta, minOffset - before, maxOffset - before), SUPERNATURAL_LIMITS.carSetup);
+      const offset = round1(before + allowed);
+      const actual = round1(offset - before);
       if (!actual) { reject(command.op, `${command.driver}.${command.field}`, command.delta, command.reason, '调校偏移已饱和或本次额度已用尽'); continue; }
       weekend.supernaturalCarEffects ??= {};
-      weekend.supernaturalCarEffects[command.driver] = { ...effect, [command.field]: normalized };
+      weekend.supernaturalCarEffects[command.driver] = { ...effect, [command.field]: offset };
       changed = true; log({ op: command.op, target: `${command.driver}.${command.field}`, requested: command.delta, applied: actual, reason: command.reason, ok: true, note: actual !== command.delta ? '已按上限或边界裁剪' : '' });
     }
   }

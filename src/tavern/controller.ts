@@ -27,9 +27,10 @@ import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ra
 import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
 import { strategyOptions } from '../engine/strategy';
 import { applySupernaturalCommands, effectiveSetup, parseSupernaturalCommands, SUPERNATURAL_LIMITS } from '../engine/supernatural';
+import { dismissalReason } from '../engine/teamSpecials';
 import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, StaffRole } from '../engine/types';
 import { hashString, money, round1 } from '../engine/util';
-import { buildView, type GameView } from '../engine/view';
+import { buildView, supernaturalAvailability, type GameView } from '../engine/view';
 import type { TavernEnv } from './env';
 import { AI_PTR, GAME_PTR, PTR, SaveStore, type RevisionInfo } from './store';
 
@@ -780,6 +781,7 @@ export class F1Controller {
     const team = state.teams[state.meta.playerTeamId];
     if (!state.meta.supernaturalMode || !team) return fail('本存档未启用超自然干预模式');
     if (current.rev.id !== request.expectedRevisionId) return fail('存档版本已变化，请刷新后重试');
+    if (dismissalReason(state)) return fail('已被撤职，不能执行超自然干预');
     if (state.weekend?.liveRace || state.season.phase === 'season_end') return fail('当前阶段不能执行超自然干预');
     const guard = {
       chatId: this.env.chatId(), floor, gameId: state.gameId, revisionId: current.rev.id,
@@ -792,17 +794,20 @@ export class F1Controller {
       .map(driver => `${driver.id}=${driver.name}(${driver.role}; 心态${driver.morale} 信任${driver.trust} 体能${driver.fitness}; 属性 pace${driver.attrs.pace}/racecraft${driver.attrs.racecraft}/consistency${driver.attrs.consistency}/tyre${driver.attrs.tyre}/wet${driver.attrs.wet}/feedback${driver.attrs.feedback})`);
     const staff = Object.entries(team.staff).filter(([, member]) => !!member.id).map(([role, member]) => `${member.id}=${member.name}(${role}; skill${member.skill})`);
     const projects = team.projects.filter(project => project.kind === 'design').map(project => `${project.id}=${project.label}(剩余${project.weeksLeft}周)`);
-    const setup = state.weekend ? team.cars.filter(car => !!car.driverId).map(car => {
-      const natural = state.weekend!.setup[car.driverId!]; const offset = state.weekend!.supernaturalCarEffects?.[car.driverId!];
+    const currentWeekend = state.weekend?.roundIndex === state.season.roundIndex ? state.weekend : null;
+    const setup = currentWeekend ? team.cars.filter(car => !!car.driverId).map(car => {
+      const natural = currentWeekend.setup[car.driverId!]; const offset = currentWeekend.supernaturalCarEffects?.[car.driverId!];
       return natural ? `${car.driverId}: confidence=${natural.confidence}+${offset?.confidence ?? 0}, tyreKnowledge=${natural.tyreKnowledge}+${offset?.tyreKnowledge ?? 0}` : '';
     }).filter(Boolean) : [];
     const pending = state.supernatural.pendingWeather;
+    const eligibility = supernaturalAvailability(state).categories;
     const prompt = [
       '你是严格的 F1 超自然干预编排器。只可建议下列引擎白名单 JSON 指令；引擎会自行拒绝非法请求。',
       `玩家请求：${request.description.trim()}`,
       `当前阶段=${state.season.phase}；年份/本站=${state.season.year}/${state.season.roundIndex + 1}；资金=${team.funds}M；董事会=${team.boardConfidence}；媒体=${team.mediaReputation}；员工士气=${team.staffMorale}。`,
       `车手（只能使用精确 ID）：${drivers.join('；') || '无'}。员工（只能使用精确 ID）：${staff.join('；') || '无'}。设计项目：${projects.join('；') || '无'}。`,
       `公开天气倾向=${pending?.rainBias ?? 0}；本站临时调校=${setup.join('；') || '周末尚未创建'}。`,
+      `当前可用类别：人物=${eligibility.people.available ? '是' : `否（${eligibility.people.reason}）`}；车队=${eligibility.team.available ? '是' : `否（${eligibility.team.reason}）`}；研发=${eligibility.research.available ? '是' : `否（${eligibility.research.reason}）`}；天气=${eligibility.weather.available ? '是' : `否（${eligibility.weather.reason}）`}；调校=${eligibility.setup.available ? '是' : `否（${eligibility.setup.reason}）`}。只建议当前可用类别。`,
       `每次最多${SUPERNATURAL_LIMITS.maxCommands}项。上限：人心态/信任/体能=${SUPERNATURAL_LIMITS.morale}/${SUPERNATURAL_LIMITS.trust}/${SUPERNATURAL_LIMITS.fitness}；车队董事会/媒体/员工=${SUPERNATURAL_LIMITS.board}/${SUPERNATURAL_LIMITS.media}/${SUPERNATURAL_LIMITS.staff}；车手属性和员工技能每人总计1；资金总计${SUPERNATURAL_LIMITS.funds}M；设计项目最多提前1周且不得完成；天气倾向${SUPERNATURAL_LIMITS.weatherTendency}；每车每项调校${SUPERNATURAL_LIMITS.carSetup}，总偏移±${SUPERNATURAL_LIMITS.carSetupOffset}。`,
       '禁止结果、积分、零件、合同、雇佣、比赛控制、任意补丁和未来天气。只返回一个 <F1M_UPDATE>[...]</F1M_UPDATE>，数组中每个对象必须使用以下一种精确格式：{op:"morale|trust|fitness",driver:"ID",delta:number,reason?:string}、{op:"board|media|staff|funds|weather_tendency",delta:number,reason?:string}、{op:"driver_attr",driver:"ID",attr:"pace|racecraft|consistency|tyre|wet|feedback",delta:number}、{op:"staff_skill",staffId:"ID",field:"skill|setup|communication|reaction|strategy|weather|risk",delta:number}、{op:"research_progress",projectId:"ID",weeks:1}、{op:"car_setup",driver:"ID",field:"confidence|tyreKnowledge",delta:number}。',
     ].join('\n');
@@ -812,7 +817,7 @@ export class F1Controller {
         this.env.generateText(prompt, api === 'secondary' ? { proxyPreset: this.settings.engineerProxyPreset, model: this.settings.engineerModel } : undefined),
         60_000,
       );
-      if (generated.length > 16 * 1024) return fail('API 返回超过 16 KiB，未保存任何改动');
+      if (new TextEncoder().encode(generated).byteLength > 16 * 1024) return fail('API 返回超过 16 KiB，未保存任何改动');
       const parsed = parseSupernaturalCommands(generated);
       if (parsed.error) return fail(parsed.error);
       const latestFloor = this.latestFloor();

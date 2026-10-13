@@ -15,27 +15,55 @@ let returnFocus: HTMLElement | null = null;
 const supernatural = computed(() => store.view?.supernatural ?? null);
 const caps = computed(() => supernatural.value?.caps);
 const canSubmit = computed(() => !!description.value.trim() && description.value.length <= 1000 && !!supernatural.value?.available && !store.busy && !store.status?.generating);
-const recent = computed(() => (store.view?.aiLog ?? []).filter(entry => entry.source === 'supernatural').slice(-8).reverse());
+const recent = computed(() => (store.view?.aiLog ?? []).filter(entry => entry.source === 'supernatural').slice(0, 8));
+
+const identity = computed(() => `${store.status?.chatId ?? ''}:${store.view?.meta.createdAt ?? ''}`);
+watch(identity, (next, previous) => {
+  if (!previous || next === previous) return;
+  description.value = '';
+  responseMessage.value = '';
+  results.value = [];
+});
 
 const cards = computed(() => {
   const c = caps.value;
+  const categories = supernatural.value?.categories;
+  const state = (key: string) => categories?.[key as keyof typeof categories] ?? { available: supernatural.value?.available ?? false, reason: supernatural.value?.reason };
   return [
-    { title: '人物状态', cap: `心态 ±${c?.morale ?? 10} · 信任 ±${c?.trust ?? 10} · 体能 ±${c?.fitness ?? 20}`, text: '仅限本队正式与储备车手，最终数值保持在 0–100。' },
-    { title: '人员与车手能力', cap: '每名对象合计 ±1', text: '可微调车手六项属性或当前员工技能，不改变合同与身份。' },
-    { title: '车队与资金', cap: `董事会 ±${c?.board ?? 8} · 媒体/士气 ±${c?.media ?? 10} · 资金 ±$${c?.funds ?? 3}M`, text: '资金保持在 $0–500M，不影响成本帽支出记录。' },
-    { title: '研发进度', cap: `最多提前 ${c?.researchWeeks ?? 1} 周`, text: '仅限现有设计项目，最多推进到最后一周，不能直接交付。' },
-    { title: '天气倾向', cap: `单次 ±${Math.round((c?.weatherTendency ?? .1) * 100)} 个百分点`, text: '仅在进入比赛周末前调整公开降雨倾向，不读取或改写隐藏天气。' },
-    { title: '临时赛车调校', cap: `单项 ±${c?.carSetup ?? 10}，本站总偏移 ±${c?.carSetupOffset ?? 15}`, text: '仅影响本站未来计算中的调校信心和轮胎知识，周末后失效。' },
+    { key: 'people', title: '人物状态', cap: `心态 ±${c?.morale ?? 10} · 信任 ±${c?.trust ?? 10} · 体能 ±${c?.fitness ?? 20}`, text: '仅限本队正式与储备车手，最终数值保持在 0–100。', ...state('people') },
+    { key: 'people', title: '人员与车手能力', cap: `车手每人 ±${c?.driverAttr ?? 1} · 员工每人 ±${c?.staffSkill ?? 1}`, text: '可微调车手六项属性或当前员工技能，不改变合同与身份。', ...state('people') },
+    { key: 'team', title: '车队与资金', cap: `董事会 ±${c?.board ?? 8} · 媒体 ±${c?.media ?? 10} · 士气 ±${c?.staff ?? 10} · 资金 ±$${c?.funds ?? 3}M`, text: '资金保持在 $0–500M，不影响成本帽支出记录。', ...state('team') },
+    { key: 'research', title: '研发进度', cap: `最多提前 ${c?.researchWeeks ?? 1} 周`, text: '仅限现有设计项目，最多推进到最后一周，不能直接交付。', ...state('research') },
+    { key: 'weather', title: '天气倾向', cap: `单次 ±${Math.round((c?.weatherTendency ?? .1) * 100)} 个百分点`, text: '仅在进入比赛周末前调整公开降雨倾向，不读取或改写隐藏天气。', ...state('weather') },
+    { key: 'setup', title: '临时赛车调校', cap: `单项 ±${c?.carSetup ?? 10}，本站总偏移 ±${c?.carSetupOffset ?? 15}`, text: '仅影响本站未来计算中的调校信心和轮胎知识，周末后失效。', ...state('setup') },
   ];
 });
+
+const OP_LABEL: Record<string, string> = {
+  morale: '车手心态', trust: '车手信任', fitness: '车手体能', board: '董事会信心', media: '媒体声誉', staff: '员工士气', funds: '车队资金',
+  driver_attr: '车手属性', staff_skill: '员工技能', research_progress: '研发进度', weather_tendency: '天气倾向', car_setup: '临时调校',
+};
+
+function targetLabel(target: string): string {
+  if (!target) return '车队';
+  const id = target.split('.')[0];
+  const driver = supernatural.value?.targets.drivers.find(item => item.id === id);
+  if (driver) return target.replace(id, driver.name);
+  const staff = supernatural.value?.targets.staff.find(item => item.id === id);
+  if (staff) return target.replace(id, staff.name);
+  const project = supernatural.value?.targets.projects.find(item => item.id === id);
+  if (project) return target.replace(id, project.label);
+  const weather = target.match(/^(\d+):(\d+)$/);
+  if (weather) return `${weather[1]} 赛季第 ${Number(weather[2]) + 1} 站`;
+  if (id === store.view?.player.team.id) return store.view.player.team.name;
+  return target;
+}
 
 watch(() => props.open, async open => {
   if (!open) return;
   returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   const settings = peek(api => api.getSettings());
   selectedApi.value = settings?.engineerApi === 'secondary' ? 'secondary' : 'main';
-  responseMessage.value = '';
-  results.value = [];
   await nextTick();
   dialog.value?.querySelector<HTMLElement>('textarea')?.focus();
 });
@@ -52,7 +80,7 @@ function keydown(event: KeyboardEvent) {
     return;
   }
   if (event.key !== 'Tab' || !dialog.value) return;
-  const focusable = [...dialog.value.querySelectorAll<HTMLElement>('button:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])')];
+  const focusable = [...dialog.value.querySelectorAll<HTMLElement>('button:not(:disabled), textarea:not(:disabled), summary, [tabindex]:not([tabindex="-1"])')];
   if (!focusable.length) return;
   const first = focusable[0];
   const last = focusable[focusable.length - 1];
@@ -72,6 +100,8 @@ async function submit() {
   responseMessage.value = result.message;
   results.value = result.results ?? [];
   if (result.ok) description.value = '';
+  await nextTick();
+  dialog.value?.focus();
 }
 
 function openSettings() {
@@ -82,7 +112,7 @@ function openSettings() {
 
 <template>
   <div v-if="open" class="supernatural-backdrop" @mousedown.self="close">
-    <section ref="dialog" class="supernatural-dialog" role="dialog" aria-modal="true" aria-labelledby="supernatural-title" @keydown="keydown">
+    <section ref="dialog" class="supernatural-dialog" role="dialog" aria-modal="true" aria-labelledby="supernatural-title" tabindex="-1" @keydown="keydown">
       <header class="dialog-head">
         <div>
           <h2 id="supernatural-title">超自然干预</h2>
@@ -98,9 +128,10 @@ function openSettings() {
         </div>
 
         <div class="grid g2 whitelist">
-          <article v-for="card in cards" :key="card.title" class="card stack-s">
-            <div class="spread"><b>{{ card.title }}</b><span class="badge team">{{ card.cap }}</span></div>
+          <article v-for="card in cards" :key="card.title" class="card stack-s" :class="{ unavailable: !card.available }">
+            <div class="spread"><b>{{ card.title }}</b><span class="badge" :class="card.available ? 'team' : 'bad'">{{ card.available ? card.cap : '当前不可用' }}</span></div>
             <div class="small muted">{{ card.text }}</div>
+            <div v-if="!card.available && card.reason" class="tiny muted">{{ card.reason }}</div>
           </article>
         </div>
 
@@ -126,7 +157,7 @@ function openSettings() {
           <h3>本次结果</h3>
           <div class="notice small" :class="results.some(row => row.ok) ? 'ok' : 'bad'">{{ responseMessage }}</div>
           <div v-for="(row, index) in results" :key="index" class="result-row small" :class="row.ok ? 'accepted' : 'rejected'">
-            <div class="spread"><b>{{ row.op }} · {{ row.target || '—' }}</b><span class="badge" :class="row.ok ? 'ok' : 'bad'">{{ row.ok ? '已应用' : '已拒绝' }}</span></div>
+            <div class="spread"><b>{{ OP_LABEL[row.op] ?? row.op }} · {{ targetLabel(row.target) }}</b><span class="badge" :class="row.ok ? (row.note ? 'warn' : 'ok') : 'bad'">{{ row.ok ? (row.note ? '已裁剪' : '已应用') : '已拒绝' }}</span></div>
             <div>请求：{{ row.requested ?? '—' }} · 实际：{{ row.applied ?? '—' }}</div>
             <div v-if="row.reason || row.note" class="tiny muted">{{ row.reason }}<template v-if="row.reason && row.note"> · </template>{{ row.note }}</div>
           </div>
@@ -149,6 +180,7 @@ function openSettings() {
 .dialog-scroll { overflow: auto; padding: 14px; }
 .whitelist .card { border-color: #3c2d49; }
 .whitelist .card::before { background: linear-gradient(180deg, var(--purple), transparent); }
+.whitelist .card.unavailable { opacity: .62; }
 .api-row { padding-top: 4px; border-top: 1px solid var(--line); }
 .invoke { min-height: 42px; }
 .result-row { display: grid; gap: 3px; padding: 8px 10px; border-left: 3px solid var(--line2); background: var(--bg2); }

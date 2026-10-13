@@ -88,7 +88,7 @@ function supernaturalSettings() {
           </div>
         </div>
         <div class="row actions">
-          <button v-if="view.supernatural.enabled" class="small supernatural-entry" :disabled="store.busy || generating || !!dismissed" @click="openSupernatural">超自然干预</button>
+          <button v-if="view.supernatural.enabled" class="small supernatural-entry" :disabled="store.busy || generating || !!dismissed || !!view.flags.fired" @click="openSupernatural">超自然干预</button>
           <button v-if="view.narration.length" class="small" :disabled="generating" :title="'待叙述：' + view.narration.map(n => n.title).join('、')" @click="narrate">
             让 AI 叙述（{{ view.narration.length }}）
           </button>
@@ -111,7 +111,7 @@ function supernaturalSettings() {
             <div v-if="store.tab === 'more'" class="mobile-more card">
               <h3>更多</h3>
               <button @click="store.tab = 'standings'">积分榜</button>
-              <button v-if="view.supernatural.enabled" class="supernatural-entry" :disabled="store.busy || generating || !!dismissed" @click="openSupernatural">超自然干预</button>
+              <button v-if="view.supernatural.enabled" class="supernatural-entry" :disabled="store.busy || generating || !!dismissed || !!view.flags.fired" @click="openSupernatural">超自然干预</button>
               <button @click="store.tab = 'saves'">存档与设置</button>
             </div>
             <Saves v-else-if="store.tab === 'saves'" />

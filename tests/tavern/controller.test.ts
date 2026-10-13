@@ -148,8 +148,10 @@ describe('后端控制器（模拟酒馆环境）', () => {
     ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: 'persona-api', engineerModel: 'bounded-model' });
     const before = ctrl.stateAt()!.teams.ferrari.boardConfidence;
     let generationOptions: unknown;
-    env.generateText = async (_prompt, options) => {
+    let generationPrompt = '';
+    env.generateText = async (prompt, options) => {
       generationOptions = options;
+      generationPrompt = prompt;
       return '<F1M_UPDATE>[{"op":"board","delta":3,"reason":"预知董事会担忧"}]</F1M_UPDATE>';
     };
     const result = await ctrl.requestSupernaturalIntervention({
@@ -158,10 +160,30 @@ describe('后端控制器（模拟酒馆环境）', () => {
     });
     expect(result.ok).toBe(true);
     expect(generationOptions).toEqual({ proxyPreset: 'persona-api', model: 'bounded-model' });
+    expect(generationPrompt).toContain('当前可用类别');
     expect(ctrl.stateAt()!.teams.ferrari.boardConfidence).toBe(before + 3);
     expect(result.results).toHaveLength(1);
     expect(result.results[0]).toMatchObject({ op: 'board', applied: 3, ok: true, source: 'supernatural' });
     expect(ctrl.listRevisions()[0].label).toBe('超自然干预');
+  });
+
+  it('rejects dismissal before generation and counts generated response bytes', async () => {
+    expect((await ctrl.newGame({ playerTeamId: 'ferrari', supernaturalMode: true })).ok).toBe(true);
+    let calls = 0;
+    env.generateText = async () => { calls++; return '<F1M_UPDATE>[]</F1M_UPDATE>'; };
+    const dismissedSave = JSON.parse(ctrl.exportSave()!);
+    dismissedSave.state.ferrari.dismissed = '测试撤职';
+    expect((await ctrl.importSave(JSON.stringify(dismissedSave))).ok).toBe(true);
+    const dismissed = await ctrl.requestSupernaturalIntervention({ description: '继续干预', expectedRevisionId: ctrl.status().revisionId! });
+    expect(dismissed.ok).toBe(false);
+    expect(dismissed.message).toContain('撤职');
+    expect(calls).toBe(0);
+
+    expect((await ctrl.newGame({ playerTeamId: 'ferrari', supernaturalMode: true })).ok).toBe(true);
+    env.generateText = async () => '你'.repeat(6_000);
+    const oversized = await ctrl.requestSupernaturalIntervention({ description: '测试字节限制', expectedRevisionId: ctrl.status().revisionId! });
+    expect(oversized.ok).toBe(false);
+    expect(oversized.message).toContain('16 KiB');
   });
 
   it('等待超自然 API 时存档变化会安全丢弃旧结果', async () => {
