@@ -143,7 +143,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <div class="spread"><h3>威廉姆斯 · 沃尔斯接班培养</h3><span class="badge" :class="williams.confirmedSuccessor ? 'ok' : 'warn'">{{ williams.confirmedSuccessor ? '已正式接任' : '培养中' }}</span></div>
       <Bar label="沃尔斯信心" :value="williams.vowlesConfidence" color="#64c4ff" />
       <Bar label="接班准备度" :value="williams.successionReadiness" :mark="v.nextSpecialRules.williams.successionThreshold" color="#005aff" :hint="`2026 年底至少需要 ${v.nextSpecialRules.williams.successionThreshold}`" />
-      <div class="small">本站方向：{{ williams.focus === 'facilities' ? '设施更新' : williams.focus === 'development' ? '赛车升级' : williams.focus === 'reserve' ? '保留现金' : '尚未决定' }}</div>
+      <div class="small">本站方向：{{ williams.focusRound === `${v.season.number}-${v.season.roundIndex}` ? (williams.focus === 'facilities' ? '设施更新' : williams.focus === 'development' ? '赛车升级' : '保留现金') : '尚未决定' }}</div>
       <div class="grid2 small"><div>设施累计投入：{{ money(williams.facilityInvestment) }}</div><div>赛车升级投入：{{ money(williams.developmentInvestment) }}</div></div>
       <div class="row"><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'facilities' })">优先设施</button><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'development' })">优先赛车升级</button><button :disabled="store.busy" @click="act({ type: 'WILLIAMS_BUDGET_FOCUS', focus: 'reserve' })">保留现金</button></div>
       <div class="tiny muted">每站只能确定一次预算方向。设施和研发动作必须符合本站方向。</div>

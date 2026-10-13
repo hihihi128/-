@@ -1094,7 +1094,7 @@ export interface AlpineState {
   gaslyCommitment: number;
   puIntegration: number;
   integrationPenaltyActive: boolean;
-  penalizedPowerSpecs: Record<string, { partType: PartType; specId: string }>;
+  penalizedPowerSpecs: Record<string, { partType: PartType; specId: string; perfAfter: number; relAfter: number }>;
   rndDirection: PartType[];
   lastActionRound: string | null;
   gaslyLeaving: boolean;

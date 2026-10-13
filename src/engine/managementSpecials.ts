@@ -16,10 +16,11 @@ export function applyAlpinePuPenalty(state: GameState, team: TeamState, partType
   const alpine = state.alpine;
   if (!alpine?.integrationPenaltyActive || team.id !== state.meta.playerTeamId || team.special !== 'alpine') return;
   const key = `${partType}:${spec.id}`;
-  if (alpine.penalizedPowerSpecs[key]) return;
+  const tracked = alpine.penalizedPowerSpecs[key];
+  if (tracked && spec.perf === tracked.perfAfter && spec.rel === tracked.relAfter) return;
   spec.perf = round1(Math.max(1, spec.perf - 4));
   spec.rel = round1(clamp(spec.rel - 5, 1, 100));
-  alpine.penalizedPowerSpecs[key] = { partType, specId: spec.id };
+  alpine.penalizedPowerSpecs[key] = { partType, specId: spec.id, perfAfter: spec.perf, relAfter: spec.rel };
 }
 
 function restoreAlpinePuSpecs(state: GameState): void {
@@ -248,6 +249,8 @@ export function completeAlpineDriverExit(state: GameState): void {
   if (!driver || !team || !car) return;
   car.driverId = null;
   driver.teamId = null;
+  state.alpine.gaslyLeaving = false;
+  state.alpine.gaslyCommitment = state.rules.alpine.startGaslyCommitment;
   addNews(state, '车手', '加斯利拒绝与阿尔派续约，赛季结束后成为自由车手。');
   addNarration(state, 'gasly_departure', '加斯利离开阿尔派', '长期的队内失衡最终造成实际后果。加斯利在合同市场开放前离队，阿尔派必须签下一名新车手。');
 }

@@ -53,6 +53,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
   it('阿尔派动力匹配惩罚覆盖供应商新件，完成匹配后只恢复到梅赛德斯水平', () => {
     let state = game('alpine');
     const works = state.teams.mercedes;
+    state.alpine!.penalizedPowerSpecs['power_unit:power_unit-2'] = { partType: 'power_unit', specId: 'power_unit-2', perfAfter: 88, relAfter: 82 };
     supplyCustomers(state, works, 'power_unit', { id: 'works-test', type: 'power_unit', version: 99, perf: 94, rel: 90, verified: true, expected: null, introduced: 'test' });
     const delivered = state.teams.alpine.parts.power_unit.specs.at(-1)!;
     expect(delivered).toMatchObject({ perf: 90, rel: 85 });
@@ -128,6 +129,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     completeAlpineDriverExit(state);
     expect(state.drivers.gasly.teamId).toBeNull();
     expect(state.teams.alpine.cars.some(car => car.driverId === 'gasly')).toBe(false);
+    expect(state.alpine).toMatchObject({ gaslyLeaving: false, gaslyCommitment: state.rules.alpine.startGaslyCommitment });
     expect(state.narration.at(-1)?.title).toContain('离开');
   });
 

@@ -641,6 +641,7 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
       team.costCapSpent = round2(team.costCapSpent + escrow.amount);
     }
   }
+  if (state.alpine?.integrationPenaltyActive) state.alpine.penalizedPowerSpecs = {};
   syncCustomerPu(state);
   resetAduoSeason(state);
   // 按上赛季排名分配风洞时长
