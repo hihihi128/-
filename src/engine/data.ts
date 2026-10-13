@@ -206,6 +206,23 @@ const RULE_RANGES: Record<string, { min?: number; max?: number; int?: boolean }>
   'redBull.gpLossPerRace': { min: 0, max: 100 },
   'redBull.gpNegotiationGain': { min: 0, max: 100 },
   'redBull.gpNegotiationCost': { min: 0 },
+  'astonMartin.vibrationInterval': { min: 1, int: true },
+  'astonMartin.vibrationRetireChance': { min: 0, max: 1 },
+  'astonMartin.startHondaConflict': { min: 0, max: 100 },
+  'astonMartin.startMediaPressure': { min: 0, max: 100 },
+  'astonMartin.mediaConfidenceLoss': { min: 0, max: 20 },
+  'astonMartin.aduoPressureGain': { min: 1, max: 100 },
+  'astonMartin.mediationGain': { min: 1, max: 100 },
+  'astonMartin.neweyProgressGain': { min: 1, max: 100 },
+  'astonMartin.aduoPuBuff': { min: 0, max: 30 },
+  'astonMartin.chassisBuff': { min: 0, max: 20 },
+  'racingBulls.recallChance': { min: 0, max: 1 },
+  'audi.startDropMin': { min: 0, max: 10, int: true },
+  'audi.startDropMax': { min: 0, max: 10, int: true },
+  'audi.allianceProgress': { min: 1, max: 100 },
+  'audi.progressPerRace': { min: 0, max: 100 },
+  'fiaMeeting.interval': { min: 1, int: true },
+  'fiaMeeting.startPoliticalCapital': { min: 0, max: 100 },
   'aduo.baseUpgrades': { int: true },
   'aduo.tier1Upgrades': { int: true },
   'aduo.tier2Upgrades': { int: true },
@@ -474,7 +491,7 @@ function normalizeTeam(ctx: Ctx, raw: unknown, index: number, rules: Rules): Tea
 }
 
 /** 目前支持的特殊机制 */
-export const SPECIAL_MECHANICS = ['ferrari', 'mclaren', 'mercedes', 'red_bull'] as const;
+export const SPECIAL_MECHANICS = ['ferrari', 'mclaren', 'mercedes', 'red_bull', 'aston_martin', 'racing_bulls', 'audi'] as const;
 
 function normalizeSpecial(ctx: Ctx, raw: Record<string, unknown>, path: string): string {
   const v = ctx.str(raw, 'special', path).toLowerCase();

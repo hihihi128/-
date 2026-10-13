@@ -232,6 +232,7 @@ teams:
 
   # ── 小红牛：红牛二队，红牛-福特动力，阵容最年轻 ──
   - id: racing_bulls
+    special: racing_bulls
     name: 小红牛车队
     short: RB
     color: '#6692ff'
@@ -265,6 +266,7 @@ teams:
 
   # ── 阿斯顿·马丁：纽维出任领队、本田回归；季前可靠性灾难 ──
   - id: aston_martin
+    special: aston_martin
     name: 阿斯顿·马丁车队
     short: AMR
     color: '#229971'
@@ -333,6 +335,7 @@ teams:
 
   # ── 奥迪：索伯改组为奥迪厂商车队，季前中游的惊喜 ──
   - id: audi
+    special: audi
     name: 奥迪车队
     short: AUD
     color: '#bb0a30'

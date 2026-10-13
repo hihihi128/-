@@ -7,7 +7,7 @@ import { rankOfTeam } from './development';
 import { capRemaining, costCapOf } from './finance';
 import { aduoLine } from './aduo';
 import { fanCamps, fanGap, ferrariActive } from './ferrari';
-import { driverName } from './log';
+import { driverName, teamName } from './log';
 import { describeLog, UPDATE_TAG } from './protocol';
 import { carRatings, driverOverall, moraleLabel, teamPaceRanking, trackScore } from './ratings';
 import { nextActionFor, sortedDrivers, sortedTeams } from './season';
@@ -112,6 +112,25 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
     const r = state.redBull;
     const maxPos = sortedDrivers(state).indexOf('verstappen') + 1;
     L.push(`【红牛·人手危机】RB23 准备不足使车手更容易失误。GP 留任意愿 ${r.gpRetention.toFixed(0)}${r.gpTransferred ? '，已经转投迈凯伦' : ''}。夏休检查${r.summerChecked ? '已完成' : '尚未进行'}；维斯塔潘当前车手榜 P${maxPos}${r.verstappenExit ? '，解约条款已经触发并已转投梅赛德斯' : '，夏休时必须位列前三'}。`);
+  }
+  if (state.astonMartin) {
+    const a = state.astonMartin;
+    L.push(`【阿斯顿·马丁·替罪羊危机】Jonathan Wheatley 因 AMR26 预期表现极差被撤职，玩家与纽维接手残局。本田动力单元约少 100 马力，且与车体产生危险振动。${a.aduoEngineArrived ? '首批 ADUO 动力单元已经到货，保护性退赛检查停止' : `每 ${rules.astonMartin.vibrationInterval} 圈以 ${Math.round(rules.astonMartin.vibrationRetireChance * 100)}% 概率为防止永久性手部损伤强制退赛；ADUO 提前进度 ${a.aduoProgress}%`}。本田冲突 ${a.hondaConflict} · 纽维适配 ${a.neweyProgress}% · 西班牙媒体压力 ${a.mediaPressure} · 老斯特罗尔满意 ${a.strollFavor} · 阿隆索粉丝愤怒 ${a.alonsoFanAnger}。`);
+  }
+  if (state.racingBulls) {
+    const r = state.racingBulls;
+    L.push(`【小红牛·副领队】玩家辅佐艾伦·佩尔曼。红牛每站可能临时调走一名正式车手。${r.pendingRecall ? `当前必须从储备车手中选择替补，待替车手：${driverName(state, r.pendingRecall.driverId)}` : r.activeRecall ? `当前由 ${driverName(state, r.activeRecall.replacementId)} 顶替 ${driverName(state, r.activeRecall.driverId)} 一站` : '当前阵容正常'}。`);
+  }
+  if (state.audi) {
+    const a = state.audi;
+    L.push(`【奥迪·副领队】比诺托负责技术，玩家处理围场政治。奥迪涡轮问题${a.turboFixed ? '已经通过 ADUO 解决' : `尚未解决，起步随机丢 ${rules.audi.startDropMin}–${rules.audi.startDropMax} 位`}。ADUO 进度 ${a.aduoProgress}% · 政治支持 ${a.politicalSupport}${a.alliance ? ` · 盟友 ${teamName(state, a.alliance)}` : ' · 尚未选择盟友'}。`);
+  }
+  if (state.meta.playerTeamId === 'cadillac') L.push('【凯迪拉克·新军】车队通过全球公开招募组建，没有额外特殊机制，但初始赛车性能很差，需要依靠研发和人才市场追赶。');
+  if (state.fiaMeeting?.current) {
+    const labels = { aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
+    const f = state.fiaMeeting;
+    const current = f.current!;
+    L.push(`【FIA 领队座谈会·必须先处理】议题：${labels[current.issue]}。辩论对手：${current.opponents.map(id => teamName(state, id)).join('、')}。政治资本 ${f.politicalCapital}。玩家必须选择支持、反对或折中立场，系统按董事会信心、媒体声望、政治资本与确定性随机数进行说服检定。`);
   }
 
   // 赛车

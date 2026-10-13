@@ -12,6 +12,7 @@ import { activeEntries, carRatings, fittedSpec, raceSkill, trackScore } from './
 import { Rng } from './rng';
 import { raceEngineerFor, staffAbility } from './staff';
 import { redBullCrashMultiplier, specialFailureChance } from './teamSpecials';
+import { applyAudiStartDrop, astonVibrationActive } from './nextTeamSpecials';
 import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from './raceWeather';
 import { validOrders, validRaceChoice } from './raceDecisions';
 import {
@@ -706,6 +707,7 @@ export function createRaceSession(state: GameState, rng: Rng, kind: 'race' | 'sp
         session.specialIncidents!.push({ type, driverId: target.driverId, lap: execution.int(2, Math.max(2, totalLaps - 2)), handled: false });
       }
     }
+    applyAudiStartDrop(state, session, execution);
     session.rngState = execution.state;
   }
   for (const driverId of disobedient) liveEvent(session, 0, 'order', `${driverId} 拒绝执行赛前策略，决定按自己的节奏比赛`, [driverId], true);
@@ -872,8 +874,13 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
         const energyRisk = car.energyMode === 'deploy' && car.energy < 15 ? 1.35 : car.energyMode === 'deploy' ? 1.12 : 1;
         const pFail = raceFailProb(car.reliability) / session.totalLaps * paceRisk * energyRisk;
         const pCrash = (.02 + (100 - car.consistency) / 100 * .06) * (1 + session.wetness) / session.totalLaps * paceRisk * energyRisk * redBullCrashMultiplier(state, car.teamId);
+        const astonVibrationRetirement = car.teamId === 'aston_martin' && astonVibrationActive(state) && lap % state.rules.astonMartin.vibrationInterval === 0 && rng.chance(state.rules.astonMartin.vibrationRetireChance);
         const special = session.specialIncidents?.find(incident => !incident.handled && incident.driverId === car.driverId && incident.lap <= lap);
-        if (special) {
+        if (astonVibrationRetirement) {
+          car.status = 'dnf';
+          car.reason = '危险振动达到手部损伤阈值，车队强制退赛';
+          incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 的赛车振动达到危险阈值，车队为防止永久性手部损伤强制其退赛`, [car.driverId], true));
+        } else if (special) {
           special.handled = true;
           if (special.type === 'mclaren_pu') {
             const crashChance = clamp(.68 - car.consistency * .005 - car.racecraft * .002, .12, .55);

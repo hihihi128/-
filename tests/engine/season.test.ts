@@ -85,7 +85,7 @@ describe('完整赛季流程', () => {
       const v = buildView(s);
       expect(v.player.cars).toHaveLength(2);
       expect(v.standings.teams).toHaveLength(11);
-      s = act(s, { type: 'ADVANCE' });
+      s = s.fiaMeeting?.current ? act(s, { type: 'FIA_DEBATE', stance: 'compromise' }) : act(s, { type: 'ADVANCE' });
     }
     const v = buildView(s);
     expect(v.season.phase).toBe('season_end');

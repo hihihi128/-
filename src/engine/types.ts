@@ -242,6 +242,23 @@ export interface RedBullRules {
   gpNegotiationCost: number;
 }
 
+export interface AstonMartinRules {
+  vibrationInterval: number;
+  vibrationRetireChance: number;
+  startHondaConflict: number;
+  startMediaPressure: number;
+  mediaConfidenceLoss: number;
+  aduoPressureGain: number;
+  mediationGain: number;
+  neweyProgressGain: number;
+  aduoPuBuff: number;
+  chassisBuff: number;
+}
+
+export interface RacingBullsRules { recallChance: number }
+export interface AudiRules { startDropMin: number; startDropMax: number; allianceProgress: number; progressPerRace: number }
+export interface FiaMeetingRules { interval: number; startPoliticalCapital: number }
+
 export interface Rules {
   seasonYear: number;
   pointsRace: number[];
@@ -314,6 +331,10 @@ export interface Rules {
   mclaren: McLarenRules;
   mercedes: MercedesRules;
   redBull: RedBullRules;
+  astonMartin: AstonMartinRules;
+  racingBulls: RacingBullsRules;
+  audi: AudiRules;
+  fiaMeeting: FiaMeetingRules;
   /** ADUO 动力单元追赶机制 */
   aduo: AduoRules;
 }
@@ -1007,6 +1028,42 @@ export interface RedBullState {
   log: Array<{ at: string; text: string }>;
 }
 
+export interface AstonMartinState {
+  aduoEngineArrived: boolean;
+  aduoProgress: number;
+  hondaConflict: number;
+  neweyProgress: number;
+  chassisUpgradeReady: boolean;
+  mediaPressure: number;
+  alonsoFanAnger: number;
+  strollFavor: number;
+  lastActionRound: string | null;
+  log: Array<{ at: string; text: string }>;
+}
+
+export interface RacingBullsState {
+  pendingRecall: { driverId: string; candidateIds: string[] } | null;
+  activeRecall: { driverId: string; replacementId: string; replacementTeamId: string | null } | null;
+  log: Array<{ at: string; text: string }>;
+}
+
+export interface AudiState {
+  turboFixed: boolean;
+  aduoProgress: number;
+  alliance: 'aston_martin' | 'mercedes' | 'ferrari' | null;
+  politicalSupport: number;
+  lastActionRound: string | null;
+  log: Array<{ at: string; text: string }>;
+}
+
+export type FiaMeetingIssue = 'aduo' | 'driver_safety' | 'cost_cap';
+export interface FiaMeetingState {
+  politicalCapital: number;
+  completed: number;
+  current: { index: number; issue: FiaMeetingIssue; opponents: string[] } | null;
+  log: Array<{ at: string; text: string }>;
+}
+
 export interface SeasonState {
   year: number;
   /** 第几个赛季（从 1 开始） */
@@ -1050,6 +1107,10 @@ export interface GameState {
   mclaren?: McLarenState | null;
   mercedes?: MercedesState | null;
   redBull?: RedBullState | null;
+  astonMartin?: AstonMartinState | null;
+  racingBulls?: RacingBullsState | null;
+  audi?: AudiState | null;
+  fiaMeeting?: FiaMeetingState;
   /** ADUO 评估记录（旧存档缺省） */
   aduo?: AduoState | null;
   lastSeason: { year: number; driverChampion: string | null; constructorChampion: string | null; playerPosition: number | null } | null;
@@ -1186,6 +1247,10 @@ export type Action =
   | { type: 'START_MCLAREN_FIX'; route: 'independent' | 'mercedes' }
   | { type: 'MERCEDES_POLITICS'; strategy: 'lobby_aduo' | 'defend' | 'compromise' }
   | { type: 'RED_BULL_RETAIN_GP' }
+  | { type: 'ASTON_CRISIS'; strategy: 'pressure_honda' | 'mediate' | 'push_newey' }
+  | { type: 'RACING_BULLS_SELECT_RESERVE'; driverId: string }
+  | { type: 'AUDI_ALLIANCE'; partner: 'aston_martin' | 'mercedes' | 'ferrari' }
+  | { type: 'FIA_DEBATE'; stance: 'support' | 'oppose' | 'compromise' }
   | { type: 'SWAP_DRIVER'; slot: number; driverId: string }
   | { type: 'CLEAR_NARRATION' };
 

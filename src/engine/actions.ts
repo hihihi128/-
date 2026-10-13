@@ -17,6 +17,7 @@ import {
 import { ferrariOnPriority } from './ferrari';
 import { teammateRelationship, willDisobeyStrategy } from './driverBehavior';
 import { dismissalReason, mercedesPolitics, retainGp, startMcLarenFix } from './teamSpecials';
+import { astonCrisis, astonOnPriority, audiAlliance, fiaDebate, selectRacingBullsReserve, specialDecisionBlocker } from './nextTeamSpecials';
 import { addNews, driverName } from './log';
 import { offerDriverContract, offerStaffContract, releasePerson } from './market';
 import { resolveAiMarket } from './market-ai';
@@ -120,6 +121,7 @@ function setPriority(state: GameState, driverId: string | null): Outcome {
   const msg = driverId ? `${driverName(state, driverId)} 被确立为车队优先车手` : '车队取消了优先车手，两位车手平等对待';
   addNews(state, '车队', `${msg}。`);
   ferrariOnPriority(state, driverId);
+  astonOnPriority(state, driverId);
   return ok(msg);
 }
 
@@ -143,6 +145,8 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
   if (dismissed && !ALLOWED_AFTER_DISMISSAL.has(action?.type)) {
     return fail(`你已被解除领队职务（${dismissed}），本局结束。请在「存档」中读档或开始新游戏。`);
   }
+  const specialBlocker = specialDecisionBlocker(state, action?.type);
+  if (specialBlocker) return fail(specialBlocker);
   switch (action.type) {
     case 'ADVANCE': {
       const next = nextActionFor(state);
@@ -269,6 +273,17 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
       return mercedesPolitics(state, action.strategy);
     case 'RED_BULL_RETAIN_GP':
       return retainGp(state);
+    case 'ASTON_CRISIS':
+      if (!['pressure_honda', 'mediate', 'push_newey'].includes(action.strategy)) return fail('未知的阿斯顿·马丁危机行动');
+      return astonCrisis(state, action.strategy);
+    case 'RACING_BULLS_SELECT_RESERVE':
+      return selectRacingBullsReserve(state, action.driverId);
+    case 'AUDI_ALLIANCE':
+      if (!['aston_martin', 'mercedes', 'ferrari'].includes(action.partner)) return fail('未知的 ADUO 联盟伙伴');
+      return audiAlliance(state, action.partner);
+    case 'FIA_DEBATE':
+      if (!['support', 'oppose', 'compromise'].includes(action.stance)) return fail('未知的 FIA 辩论立场');
+      return fiaDebate(state, action.stance);
     case 'SWAP_DRIVER':
       return swapDriver(state, tid, action.slot, action.driverId);
     case 'CLEAR_NARRATION':

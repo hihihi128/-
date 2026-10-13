@@ -121,12 +121,16 @@ function setupWindow() {
 }
 
 describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backend.js）', () => {
-  it('生成卡包含三支车队的条件式资料', () => {
+  it('生成卡包含车队的条件式资料', () => {
     const card = JSON.parse(readFileSync(CARD, 'utf8'));
     const entries = card.data.character_book.entries as Array<{ comment: string; content: string }>;
     expect(entries.find(entry => entry.comment.includes('迈凯伦车队'))?.content).toContain('若玩家执掌迈凯伦');
     expect(entries.find(entry => entry.comment.includes('梅赛德斯车队'))?.content).toContain('其他车队存档只把接班人计划视为围场新闻');
     expect(entries.find(entry => entry.comment.includes('红牛车队'))?.content).toContain('其他车队存档只把人手危机视为围场新闻');
+    expect(entries.find(entry => entry.comment.includes('阿斯顿·马丁车队'))?.content).toContain('若玩家执掌阿斯顿·马丁');
+    expect(entries.find(entry => entry.comment.includes('小红牛车队'))?.content).toContain('若玩家执掌小红牛');
+    expect(entries.find(entry => entry.comment.includes('奥迪车队'))?.content).toContain('若玩家执掌奥迪');
+    expect(entries.find(entry => entry.comment.includes('凯迪拉克车队'))?.content).toContain('若玩家执掌凯迪拉克');
   });
   it('能在模拟的酒馆助手环境中加载并跑通开局 → 面板 → AI 结算 → 注入', async () => {
     const env = setupWindow();

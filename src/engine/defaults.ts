@@ -238,6 +238,21 @@ export const DEFAULT_RULES: Rules = {
     gpNegotiationGain: 25,
     gpNegotiationCost: 1,
   },
+  astonMartin: {
+    vibrationInterval: 10,
+    vibrationRetireChance: 0.25,
+    startHondaConflict: 78,
+    startMediaPressure: 62,
+    mediaConfidenceLoss: 3,
+    aduoPressureGain: 28,
+    mediationGain: 20,
+    neweyProgressGain: 25,
+    aduoPuBuff: 8,
+    chassisBuff: 2,
+  },
+  racingBulls: { recallChance: 0.05 },
+  audi: { startDropMin: 2, startDropMax: 3, allianceProgress: 34, progressPerRace: 10 },
+  fiaMeeting: { interval: 3, startPoliticalCapital: 50 },
 };
 
 export const DEFAULT_PLAN: DriverPlan = {

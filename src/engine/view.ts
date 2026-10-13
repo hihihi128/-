@@ -295,6 +295,11 @@ export interface GameView {
   mercedes: GameState['mercedes'];
   redBull: (GameState['redBull'] & { verstappenPosition?: number }) | null;
   specialRules: Pick<GameState['rules'], 'mclaren' | 'mercedes' | 'redBull'>;
+  astonMartin: GameState['astonMartin'];
+  racingBulls: (GameState['racingBulls'] & { candidates?: Array<{ id: string; name: string }> }) | null;
+  audi: GameState['audi'];
+  fiaMeeting: GameState['fiaMeeting'];
+  nextSpecialRules: Pick<GameState['rules'], 'astonMartin' | 'racingBulls' | 'audi' | 'fiaMeeting'>;
   aduo: AduoView;
   lastSeason: GameState['lastSeason'];
   labels: typeof LABELS & {
@@ -652,6 +657,19 @@ export function buildView(state: GameState): GameView {
       mclaren: { ...rules.mclaren },
       mercedes: { ...rules.mercedes },
       redBull: { ...rules.redBull },
+    },
+    astonMartin: state.astonMartin ?? null,
+    racingBulls: state.racingBulls ? {
+      ...state.racingBulls,
+      candidates: state.racingBulls.pendingRecall?.candidateIds.map(id => ({ id, name: state.drivers[id]?.name ?? id })) ?? [],
+    } : null,
+    audi: state.audi ?? null,
+    fiaMeeting: state.fiaMeeting,
+    nextSpecialRules: {
+      astonMartin: { ...rules.astonMartin },
+      racingBulls: { ...rules.racingBulls },
+      audi: { ...rules.audi },
+      fiaMeeting: { ...rules.fiaMeeting },
     },
     aduo: aduoView(state),
     lastSeason: state.lastSeason,

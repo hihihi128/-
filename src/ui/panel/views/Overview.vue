@@ -15,6 +15,12 @@ const fr = computed(() => v.value.ferrari);
 const mc = computed(() => v.value.mclaren);
 const mb = computed(() => v.value.mercedes);
 const rb = computed(() => v.value.redBull);
+const am = computed(() => v.value.astonMartin);
+const vcarb = computed(() => v.value.racingBulls);
+const au = computed(() => v.value.audi);
+const fia = computed(() => v.value.fiaMeeting);
+const fiaIssue: Record<string, string> = { aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
+const driverLabel = (id?: string) => v.value.drivers.find((driver: any) => driver.id === id)?.name ?? id ?? '-';
 const demandLabels: Record<string, string> = { downforce: '下压力', efficiency: '气动效率', power: '动力', mechanical: '机械抓地' };
 
 function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
@@ -82,6 +88,37 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <button :disabled="store.busy || rb.gpTransferred" @click="act({ type: 'RED_BULL_RETAIN_GP' })">提交 GP 留任方案（{{ v.specialRules.redBull.gpNegotiationCost }}M$）</button>
       <div class="small" :class="rb.verstappenExit ? 'notice bad' : 'notice warn'">{{ rb.verstappenExit ? '维斯塔潘的解约条款已经触发，他已转投梅赛德斯。' : rb.summerChecked ? '夏休检查已通过。' : '夏休时维斯塔潘必须位列车手榜前三。' }}</div>
       <div class="tiny muted">RB23 准备不足会使红牛车手的单车失误概率提高 {{ Math.round((v.specialRules.redBull.mistakeMultiplier - 1) * 100) }}%。</div>
+    </div>
+
+    <div v-if="am" class="card stack-s special-card">
+      <div class="spread"><h3>阿斯顿·马丁 · 本田振动危机</h3><span class="badge" :class="am.aduoEngineArrived ? 'ok' : 'bad'">{{ am.aduoEngineArrived ? '首批 ADUO 已到货' : '每10圈 25% 保护性退赛' }}</span></div>
+      <Bar label="ADUO 提前进度" :value="am.aduoProgress" color="#006f62" :hint="am.aduoEngineArrived ? '危险振动退赛检查已停止' : '公开车手安全数据可以加速到货'" />
+      <Bar label="本田—纽维冲突" :value="am.hondaConflict" :color="am.hondaConflict > 70 ? '#ff5a5a' : '#ffb347'" hint="越高越难合作" />
+      <Bar label="纽维适配车体" :value="am.neweyProgress" color="#56b4a9" :hint="am.chassisUpgradeReady ? '升级已经装车' : '完成后释放气动潜力'" />
+      <Bar label="西班牙媒体压力" :value="am.mediaPressure" color="#f08b32" hint="每场比赛后持续降低媒体声望和董事会信心" />
+      <div class="grid2"><Bar label="老斯特罗尔满意" :value="am.strollFavor" color="#2d9c7b" /><Bar label="阿隆索粉丝愤怒" :value="am.alonsoFanAnger" color="#d45d5d" /></div>
+      <div class="row"><button :disabled="store.busy" @click="act({ type: 'ASTON_CRISIS', strategy: 'pressure_honda' })">用车手安全施压</button><button :disabled="store.busy" @click="act({ type: 'ASTON_CRISIS', strategy: 'mediate' })">调解本田与纽维</button><button :disabled="store.busy" @click="act({ type: 'ASTON_CRISIS', strategy: 'push_newey' })">催促适配车体</button></div>
+      <div class="tiny muted">调整优先车手也会改变老斯特罗尔满意度与阿隆索粉丝愤怒。</div>
+    </div>
+
+    <div v-if="vcarb" class="card stack-s special-card">
+      <div class="spread"><h3>小红牛 · 红牛临时调用</h3><span class="badge" :class="vcarb.pendingRecall ? 'bad' : vcarb.activeRecall ? 'warn' : 'ok'">{{ vcarb.pendingRecall ? '等待替补选择' : vcarb.activeRecall ? '替补正在出赛' : '阵容正常' }}</span></div>
+      <template v-if="vcarb.pendingRecall"><div class="notice warn small">红牛已调走 {{ driverLabel(vcarb.pendingRecall?.driverId) }}。请选择本周末替补。</div><div class="row"><button v-for="d in vcarb.candidates" :key="d.id" :disabled="store.busy" @click="act({ type: 'RACING_BULLS_SELECT_RESERVE', driverId: d.id })">选择 {{ d.name }}</button></div></template>
+      <div v-else class="small muted">每个比赛周末有 {{ Math.round(v.nextSpecialRules.racingBulls.recallChance * 100) }}% 概率被红牛调走一名正式车手，替补只出赛一站。</div>
+    </div>
+
+    <div v-if="au" class="card stack-s special-card">
+      <div class="spread"><h3>奥迪 · 涡轮与 ADUO 联盟</h3><span class="badge" :class="au.turboFixed ? 'ok' : 'bad'">{{ au.turboFixed ? '涡轮问题已解决' : '起步随机掉 2–3 位' }}</span></div>
+      <Bar label="ADUO 推进" :value="au.aduoProgress" color="#d33" :hint="au.alliance ? `盟友：${au.alliance}` : '选择一个同样需要 ADUO 的盟友'" />
+      <Bar label="政治支持" :value="au.politicalSupport" color="#555" />
+      <div v-if="!au.alliance" class="row"><button @click="act({ type: 'AUDI_ALLIANCE', partner: 'aston_martin' })">联合马丁</button><button @click="act({ type: 'AUDI_ALLIANCE', partner: 'mercedes' })">联合梅奔</button><button @click="act({ type: 'AUDI_ALLIANCE', partner: 'ferrari' })">联合法拉利</button></div>
+    </div>
+
+    <div v-if="fia?.current" class="card stack-s fia-meeting">
+      <div class="spread"><h3>FIA 领队座谈会</h3><span class="badge warn">第 {{ fia.current.index }} 次会议</span></div>
+      <div class="notice warn small">议题：{{ fiaIssue[fia.current.issue] }}。对手：{{ fia.current.opponents.join('、') }}。</div>
+      <Bar label="政治资本" :value="fia.politicalCapital" color="#355c8a" hint="董事会信心、媒体声望和政治资本共同决定说服检定" />
+      <div class="row"><button class="primary" @click="act({ type: 'FIA_DEBATE', stance: 'support' })">支持议题</button><button @click="act({ type: 'FIA_DEBATE', stance: 'oppose' })">反对议题</button><button @click="act({ type: 'FIA_DEBATE', stance: 'compromise' })">提出折中</button></div>
     </div>
 
     <div class="grid g2">

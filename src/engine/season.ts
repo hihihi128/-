@@ -10,6 +10,7 @@ import { closeMarket, openMarket } from './market';
 import { emptyStandings } from './newgame';
 import { ferrariAfterRace, ferrariMediaDelta, ferrariOnAllocation, ferrariOnBench, ferrariOnOrder } from './ferrari';
 import { afterSpecialRace } from './teamSpecials';
+import { afterNextTeamRace, maybeTriggerRacingBullsRecall } from './nextTeamSpecials';
 import { resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
@@ -96,6 +97,7 @@ function retainUntouchedMarket(state: GameState): void {
 export function startWeekend(state: GameState, rng: Rng): Outcome {
   if (state.season.phase !== 'pre_race') return fail('当前阶段不能进入比赛周末');
   state.weekend = createWeekend(state, rng);
+  maybeTriggerRacingBullsRecall(state, rng);
   state.season.phase = 'practice';
   const track = currentTrack(state);
   const w = state.weekend;
@@ -444,6 +446,7 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
   // 法拉利：媒体与粉丝的反应、撤职检查
   ferrariAfterRace(state, result);
   if (!sprint) afterSpecialRace(state);
+  if (!sprint) afterNextTeamRace(state);
 }
 
 /** 事故导致的零件损毁与维修 */

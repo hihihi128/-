@@ -34,6 +34,10 @@ export function migrateState(state: GameState): GameState {
   if (state.mclaren === undefined) state.mclaren = null;
   if (state.mercedes === undefined) state.mercedes = null;
   if (state.redBull === undefined) state.redBull = null;
+  if (state.astonMartin === undefined) state.astonMartin = null;
+  if (state.racingBulls === undefined) state.racingBulls = null;
+  if (state.audi === undefined) state.audi = null;
+  state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, log: [] };
   if (state.mclaren) state.mclaren.weeksTotal ??= state.mclaren.weeksLeft;
   // Market rules are a closed map, unlike parts/tyres. Modern saves take the
   // puAllocation fast path below, so fill this before that return.

@@ -19,6 +19,7 @@ import { aeroAllowance } from './development';
 import { recordAduoBaseline } from './aduo';
 import { initFerrari } from './ferrari';
 import { initTeamSpecials } from './teamSpecials';
+import { initNextTeamSpecials } from './nextTeamSpecials';
 import { ensureMarket, openMarket } from './market';
 import { resetPuUsage } from './powerunit';
 
@@ -198,6 +199,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
   const tail = `距离首站（${firstTrack}）还有 ${state.calendar[0]?.weeksGap ?? 0} 周。董事会对本赛季的目标是车队积分榜第 ${team.targetPosition} 名。`;
   initFerrari(state, team);
   initTeamSpecials(state, team);
+  initNextTeamSpecials(state, team);
   let newsText: string;
   let title: string;
   let detail: string[];
@@ -225,6 +227,22 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     newsText = `红牛任命 ${name} 辅助洛朗·梅基斯管理 2026 赛季。`;
     title = '人手危机：协助梅基斯';
     detail = ['红牛在 2025 年失去大量人才，赫尔穆特·马尔科也被解雇。由于管理与技术人手不足，车队招来玩家辅助梅基斯。', reasonLine, 'RB23 的准备因 2025 年全力争冠而严重不足。车手更容易失误，GP 正与迈凯伦谈判；夏休时若维斯塔潘不在积分榜前三，他将触发解约条款。', tail];
+  } else if (state.astonMartin) {
+    newsText = `劳伦斯·斯特罗尔撤掉 Jonathan Wheatley，并让 ${name} 接手预计垫底的阿斯顿·马丁。`;
+    title = '替罪羊危机：阿斯顿·马丁领队';
+    detail = ['2026 年初，AMR26 的预计表现极差。愤怒的老斯特罗尔撤掉 Jonathan Wheatley，并找来玩家与纽维收拾残局。', reasonLine, '本田动力单元预计少约 100 马力，且与车体结合后产生危险振动。首批 ADUO 动力单元到货前，赛车每十圈检查一次并可能为保护车手手部而强制退赛。', '玩家还必须调解本田与纽维，催促适配车体，并在照顾兰斯与避免激怒阿隆索粉丝之间维持平衡。', tail];
+  } else if (state.racingBulls) {
+    newsText = `${name} 加入小红牛，担任艾伦·佩尔曼的副领队。`;
+    title = '临时调度：小红牛副领队';
+    detail = ['梅基斯转往红牛后，小红牛请玩家担任副领队，辅佐艾伦·佩尔曼。', reasonLine, '红牛可能因伤病或突发事件临时调走正式车手。事件发生时，玩家必须从储备车手中选人顶替一站。', tail];
+  } else if (state.audi) {
+    newsText = `比诺托邀请 ${name} 担任奥迪副领队，负责围场政治。`;
+    title = '四环入局：奥迪副领队';
+    detail = ['Jonathan Wheatley 在 2025 年底转往阿斯顿·马丁。技术背景出身的比诺托上位，并邀请玩家处理车队间政治斗争。', reasonLine, '奥迪自研动力单元存在涡轮问题，修复前起步会随机丢失两到三个位置。玩家可以与阿斯顿·马丁、梅赛德斯或法拉利结盟，共同争取 ADUO。', tail];
+  } else if (team.id === 'cadillac') {
+    newsText = `新军凯迪拉克通过全球公开招募，任命 ${name} 为首任领队。`;
+    title = '从零开始：凯迪拉克新军';
+    detail = ['作为全新加入 F1 的车队，凯迪拉克急需工程、比赛与管理人才，因此在全球公开招募。', reasonLine, '凯迪拉克没有额外特殊机制，但初始赛车性能很差。玩家必须用研发、市场与稳定完赛逐步建立一支真正的 F1 车队。', tail];
   } else {
     newsText = `${name} 正式出任 ${team.name} 领队，${state.season.year} 赛季季前准备开始。`;
     title = '就任领队';

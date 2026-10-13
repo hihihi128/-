@@ -20,6 +20,9 @@ const specialLabels: Record<string, string> = {
   mclaren: '临时领队',
   mercedes: '接班人计划',
   red_bull: '人手危机',
+  aston_martin: '本田振动危机',
+  racing_bulls: '红牛临时调用',
+  audi: '涡轮与ADUO联盟',
 };
 
 const errors = computed(() => report.value?.issues.filter(i => i.level === 'error') ?? []);
@@ -134,6 +137,26 @@ onMounted(load);
       <b>红牛 · 人手危机</b>
       <div>玩家协助梅基斯处理人才流失与 RB23 准备不足的问题。</div>
       <ul class="tiny"><li>RB23 准备不足会显著提高车手失误概率。</li><li>GP 正与迈凯伦谈判，需要持续争取留任。</li><li>夏休时维斯塔潘必须位列车手榜前三，否则会触发解约条款。</li></ul>
+    </div>
+    <div v-else-if="special === 'aston_martin'" class="card notice special-team small stack-s">
+      <b>阿斯顿·马丁 · 本田振动危机</b>
+      <div>老斯特罗尔撤掉 Jonathan Wheatley，并让玩家与纽维收拾预计垫底的 AMR26。</div>
+      <ul class="tiny"><li>首批 ADUO 动力单元到货前，每十圈以 25% 概率触发保护性退赛。</li><li>公开车手安全数据可加速 ADUO，但会激化本田与纽维的矛盾。</li><li>必须兼顾兰斯·斯特罗尔与阿隆索粉丝，并承受西班牙媒体持续施压。</li></ul>
+    </div>
+    <div v-else-if="special === 'racing_bulls'" class="card notice special-team small stack-s">
+      <b>小红牛 · 临时车手调用</b>
+      <div>玩家担任副领队，辅佐艾伦·佩尔曼。</div>
+      <ul class="tiny"><li>每个比赛周末有 5% 概率被红牛调走一名正式车手。</li><li>事件发生后，必须从储备车手中选择一人顶替一站。</li></ul>
+    </div>
+    <div v-else-if="special === 'audi'" class="card notice special-team small stack-s">
+      <b>奥迪 · 涡轮与 ADUO 联盟</b>
+      <div>比诺托负责技术，玩家作为副领队处理围场政治。</div>
+      <ul class="tiny"><li>修复涡轮前，两台车起步会随机丢失两到三个位置。</li><li>可与马丁、梅奔或法拉利结盟，共同向 FIA 争取 ADUO。</li></ul>
+    </div>
+    <div v-else-if="selectedTeam?.id === 'cadillac'" class="card notice special-team small stack-s">
+      <b>凯迪拉克 · 从零开始</b>
+      <div>新车队通过全球公开招募组建首支 F1 队伍。</div>
+      <ul class="tiny"><li>没有额外特殊机制。</li><li>初始赛车性能很差，需要依靠研发、市场和稳定完赛追赶。</li></ul>
     </div>
 
     <div class="card stack-s">
