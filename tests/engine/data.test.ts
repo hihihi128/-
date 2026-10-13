@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { normalizeDatabase } from '../../src/engine/data';
-import { placeholderSources } from '../helpers';
+import { cardSources, placeholderSources } from '../helpers';
 
 describe('数据解析（世界书 YAML）', () => {
   it('占位测试数据可以无错误加载', () => {
@@ -31,6 +31,17 @@ describe('数据解析（世界书 YAML）', () => {
     for (const t of res.db!.tracks) {
       const s = Object.values(t.weights).reduce((a, b) => a + b, 0);
       expect(s).toBeCloseTo(1, 2);
+    }
+  });
+
+  it('11 支真实车队都提供具名的两位比赛工程师和策略负责人', () => {
+    const db = normalizeDatabase(cardSources()).db!;
+    expect(db.teams).toHaveLength(11);
+    for (const team of db.teams) {
+      expect([team.staff.raceEngineer, team.staff.raceEngineer2, team.staff.strategist].every(member => member.name && !member.name.includes('比赛工程师') && member.name !== '首席策略组')).toBe(true);
+      expect(Object.keys(team.staff.raceEngineer.abilities ?? {})).toEqual(expect.arrayContaining(['setup', 'communication', 'reaction', 'weather']));
+      expect(Object.keys(team.staff.raceEngineer2.abilities ?? {})).toEqual(expect.arrayContaining(['setup', 'communication', 'reaction', 'weather']));
+      expect(Object.keys(team.staff.strategist.abilities ?? {})).toEqual(expect.arrayContaining(['strategy', 'weather', 'reaction', 'risk']));
     }
   });
 

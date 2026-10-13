@@ -22,9 +22,10 @@ describe('strategy mode interface', () => {
     expect(weekend).toContain('当前策略人员的判断或风险偏好不稳定');
   });
 
-  it('shows direct red-flag tyre choices and free wing repair', () => {
-    expect(liveRace).toContain('选择重启轮胎');
-    expect(liveRace).toContain('换 {{ v.labels.tyres[compound]?.name ?? compound }}');
+  it('opens a red-flag tyre picker and keeps free wing repair visible', () => {
+    expect(liveRace).toContain('免费换胎…');
+    expect(liveRace).toContain('选择 {{ driverShort(tyrePickerDriverId) }} 的重启轮胎');
+    expect(liveRace).toContain('role="dialog"');
     expect(liveRace).toContain('红旗下免费更换前翼');
   });
 });

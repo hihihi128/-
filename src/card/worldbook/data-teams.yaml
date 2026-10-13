@@ -67,10 +67,10 @@ teams:
     staff:
       technicalDirector: { name: 詹姆斯·艾利森, skill: 90, salary: 3.5 }
       aeroChief: { skill: 85, salary: 2.2 }
-      raceEngineer: { name: 彼得·博宁顿, skill: 86, abilities: { setup: 90, communication: 89, reaction: 87, weather: 85 }, salary: 1.2 }
-      raceEngineer2: { name: 马库斯·达德利, skill: 83, abilities: { setup: 85, communication: 84, reaction: 82, weather: 83 }, salary: 1.1 }
+      raceEngineer: { name: 马库斯·达德利, skill: 84, abilities: { setup: 86, communication: 84, reaction: 84, weather: 83 }, salary: 1.1 }
+      raceEngineer2: { name: 彼得·博宁顿, skill: 88, abilities: { setup: 90, communication: 91, reaction: 88, weather: 86 }, salary: 1.2 }
       pitCrew: { skill: 86, salary: 1.6 }
-      strategist: { name: 首席策略组, skill: 84, abilities: { strategy: 86, weather: 85, reaction: 83, risk: 68 }, salary: 1.1 }
+      strategist: { name: 罗茜·韦特, skill: 87, abilities: { strategy: 89, weather: 87, reaction: 86, risk: 67 }, salary: 1.1 }
     carBase: { perf: 87, rel: 88 }
     parts:
       power_unit: { perf: 91, rel: 87 }
@@ -103,7 +103,7 @@ teams:
       raceEngineer: { name: 威尔·约瑟夫, skill: 84, abilities: { setup: 85, communication: 87, reaction: 83, weather: 82 }, salary: 1.1 }
       raceEngineer2: { name: 汤姆·斯托拉德, skill: 85, abilities: { setup: 86, communication: 85, reaction: 86, weather: 84 }, salary: 1.1 }
       pitCrew: { skill: 92, salary: 1.8 }
-      strategist: { name: 兰迪普·辛格, skill: 85, abilities: { strategy: 87, weather: 84, reaction: 86, risk: 72 }, salary: 1.1 }
+      strategist: { name: 兰迪·辛格, skill: 86, abilities: { strategy: 88, weather: 85, reaction: 87, risk: 71 }, salary: 1.1 }
     carBase: { perf: 78, rel: 87 }
     parts:
       power_unit: { perf: 91, rel: 87 }
@@ -172,10 +172,10 @@ teams:
     staff:
       technicalDirector: { name: 洛伊克·塞拉（底盘技术总监）, skill: 84, salary: 3 }
       aeroChief: { name: 迭戈·通迪, skill: 80, salary: 2 }
-      raceEngineer: { name: 布莱恩·博齐, skill: 79, abilities: { setup: 84, communication: 82, reaction: 77, weather: 76 }, salary: 1 }
-      raceEngineer2: { name: 里卡多·阿达米, skill: 76, abilities: { setup: 80, communication: 76, reaction: 72, weather: 73 }, salary: 1 }
+      raceEngineer: { name: 卡洛·桑蒂, skill: 79, abilities: { setup: 81, communication: 82, reaction: 78, weather: 77 }, salary: 1 }
+      raceEngineer2: { name: 布莱恩·博齐, skill: 82, abilities: { setup: 85, communication: 84, reaction: 81, weather: 79 }, salary: 1 }
       pitCrew: { skill: 87, salary: 1.6 }
-      strategist: { name: 拉文·贾恩, skill: 77, abilities: { strategy: 74, weather: 72, reaction: 70, risk: 84 }, salary: 1 }
+      strategist: { name: 拉文·贾恩, skill: 78, abilities: { strategy: 76, weather: 74, reaction: 73, risk: 82 }, salary: 1 }
     carBase: { perf: 81, rel: 83 }
     parts:
       # 钢制气缸盖方案被放弃，退回成熟方案：功率接近梅赛德斯，可靠性略逊
@@ -213,7 +213,7 @@ teams:
       raceEngineer: { name: 詹姆斯·厄文, skill: 78, abilities: { setup: 81, communication: 80, reaction: 78, weather: 76 }, salary: 0.9 }
       raceEngineer2: { name: 加埃唐·热戈, skill: 78, abilities: { setup: 79, communication: 81, reaction: 77, weather: 78 }, salary: 0.9 }
       pitCrew: { skill: 82, salary: 1.2 }
-      strategist: { name: 首席策略组, skill: 78, abilities: { strategy: 80, weather: 79, reaction: 77, risk: 70 }, salary: 0.9 }
+      strategist: { name: 夏尔-安托万·弗洛朗坦, skill: 80, abilities: { strategy: 82, weather: 80, reaction: 79, risk: 69 }, salary: 0.9 }
     carBase: { perf: 49, rel: 82 }
     parts:
       power_unit: { perf: 91, rel: 87 }
@@ -243,10 +243,10 @@ teams:
     staff:
       technicalDirector: { name: 蒂姆·戈斯, skill: 76, salary: 1.6 }
       aeroChief: { skill: 75, salary: 1.3 }
-      raceEngineer: { name: 皮埃尔·哈梅林, skill: 77, abilities: { setup: 79, communication: 78, reaction: 76, weather: 75 }, salary: 0.8 }
-      raceEngineer2: { name: 二号车比赛工程师, skill: 75, abilities: { setup: 76, communication: 77, reaction: 74, weather: 73 }, salary: 0.8 }
+      raceEngineer: { name: 亚历山大·伊利奥普洛斯, skill: 76, abilities: { setup: 77, communication: 78, reaction: 75, weather: 73 }, salary: 0.8 }
+      raceEngineer2: { name: 皮埃尔·哈梅林, skill: 78, abilities: { setup: 80, communication: 79, reaction: 77, weather: 76 }, salary: 0.8 }
       pitCrew: { skill: 84, salary: 1.1 }
-      strategist: { name: 首席策略组, skill: 76, abilities: { strategy: 75, weather: 74, reaction: 75, risk: 78 }, salary: 0.8 }
+      strategist: { name: 马蒂厄·迪布瓦-卢卡, skill: 76, abilities: { strategy: 77, weather: 75, reaction: 76, risk: 77 }, salary: 0.8 }
     carBase: { perf: 62, rel: 82 }
     parts:
       power_unit: { perf: 87, rel: 78 }
@@ -278,9 +278,9 @@ teams:
       technicalDirector: { name: 恩里科·卡尔迪莱, skill: 84, salary: 2.8 }
       aeroChief: { skill: 80, salary: 1.8 }
       raceEngineer: { name: 克里斯·克罗宁, skill: 77, abilities: { setup: 78, communication: 82, reaction: 75, weather: 78 }, salary: 1 }
-      raceEngineer2: { name: 本·米歇尔, skill: 75, abilities: { setup: 76, communication: 77, reaction: 74, weather: 75 }, salary: 0.9 }
+      raceEngineer2: { name: 加里·甘农, skill: 77, abilities: { setup: 79, communication: 78, reaction: 76, weather: 76 }, salary: 0.9 }
       pitCrew: { skill: 80, salary: 1.3 }
-      strategist: { name: 首席策略组, skill: 76, abilities: { strategy: 73, weather: 72, reaction: 72, risk: 82 }, salary: 0.9 }
+      strategist: { name: 彼得·霍尔, skill: 77, abilities: { strategy: 75, weather: 74, reaction: 74, risk: 80 }, salary: 0.9 }
     carBase: { perf: 35, rel: 74 }
     parts:
       # 电池故障、备件不足：动力单元是全场最弱的一环
@@ -311,10 +311,10 @@ teams:
     staff:
       technicalDirector: { name: 安德烈亚·德佐尔多, skill: 75, salary: 1.4 }
       aeroChief: { skill: 74, salary: 1.2 }
-      raceEngineer: { name: 罗南·奥黑尔, skill: 76, abilities: { setup: 77, communication: 79, reaction: 75, weather: 74 }, salary: 0.8 }
-      raceEngineer2: { name: 二号车比赛工程师, skill: 74, abilities: { setup: 75, communication: 76, reaction: 73, weather: 72 }, salary: 0.8 }
+      raceEngineer: { name: 劳拉·穆勒, skill: 77, abilities: { setup: 78, communication: 80, reaction: 76, weather: 74 }, salary: 0.8 }
+      raceEngineer2: { name: 罗南·奥黑尔, skill: 77, abilities: { setup: 78, communication: 79, reaction: 76, weather: 74 }, salary: 0.8 }
       pitCrew: { skill: 79, salary: 1 }
-      strategist: { name: 首席策略组, skill: 75, abilities: { strategy: 76, weather: 73, reaction: 74, risk: 74 }, salary: 0.8 }
+      strategist: { name: 卡琳·克里德利希, skill: 78, abilities: { strategy: 79, weather: 76, reaction: 78, risk: 72 }, salary: 0.8 }
     carBase: { perf: 55, rel: 81 }
     parts:
       power_unit: { perf: 89, rel: 84 }
@@ -345,10 +345,10 @@ teams:
     staff:
       technicalDirector: { name: 詹姆斯·基, skill: 80, salary: 2.2 }
       aeroChief: { skill: 76, salary: 1.5 }
-      raceEngineer: { name: 一号车比赛工程师, skill: 77, abilities: { setup: 78, communication: 78, reaction: 76, weather: 75 }, salary: 0.9 }
-      raceEngineer2: { name: 二号车比赛工程师, skill: 76, abilities: { setup: 77, communication: 76, reaction: 75, weather: 76 }, salary: 0.9 }
+      raceEngineer: { name: 史蒂文·佩特里克, skill: 78, abilities: { setup: 79, communication: 79, reaction: 77, weather: 76 }, salary: 0.9 }
+      raceEngineer2: { name: 何塞·曼努埃尔·洛佩斯, skill: 77, abilities: { setup: 78, communication: 78, reaction: 76, weather: 76 }, salary: 0.9 }
       pitCrew: { skill: 80, salary: 1.2 }
-      strategist: { name: 首席策略组, skill: 76, abilities: { strategy: 77, weather: 76, reaction: 75, risk: 72 }, salary: 0.9 }
+      strategist: { name: 里特维克·达南贾亚·雷迪, skill: 78, abilities: { strategy: 79, weather: 78, reaction: 77, risk: 70 }, salary: 0.9 }
     carBase: { perf: 62, rel: 79 }
     parts:
       power_unit: { perf: 81, rel: 75 }
@@ -378,10 +378,10 @@ teams:
     staff:
       technicalDirector: { name: 大卫·桑切斯, skill: 78, salary: 1.8 }
       aeroChief: { skill: 75, salary: 1.3 }
-      raceEngineer: { name: 卡雷尔·洛斯, skill: 76, abilities: { setup: 77, communication: 78, reaction: 75, weather: 74 }, salary: 0.8 }
-      raceEngineer2: { name: 二号车比赛工程师, skill: 74, abilities: { setup: 75, communication: 75, reaction: 73, weather: 72 }, salary: 0.8 }
+      raceEngineer: { name: 乔什·佩克特, skill: 76, abilities: { setup: 77, communication: 78, reaction: 75, weather: 74 }, salary: 0.8 }
+      raceEngineer2: { name: 斯图尔特·巴洛, skill: 75, abilities: { setup: 76, communication: 76, reaction: 74, weather: 73 }, salary: 0.8 }
       pitCrew: { skill: 80, salary: 1.1 }
-      strategist: { name: 首席策略组, skill: 75, abilities: { strategy: 74, weather: 73, reaction: 72, risk: 80 }, salary: 0.8 }
+      strategist: { name: 奥里奥尔·伊塞恩, skill: 76, abilities: { strategy: 76, weather: 75, reaction: 74, risk: 78 }, salary: 0.8 }
     carBase: { perf: 65, rel: 82 }
     parts:
       power_unit: { perf: 91, rel: 87 }
@@ -411,10 +411,10 @@ teams:
     staff:
       technicalDirector: { name: 尼克·切斯特, skill: 74, salary: 1.8 }
       aeroChief: { skill: 70, salary: 1.3 }
-      raceEngineer: { name: 一号车比赛工程师, skill: 74, abilities: { setup: 75, communication: 76, reaction: 73, weather: 72 }, salary: 0.8 }
-      raceEngineer2: { name: 二号车比赛工程师, skill: 72, abilities: { setup: 73, communication: 73, reaction: 71, weather: 70 }, salary: 0.8 }
+      raceEngineer: { name: 约翰·霍华德, skill: 75, abilities: { setup: 76, communication: 77, reaction: 74, weather: 73 }, salary: 0.8 }
+      raceEngineer2: { name: 卡洛·帕塞蒂, skill: 74, abilities: { setup: 75, communication: 75, reaction: 73, weather: 72 }, salary: 0.8 }
       pitCrew: { skill: 72, salary: 1.1 }
-      strategist: { name: 首席策略组, skill: 72, abilities: { strategy: 70, weather: 69, reaction: 70, risk: 82 }, salary: 0.8 }
+      strategist: { name: 亚历克斯·古迪纳夫, skill: 74, abilities: { strategy: 74, weather: 72, reaction: 73, risk: 80 }, salary: 0.8 }
     carBase: { perf: 32, rel: 81 }
     parts:
       power_unit: { perf: 89, rel: 84 }
