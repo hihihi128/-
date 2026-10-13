@@ -1,5 +1,6 @@
 import { addNarration, addNews, playerTeam } from './log';
 import { affordError, charge } from './finance';
+import { recordPuFit, resetPuUsage } from './powerunit';
 import type { GameState, TeamState } from './types';
 import { clamp, deepClone, pushCapped, round1, stamp } from './util';
 
@@ -127,14 +128,24 @@ function transferGpToMcLaren(state: GameState): void {
   const gp = redBull?.staff.raceEngineer;
   if (!redBull || !mclaren || !gp) return;
   const displaced = mclaren.staff.raceEngineer;
-  const promoted = deepClone(redBull.staff.raceEngineer2);
-  redBull.staff.raceEngineer = { ...promoted, role: 'raceEngineer', id: `${promoted.id ?? 'red-bull-engineer2'}-promoted` };
+  const promoted = redBull.staff.raceEngineer2;
+  redBull.staff.raceEngineer = { ...deepClone(promoted), role: 'raceEngineer' };
+  redBull.staff.raceEngineer2 = { ...deepClone(displaced), role: 'raceEngineer2' };
   mclaren.staff.raceEngineer = { ...deepClone(gp), role: 'raceEngineer' };
-  if (displaced.id) state.market!.freeStaff[displaced.id] = deepClone(displaced);
   const window = state.market?.window;
   if (window && window.status !== 'closed') {
     window.projectedRosters.red_bull.staff.raceEngineer = redBull.staff.raceEngineer.id ?? null;
+    window.projectedRosters.red_bull.staff.raceEngineer2 = redBull.staff.raceEngineer2.id ?? null;
     window.projectedRosters.mclaren.staff.raceEngineer = mclaren.staff.raceEngineer.id ?? null;
+  }
+}
+
+function syncDriverPuToCar(state: GameState, driverId: string, car: TeamState['cars'][number]): void {
+  const driver = state.drivers[driverId];
+  if (!driver) return;
+  if (!driver.puUsed) return resetPuUsage(state, driver, car);
+  for (const [partType, specId] of Object.entries(car.fitted)) {
+    if (driver.puPool?.[partType] && !driver.puPool[partType].includes(specId)) recordPuFit(state, driver.id, partType, specId);
   }
 }
 
@@ -151,7 +162,18 @@ function transferVerstappenToMercedes(state: GameState): void {
   maxCar.driverId = displacedId;
   targetCar.driverId = max.id;
   max.teamId = 'mercedes';
-  if (displaced) displaced.teamId = 'red_bull';
+  max.role = 'race';
+  if (displaced) {
+    displaced.teamId = 'red_bull';
+    displaced.role = 'race';
+  }
+  syncDriverPuToCar(state, max.id, targetCar);
+  syncDriverPuToCar(state, displacedId, maxCar);
+  if (redBull.driverPriority === max.id) redBull.driverPriority = null;
+  if (mercedes.driverPriority === displacedId) mercedes.driverPriority = null;
+  if (state.weekend?.teamOrders.favorDriverId === max.id || state.weekend?.teamOrders.favorDriverId === displacedId) {
+    state.weekend.teamOrders = { mode: 'free', favorDriverId: null };
+  }
 }
 
 export function afterSpecialRace(state: GameState): void {

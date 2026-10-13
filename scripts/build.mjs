@@ -140,11 +140,11 @@ const book = {
       order: 204,
     }),
     entry(11, '[F1M资料] 梅赛德斯车队（2026）', readCard(`${wb}/lore-mercedes.md`), {
-      keys: ['梅赛德斯', 'Mercedes', '梅奔', 'Toto Wolff', '托托', 'W17', '压缩比', 'ADUO'],
+      keys: ['梅赛德斯', 'Mercedes', '梅奔', 'Toto Wolff', '托托', 'W17', '压缩比'],
       order: 205,
     }),
     entry(12, '[F1M资料] 红牛车队（2026）', readCard(`${wb}/lore-redbull.md`), {
-      keys: ['红牛', 'Red Bull', '梅基斯', '维斯塔潘', 'Verstappen', 'GP', 'RB23'],
+      keys: ['红牛', 'Red Bull', '梅基斯', '维斯塔潘', 'Verstappen', 'RB23'],
       order: 206,
     }),
   ],

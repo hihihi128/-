@@ -80,7 +80,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <div class="spread"><h3>红牛 · 人才与维斯塔潘危机</h3><span class="badge" :class="(rb.verstappenPosition ?? 99) <= 3 ? 'ok' : 'bad'">维斯塔潘 P{{ rb.verstappenPosition || '-' }}</span></div>
       <Bar label="GP 留任意愿" :value="rb.gpRetention" :color="rb.gpRetention < 25 ? '#ff5a5a' : '#3671c6'" :hint="rb.gpTransferred ? 'GP 已决定转投迈凯伦' : '每场正赛后都会下降'" />
       <button :disabled="store.busy || rb.gpTransferred" @click="act({ type: 'RED_BULL_RETAIN_GP' })">提交 GP 留任方案（{{ v.specialRules.redBull.gpNegotiationCost }}M$）</button>
-      <div class="small" :class="rb.verstappenExit ? 'notice bad' : 'notice warn'">{{ rb.verstappenExit ? '维斯塔潘的解约条款已经触发，他将转投梅赛德斯。' : rb.summerChecked ? '夏休检查已通过。' : '夏休时维斯塔潘必须位列车手榜前三。' }}</div>
+      <div class="small" :class="rb.verstappenExit ? 'notice bad' : 'notice warn'">{{ rb.verstappenExit ? '维斯塔潘的解约条款已经触发，他已转投梅赛德斯。' : rb.summerChecked ? '夏休检查已通过。' : '夏休时维斯塔潘必须位列车手榜前三。' }}</div>
       <div class="tiny muted">RB23 准备不足会使红牛车手的单车失误概率提高 {{ Math.round((v.specialRules.redBull.mistakeMultiplier - 1) * 100) }}%。</div>
     </div>
 

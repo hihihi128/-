@@ -101,7 +101,8 @@ describe('三支车队特殊机制', () => {
     expect(state.redBull!.gpTransferred).toBe(true);
     expect(state.teams.mclaren.staff.raceEngineer.id).toBe(gpId);
     expect(state.teams.red_bull.staff.raceEngineer.id).not.toBe(gpId);
-    expect(displacedId && state.market!.freeStaff[displacedId]).toBeTruthy();
+    expect(state.teams.red_bull.staff.raceEngineer2.id).toBe(displacedId);
+    expect(state.teams.red_bull.staff.raceEngineer.id).not.toBe(state.teams.red_bull.staff.raceEngineer2.id);
   });
 
   it('旧存档补齐新的特殊状态与实时比赛字段', () => {
