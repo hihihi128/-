@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { act, call, connect, store } from './bridge';
 import Overview from './views/Overview.vue';
 import Drivers from './views/Drivers.vue';
@@ -11,6 +11,7 @@ import Saves from './views/Saves.vue';
 import NewGame from './views/NewGame.vue';
 import TimingTower from './components/TimingTower.vue';
 import MobileTabBar from './components/MobileTabBar.vue';
+import SupernaturalPanel from './components/SupernaturalPanel.vue';
 
 const tabs = [
   { id: 'overview', label: '总览' },
@@ -27,6 +28,7 @@ const team = computed(() => view.value?.player.team);
 const showNewGame = computed(() => store.connected && (!view.value || store.forceNewGame));
 const generating = computed(() => !!store.status?.generating);
 const dismissed = computed(() => view.value?.ferrari?.dismissed ?? view.value?.mercedes?.dismissed ?? null);
+const supernaturalOpen = ref(false);
 
 watch(
   () => team.value?.color,
@@ -47,6 +49,14 @@ async function narrate() {
 
 function selectMobileTab(tab: string) {
   store.tab = tab;
+}
+
+function openSupernatural() {
+  supernaturalOpen.value = true;
+}
+
+function supernaturalSettings() {
+  store.tab = 'saves';
 }
 </script>
 
@@ -78,6 +88,7 @@ function selectMobileTab(tab: string) {
           </div>
         </div>
         <div class="row actions">
+          <button v-if="view.supernatural.enabled" class="small supernatural-entry" :disabled="store.busy || generating || !!dismissed" @click="openSupernatural">超自然干预</button>
           <button v-if="view.narration.length" class="small" :disabled="generating" :title="'待叙述：' + view.narration.map(n => n.title).join('、')" @click="narrate">
             让 AI 叙述（{{ view.narration.length }}）
           </button>
@@ -100,6 +111,7 @@ function selectMobileTab(tab: string) {
             <div v-if="store.tab === 'more'" class="mobile-more card">
               <h3>更多</h3>
               <button @click="store.tab = 'standings'">积分榜</button>
+              <button v-if="view.supernatural.enabled" class="supernatural-entry" :disabled="store.busy || generating || !!dismissed" @click="openSupernatural">超自然干预</button>
               <button @click="store.tab = 'saves'">存档与设置</button>
             </div>
             <Saves v-else-if="store.tab === 'saves'" />
@@ -116,6 +128,7 @@ function selectMobileTab(tab: string) {
         </div>
       </div>
       <MobileTabBar :tab="store.tab" @select="selectMobileTab" />
+      <SupernaturalPanel :open="supernaturalOpen" @close="supernaturalOpen = false" @settings="supernaturalSettings" />
     </template>
 
     <div class="toasts">
@@ -179,6 +192,11 @@ function selectMobileTab(tab: string) {
 }
 .actions {
   margin-left: auto;
+}
+.supernatural-entry {
+  border-color: color-mix(in srgb, var(--purple) 65%, var(--line));
+  color: #ddb8ff;
+  background: color-mix(in srgb, var(--purple) 12%, var(--bg3));
 }
 .tabs {
   display: flex;

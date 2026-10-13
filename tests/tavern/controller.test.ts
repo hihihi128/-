@@ -139,6 +139,47 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(ctrl.stateAt()!.weekend!.plans.c1.strategySource).toBe('perfect');
   });
 
+  it('仅在开局启用后通过所选 API 提交一次受限超自然干预', async () => {
+    const disabled = await ctrl.requestSupernaturalIntervention({ description: '提升董事会信心', expectedRevisionId: ctrl.status().revisionId! });
+    expect(disabled.ok).toBe(false);
+    expect(disabled.message).toContain('未启用');
+
+    expect((await ctrl.newGame({ playerTeamId: 'ferrari', principalName: '测试领队', supernaturalMode: true })).ok).toBe(true);
+    ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: 'persona-api', engineerModel: 'bounded-model' });
+    const before = ctrl.stateAt()!.teams.ferrari.boardConfidence;
+    let generationOptions: unknown;
+    env.generateText = async (_prompt, options) => {
+      generationOptions = options;
+      return '<F1M_UPDATE>[{"op":"board","delta":3,"reason":"预知董事会担忧"}]</F1M_UPDATE>';
+    };
+    const result = await ctrl.requestSupernaturalIntervention({
+      description: '读取董事会成员的想法并消除误会',
+      expectedRevisionId: ctrl.status().revisionId!,
+    });
+    expect(result.ok).toBe(true);
+    expect(generationOptions).toEqual({ proxyPreset: 'persona-api', model: 'bounded-model' });
+    expect(ctrl.stateAt()!.teams.ferrari.boardConfidence).toBe(before + 3);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]).toMatchObject({ op: 'board', applied: 3, ok: true, source: 'supernatural' });
+    expect(ctrl.listRevisions()[0].label).toBe('超自然干预');
+  });
+
+  it('等待超自然 API 时存档变化会安全丢弃旧结果', async () => {
+    expect((await ctrl.newGame({ playerTeamId: 'ferrari', principalName: '测试领队', supernaturalMode: true })).ok).toBe(true);
+    let release!: (value: string) => void;
+    env.generateText = async () => new Promise<string>(resolve => { release = resolve; });
+    const pending = ctrl.requestSupernaturalIntervention({ description: '改变士气', expectedRevisionId: ctrl.status().revisionId! });
+    await Promise.resolve();
+    const replacement = JSON.parse(ctrl.exportSave()!);
+    replacement.state.gameId = 'replacement-supernatural-game';
+    expect((await ctrl.importSave(JSON.stringify(replacement))).ok).toBe(true);
+    release('<F1M_UPDATE>[{"op":"board","delta":3}]</F1M_UPDATE>');
+    const result = await pending;
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('安全丢弃');
+    expect(ctrl.stateAt()!.gameId).toBe('replacement-supernatural-game');
+  });
+
   it('正赛发车前只调用一次 API，并为全部 AI 赛车应用批量策略', async () => {
     const { state } = await prepareRace(ctrl);
     const aiIds = Object.values(state.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));

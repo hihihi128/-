@@ -9,6 +9,7 @@ const teamId = ref('');
 const principal = ref('');
 const difficulty = ref<'easy' | 'normal' | 'hard'>('normal');
 const randomness = ref<'deterministic' | 'fresh'>('deterministic');
+const supernaturalMode = ref(false);
 const selectionReason = ref('');
 const REASON_MAX = 300;
 
@@ -48,6 +49,7 @@ async function start() {
       principalName: principal.value,
       difficulty: difficulty.value,
       randomness: randomness.value,
+      supernaturalMode: supernaturalMode.value,
       selectionReason: selectionReason.value,
     }),
   );
@@ -70,6 +72,15 @@ onMounted(load);
       </div>
       <p class="muted small">选择你要执掌的车队。数据来自角色卡世界书中名字以「[F1M数据]」开头的条目，可随时修改后点击「重新读取」。</p>
     </div>
+
+    <label class="card supernatural-toggle" :class="{ on: supernaturalMode }">
+      <input v-model="supernaturalMode" type="checkbox" />
+      <span class="toggle-copy grow">
+        <span class="spread"><b>允许领队使用超自然能力</b><span class="badge" :class="supernaturalMode ? 'ok' : ''">{{ supernaturalMode ? '本局开启' : '默认关闭' }}</span></span>
+        <span class="small muted">开启后可从管理面板手动描述一次干预。调用次数不限，但每次变化都受引擎硬上限约束。</span>
+        <span class="tiny muted">普通聊天和“让 AI 叙述”不会自动发动能力。此选项保存到本局，开局后不能切换。</span>
+      </span>
+    </label>
 
     <div class="card notice bad strategy-warning">
       <b>重要提醒：工程师给的策略不一定靠谱。</b>
@@ -213,6 +224,7 @@ onMounted(load);
     </div>
 
     <div class="row" style="justify-content: flex-end">
+      <span v-if="supernaturalMode" class="badge warn">超自然人设已开启</span>
       <span v-if="store.status && store.status.latestFloor > 0" class="tiny muted">存档会挂在当前最新楼层（#{{ store.status.latestFloor }}）</span>
       <button class="primary" :disabled="!report?.ok || !teamId || store.busy" @click="start">开始执掌车队</button>
     </div>
@@ -275,5 +287,26 @@ onMounted(load);
   flex-direction: column;
   gap: 5px;
   border-left: 6px solid var(--red);
+}
+.supernatural-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  cursor: pointer;
+  border-color: #4b315f;
+}
+.supernatural-toggle.on {
+  border-color: var(--purple);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--purple) 35%, transparent);
+}
+.supernatural-toggle input {
+  width: 18px;
+  height: 18px;
+  margin: 2px 0 0;
+  accent-color: var(--purple);
+}
+.toggle-copy {
+  display: grid;
+  gap: 4px;
 }
 </style>
