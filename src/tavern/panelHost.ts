@@ -9,6 +9,7 @@ const MINI_GEOM_KEY = 'f1m-panel-mini-geom';
 const MINI_MARGIN = 8;
 
 type DisplayState = 'expanded' | 'minimized' | 'closed';
+type ExpandedGeometry = Pick<CSSStyleDeclaration, 'left' | 'top' | 'width' | 'height'>;
 
 export interface CompactStatus {
   hasGame: boolean;
@@ -60,7 +61,7 @@ export class PanelHost {
   private displayState: DisplayState = 'closed';
   private compactStatus: CompactStatus = { hasGame: false, pendingNarration: 0, generating: false };
   private focusBeforeMinimize: HTMLElement | null = null;
-  private suppressRestoreClick = false;
+  private expandedGeometry: ExpandedGeometry | null = null;
 
   constructor(
     private doc: Document,
@@ -127,34 +128,27 @@ export class PanelHost {
     this.bindDrag(bar, false, ev => !!(ev.target as HTMLElement).closest('button'));
     this.bindDrag(miniHandle, true, ev => !!(ev.target as HTMLElement).closest('button'));
     miniRestore.addEventListener('click', () => this.restore());
-    miniBody.addEventListener('click', () => {
-      if (this.suppressRestoreClick) {
-        this.suppressRestoreClick = false;
-        return;
-      }
-      this.restore();
-    });
+    miniBody.addEventListener('click', () => this.restore());
     miniBody.addEventListener('keydown', ev => {
       if (ev.key !== 'Enter' && ev.key !== ' ') return;
       ev.preventDefault();
       this.restore();
     });
+    root.addEventListener('mouseup', () => this.saveGeometry());
     this.win.addEventListener('resize', this.onResize);
     this.win.addEventListener('orientationchange', this.onResize);
   }
 
   private bindDrag(handle: HTMLElement, mini: boolean, skip?: (ev: PointerEvent) => boolean): void {
     const root = this.root!;
-    let start: { x: number; y: number; left: number; top: number; moved: boolean } | null = null;
+    let start: { x: number; y: number; left: number; top: number } | null = null;
     const end = () => {
       if (!start) return;
-      const moved = start.moved;
       start = null;
       root.classList.remove('f1m-dragging');
       if (mini) {
         this.clampMiniPosition();
         this.saveMiniGeometry();
-        this.suppressRestoreClick ||= moved;
       } else {
         this.saveGeometry();
       }
@@ -162,7 +156,7 @@ export class PanelHost {
     handle.addEventListener('pointerdown', ev => {
       if (skip?.(ev) || (!mini && this.isMobile())) return;
       const rect = root.getBoundingClientRect();
-      start = { x: ev.clientX, y: ev.clientY, left: rect.left, top: rect.top, moved: false };
+      start = { x: ev.clientX, y: ev.clientY, left: rect.left, top: rect.top };
       root.classList.add('f1m-dragging');
       handle.setPointerCapture(ev.pointerId);
     });
@@ -170,7 +164,6 @@ export class PanelHost {
       if (!start) return;
       const dx = ev.clientX - start.x;
       const dy = ev.clientY - start.y;
-      if (Math.abs(dx) > 4 || Math.abs(dy) > 4) start.moved = true;
       if (mini) {
         const { left, top } = this.clampMiniCoordinates(start.left + dx, start.top + dy);
         root.style.left = `${left}px`;
@@ -206,6 +199,18 @@ export class PanelHost {
     } catch {
       /* 隐私模式 */
     }
+  }
+
+  private rememberExpandedGeometry(): void {
+    if (!this.root) return;
+    const { left, top, width, height } = this.root.style;
+    this.expandedGeometry = { left, top, width, height };
+  }
+
+  private restoreExpandedGeometry(): void {
+    if (!this.root || !this.expandedGeometry) return;
+    Object.assign(this.root.style, this.expandedGeometry);
+    this.expandedGeometry = null;
   }
 
   private restoreGeometry(): void {
@@ -365,6 +370,7 @@ export class PanelHost {
     if (this.displayState !== 'expanded') return;
     const active = this.doc.activeElement;
     this.focusBeforeMinimize = active instanceof HTMLElement ? active : null;
+    this.rememberExpandedGeometry();
     this.displayState = 'minimized';
     this.root!.classList.remove('f1m-hidden', 'f1m-mobile');
     this.root!.classList.add('f1m-minimized');
@@ -378,6 +384,7 @@ export class PanelHost {
     if (!this.root || this.displayState !== 'minimized') return;
     this.displayState = 'expanded';
     this.root.classList.remove('f1m-minimized');
+    this.restoreExpandedGeometry();
     this.root.classList.toggle('f1m-mobile', this.isMobile());
     this.frame?.removeAttribute('aria-hidden');
     if (this.frame) this.frame.tabIndex = 0;
@@ -388,6 +395,7 @@ export class PanelHost {
 
   close(): void {
     if (!this.root) return;
+    this.restoreExpandedGeometry();
     this.displayState = 'closed';
     this.root.classList.remove('f1m-minimized');
     this.root.classList.add('f1m-hidden');
