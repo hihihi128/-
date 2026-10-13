@@ -128,6 +128,7 @@ describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backen
     const drivers = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M资料]') && entry.content.startsWith('<车手资料'));
     expect(teams).toHaveLength(11);
     expect(drivers).toHaveLength(22);
+    expect(teams.every(entry => entry.content.includes('实时数据表明玩家执掌本队时生效'))).toBe(true);
     expect(teams.every(entry => entry.keys.length >= 2)).toBe(true);
     expect(drivers.every(entry => entry.keys.length >= 4)).toBe(true);
     expect(teams.find(entry => entry.comment.includes('迈凯伦车队'))?.content).toContain('玩家为临时领队');

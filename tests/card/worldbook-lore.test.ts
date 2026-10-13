@@ -7,18 +7,23 @@ const ROOT = resolve(__dirname, '../../src/card/worldbook');
 const drivers = YAML.parse(readFileSync(resolve(ROOT, 'data-drivers.yaml'), 'utf8')).drivers as Array<{
   id: string;
   name: string;
+  team: string;
   role: string;
 }>;
-const teamFiles = [
-  'lore-mercedes.md', 'lore-mclaren.md', 'lore-redbull.md', 'lore-ferrari.md', 'lore-williams.md',
-  'lore-racing-bulls.md', 'lore-aston-martin.md', 'lore-haas.md', 'lore-audi.md', 'lore-alpine.md', 'lore-cadillac.md',
-];
+const teams = YAML.parse(readFileSync(resolve(ROOT, 'data-teams.yaml'), 'utf8')).teams as Array<{ id: string; name: string }>;
+const teamFiles: Record<string, string> = {
+  mercedes: 'lore-mercedes.md', mclaren: 'lore-mclaren.md', red_bull: 'lore-redbull.md', ferrari: 'lore-ferrari.md',
+  williams: 'lore-williams.md', racing_bulls: 'lore-racing-bulls.md', aston_martin: 'lore-aston-martin.md', haas: 'lore-haas.md',
+  audi: 'lore-audi.md', alpine: 'lore-alpine.md', cadillac: 'lore-cadillac.md',
+};
 const prohibited = /——|似乎|仿佛|宛如|如同|几乎|近似|不是.*?(?:而是|只是)|极其|极大|本卡|写作要点|暂不展开|素材池|戏剧用途|核心冲突_/;
 
 describe('2026 世界书资料', () => {
   it('为 11 支车队提供统一结构的独立条目', () => {
-    expect(teamFiles).toHaveLength(11);
-    for (const file of teamFiles) {
+    expect(teams).toHaveLength(11);
+    expect(Object.keys(teamFiles)).toEqual(expect.arrayContaining(teams.map(team => team.id)));
+    for (const team of teams) {
+      const file = teamFiles[team.id];
       const content = readFileSync(resolve(ROOT, file), 'utf8');
       expect(content).toMatch(/^<车队资料 name=".+" year="2026">/);
       for (const section of ['车队身份:', '2026 形势:', '管理文化:', '技术档案:', '关键人员:', '正式车手:', '玩家角色压力:', '叙事指引:']) {
@@ -26,6 +31,10 @@ describe('2026 世界书资料', () => {
       }
       expect(content).toMatch(/<\/车队资料>\s*$/);
       expect(content).not.toMatch(prohibited);
+      expect(content).toContain('实时数据表明玩家执掌本队时生效');
+      const raceDrivers = drivers.filter(driver => driver.role === 'race' && driver.team === team.id);
+      expect(raceDrivers).toHaveLength(2);
+      for (const driver of raceDrivers) expect(content).toContain(driver.name);
     }
   });
 
