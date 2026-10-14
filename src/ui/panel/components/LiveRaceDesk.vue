@@ -13,7 +13,7 @@ const shortNames = computed(() => new Map(v.value.drivers.map(d => [d.id, d.shor
 const selections = reactive<Record<string, { pit: 'auto' | 'stay_out' | 'box'; compound: string; repairWing: boolean; paceMode: PaceMode; energyMode: EnergyMode; pitTiming: PitTiming }>>({});
 const orders = reactive<TeamOrders>({ mode: 'free', favorDriverId: null });
 const activeWindowId = computed(() => live.value?.pendingDecision?.id ?? '');
-const importantPause = computed(() => !!live.value?.pendingDecision || live.value?.stage === 'finished');
+const importantPause = computed(() => !!live.value?.pendingDecision);
 const tyrePickerDriverId = ref('');
 const tyrePickerDialog = ref<HTMLElement | null>(null);
 let tyrePickerTrigger: HTMLElement | null = null;
@@ -77,8 +77,8 @@ async function autoFinish() {
 }
 async function narratePause() {
   if (!live.value || !importantPause.value) return;
-  const focus = live.value.stage === 'finished' ? '刚刚结束的比赛结果' : `当前重要暂停点（${live.value.pendingDecision?.reasons.map(reasonLabel).join('、') ?? '比赛事件'}）`;
-  await call(api => api.requestNarration(`（请根据【实时比赛】数据自然叙述${focus}。只写已经发生的事和当前可见信息，不要替领队作出任何策略选择。）`));
+  const focus = `当前重要暂停点（${live.value.pendingDecision?.reasons.map(reasonLabel).join('、') ?? '比赛事件'}）`;
+  await call(api => api.requestNarration(`（请根据【实时比赛】数据自然叙述${focus}。只写已经发生的事和当前可见信息，不要替领队作出任何策略选择。本次不要输出 <F1M_UPDATE> 指令。）`));
 }
 </script>
 
@@ -88,8 +88,8 @@ async function narratePause() {
       <div><div class="tiny muted">当前圈 / {{ live.totalLaps }}</div><b class="lap mono">{{ live.completedLaps }}</b></div>
       <div class="grow"><b>{{ live.pendingDecision ? '比赛已暂停，等待你的指令' : live.raceControl === 'red_flag' ? '红旗暂停' : live.restart ? `${live.restart === 'standing' ? '静态' : '滚动'}重启准备中` : live.raceControl === 'sc' ? '安全车部署中' : live.raceControl === 'vsc' ? '虚拟安全车部署中' : '比赛进行中' }}</b><div class="small muted">{{ weatherLabel() }}<span v-if="live.raceControl"> · {{ live.raceControl === 'red_flag' ? 'RED FLAG' : live.raceControl.toUpperCase() }}</span></div></div>
       <span v-if="live.pendingDecision" class="badge warn">{{ live.pendingDecision.reasons.map(reasonLabel).join(' · ') }}</span>
-      <button v-if="importantPause" class="narrate-pause" :disabled="store.busy || !!store.status?.generating" @click="narratePause">{{ live.stage === 'finished' ? '让 AI 叙述比赛结果' : '让 AI 叙述当前暂停' }}</button>
-      <div v-else class="race-actions"><button class="primary" :disabled="store.busy" @click="advance('next_decision')">推进至下一窗口</button><button :disabled="store.busy" @click="autoFinish">自动完成比赛</button></div>
+      <button v-if="importantPause" class="narrate-pause" :disabled="store.busy || !!store.status?.generating" @click="narratePause">让 AI 叙述当前暂停</button>
+      <div v-if="!importantPause" class="race-actions"><button class="primary" :disabled="store.busy" @click="advance('next_decision')">推进至下一窗口</button><button :disabled="store.busy" @click="autoFinish">自动完成比赛</button></div>
     </div>
 
     <div class="live-grid">

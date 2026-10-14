@@ -26,6 +26,10 @@ export interface PromptOptions {
   protocolReminder?: boolean;
 }
 
+const RACE_REASON_LABELS: Record<string, string> = {
+  grid: '发车', pit_opportunity: '进站机会', weather_change: '天气变化', sc: '安全车', vsc: '虚拟安全车', red_flag: '红旗暂停', incident: '事故与损伤',
+};
+
 function pct(v: number): string {
   return `${Math.round(v * 100)}%`;
 }
@@ -64,7 +68,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
     const live = w.liveRace;
     if (live) {
       const recent = live.events.slice(-3).map(e => `第${e.lap}圈 ${e.text}`).join('；');
-      const decision = live.pendingDecision ? `当前暂停等待领队确认：${live.pendingDecision.reasons.join('、')}。` : live.stage === 'finished' ? '比赛已经结束，可以总结已确认的比赛结果。' : '比赛正在等待下一次引擎推进。';
+      const decision = live.pendingDecision ? `当前暂停等待领队确认：${live.pendingDecision.reasons.map(reason => RACE_REASON_LABELS[reason] ?? reason).join('、')}。` : '比赛正在等待下一次引擎推进。';
       L.push(`【实时比赛】${live.kind === 'sprint' ? '冲刺赛' : '正赛'}第 ${live.completedLaps}/${live.totalLaps} 圈，赛道${live.surface}，当前降雨强度 ${Math.round(live.rain * 100)}%，未来 ${live.forecast.horizonLaps} 圈预报仅供参考（降雨概率 ${pct(live.forecast.rainProbability)}，置信度 ${pct(live.forecast.confidence)}）。${recent ? `已发生：${recent}。` : ''}${decision}AI 只能叙述已发生事件或讨论选项，不能推进圈数、选择轮胎、改变天气或编造结果。`);
     }
   }

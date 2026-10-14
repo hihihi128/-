@@ -148,10 +148,12 @@ export function setRandomEventContent(state: GameState, eventId: string, content
 
 export function randomEventContext(state: GameState): Record<string, unknown> {
   const team = playerTeam(state);
+  const staffLevel = (skill: number): string => skill >= 88 ? '顶尖' : skill >= 80 ? '资深' : skill >= 70 ? '成熟' : '尚在成长';
+  const relationship = (affinity: number): string => affinity >= 70 ? '信任领队' : affinity >= 45 ? '关系正常' : '关系紧张';
   return {
     team: { id: team.id, name: team.name, funds: round1(team.funds), aeroHours: round1(team.aeroHours) },
     drivers: Object.values(state.drivers).filter(driver => driver.teamId === team.id).map(driver => ({ id: driver.id, name: driver.name, role: driver.role, fitness: round1(driver.fitness), morale: round1(driver.morale) })),
-    staff: Object.values(team.staff).map(staff => ({ id: staff.id, name: staff.name, role: staff.role, skill: round1(staff.skill), affinity: round1(staff.affinity ?? 50) })),
+    staff: Object.values(team.staff).map(staff => ({ id: staff.id, name: staff.name, role: staff.role, experience: staffLevel(staff.skill), relationship: relationship(staff.affinity ?? 50) })),
     relationships: {
       drivers: Object.values(state.drivers).filter(driver => driver.teamId === team.id).map(driver => ({ id: driver.id, name: driver.name, affinity: round1(driver.affinity ?? 50) })),
     },

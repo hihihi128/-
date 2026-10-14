@@ -36,10 +36,11 @@ describe('strategy mode interface', () => {
   });
 
   it('offers main-chat narration at important live-race pauses and the finish', () => {
-    expect(liveRace).toContain("!!live.value?.pendingDecision || live.value?.stage === 'finished'");
+    expect(liveRace).toContain('!!live.value?.pendingDecision');
     expect(liveRace).toContain('让 AI 叙述当前暂停');
-    expect(liveRace).toContain('让 AI 叙述比赛结果');
+    expect(weekend).toContain('让 AI 叙述比赛结果');
     expect(liveRace).toContain('api.requestNarration');
     expect(liveRace).toContain('不要替领队作出任何策略选择');
+    expect(liveRace).toContain('本次不要输出 <F1M_UPDATE> 指令');
   });
 });

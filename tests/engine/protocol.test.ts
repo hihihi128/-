@@ -125,4 +125,12 @@ describe('提示词', () => {
     const p = buildStatePrompt(s);
     expect(p).toMatch(/正赛降雨概率 \d+%/);
   });
+
+  it('实时比赛暂停原因使用中文标签而非内部枚举值', () => {
+    let s = advanceUntil(newTestGame(3), x => x.season.phase === 'race');
+    s = act(s, { type: 'START_RACE', kind: 'race' });
+    const p = buildStatePrompt(s);
+    expect(p).toContain('当前暂停等待领队确认：发车');
+    expect(p).not.toContain('当前暂停等待领队确认：grid');
+  });
 });

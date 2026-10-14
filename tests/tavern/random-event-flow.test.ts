@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { applyRandomEventResolution, closeUnansweredRandomEvent, setRandomEventContent, triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
 import { Rng } from '../../src/engine/rng';
-import { parseRandomEventContent, parseRandomEventResolution, randomEventNarrationMessage } from '../../src/tavern/randomEventFlow';
+import { parseRandomEventContent, parseRandomEventResolution, randomEventGenerationPrompt, randomEventNarrationMessage } from '../../src/tavern/randomEventFlow';
 import { newTestGame } from '../helpers';
 
 describe('随机事件双 API 协议', () => {
@@ -13,6 +13,17 @@ describe('随机事件双 API 协议', () => {
     const state = newTestGame(3);
     const event = { ...state.randomEvents?.current, id: 'event-1', title: '供应商争议', prompt: '一批部件检测结果不一致。' } as any;
     expect(randomEventNarrationMessage(state, event, '停用并复查')).toContain('不要返回 JSON');
+  });
+
+  it('随机事件编剧只接收员工定性信息并禁止输出内部评分', () => {
+    const state = newTestGame(9);
+    state.rules.randomEvents = { noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 1 };
+    triggerWeekendRandomEvent(state, new Rng(2));
+    const prompt = randomEventGenerationPrompt(state, state.randomEvents!.current!);
+    expect(prompt).toContain('内部评分');
+    expect(prompt).toContain('只能使用姓名、职务和定性表现');
+    expect(prompt).toContain('"experience"');
+    expect(prompt).not.toContain('"skill"');
   });
 
   it('只接受匹配事件 ID 和白名单效果', () => {

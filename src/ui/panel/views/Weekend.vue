@@ -15,6 +15,7 @@ const phase = computed(() => v.value.season.phase);
 const isSprint = computed(() => w.value ? w.value.practiceSessionTotal === 1 : !!v.value.round?.sprint);
 const current = computed(() => !!w.value?.isCurrent);
 const generating = computed(() => !!store.status?.generating);
+const raceResultNarration = computed(() => v.value.narration.some(item => /(?:正赛|冲刺赛)结果$/.test(item.title)));
 const practiceSessions = computed(() => {
   const ww = w.value;
   return ww?.practiceSessions?.length ? ww.practiceSessions : ww?.practice ? [ww.practice] : [];
@@ -244,7 +245,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
           <template v-else-if="phase === 'season_end'">赛季已结束。</template>
         </div>
         <div class="row">
-          <button v-if="v.narration.length" class="small" :disabled="generating" @click="call(a => a.requestNarration())">让 AI 叙述（{{ v.narration.length }}）</button>
+          <button v-if="v.narration.length" class="small" :disabled="generating" @click="call(a => a.requestNarration())">{{ raceResultNarration ? '让 AI 叙述比赛结果' : `让 AI 叙述（${v.narration.length}）` }}</button>
           <button v-if="v.next" class="primary" :disabled="store.busy || generating" @click="act({ type: 'ADVANCE' })">▶ {{ v.next.label }}</button>
         </div>
       </div>

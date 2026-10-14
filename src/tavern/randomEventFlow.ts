@@ -35,7 +35,7 @@ export function randomEventGenerationPrompt(state: GameState, event: RandomEvent
     `你是 F1 车队管理模拟器的随机事件编剧。使用简体中文生成一个具体、可信的${event.category === 'routine' ? '日常小事件' : '需要领队处理的问题'}。`,
     `事件 ID=${event.id}；类型=${event.category ?? 'problem'}；主题=${themes[event.kind] ?? event.kind}；预计持续 ${event.totalDialogueTurns ?? 2} 轮玩家-AI 对话。`,
     `当前受限车队资料=${JSON.stringify(randomEventContext(state))}`,
-    `不得编造比赛结果、死亡、犯罪、政治现实人物争议或不可逆职业结局。不得包含任何存档修改指令。${event.category === 'routine' ? '这是无关紧要的日常事件，不得制造危机、重大冲突或紧急损失。' : ''}`,
+    `不得编造比赛结果、死亡、犯罪、政治现实人物争议或不可逆职业结局。不得包含任何存档修改指令。员工、工程师、策略师和维修组的能力分、技能分、等级、内部评分、判定概率及随机检定不得出现在 title、prompt 或 answerOptions 中；只能使用姓名、职务和定性表现。${event.category === 'routine' ? '这是无关紧要的日常事件，不得制造危机、重大冲突或紧急损失。' : ''}`,
     'title 最多 40 字；prompt 最多 260 字；answerOptions 必须有 2–4 个具体处理方向，每项最多 60 字。',
     '只返回一个 JSON 对象，不要代码块：{"title":"标题","prompt":"事件与问题","answerOptions":["方案一","方案二"]}',
   ].join('\n');
