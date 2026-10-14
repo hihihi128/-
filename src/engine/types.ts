@@ -481,10 +481,14 @@ export interface TeamDef {
   parts: Record<PartType, { perf: number; rel: number }>;
   /** 董事会预期的车队排名 */
   targetPosition: number;
+  /** 开局选队界面的难度分组 */
+  selectionDifficulty: TeamSelectionDifficulty;
   description: string;
   /** 特殊机制标识，空字符串 = 无 */
   special: string;
 }
+
+export type TeamSelectionDifficulty = 'easy' | 'medium' | 'hard';
 
 export interface DriverDef {
   id: string;

@@ -35,6 +35,7 @@
 #   sponsorIncome   每站赞助收入（M$）
 #   operatingCost   每站运营成本（M$，计入预算帽）
 #   targetPosition  董事会期望的车队排名
+#   selectionDifficulty  开局选队难度分组：easy 简单 / medium 中等 / hard 困难（省略时为 medium）
 #   facilities      设施等级 1~5：windTunnel 风洞 / cfd CFD / simulator 模拟器 / factory 工厂
 #                   （模拟器等级影响周末初始调校信心）
 #   staff           关键员工：technicalDirector 技术总监 / aeroChief 空气动力学主管 /
@@ -64,6 +65,7 @@ teams:
     sponsorIncome: 7.2
     operatingCost: 2.6
     targetPosition: 1
+    selectionDifficulty: easy
     facilities: { windTunnel: 5, cfd: 5, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 詹姆斯·艾利森, skill: 90, salary: 3.5 }
@@ -83,7 +85,7 @@ teams:
       floor: { perf: 88, rel: 87 }
       sidepods: { perf: 87, rel: 89 }
       suspension: { perf: 87, rel: 88 }
-    description: W17 · 梅赛德斯动力单元。2025 年车队榜第 2（469 分）。季前测试跑得最多、长距离最稳，被普遍看作新规则下起步最好的车队。
+    description: W17 · 梅赛德斯动力单元。2025 年车队积分榜第 2（469 分）。季前测试跑得最多、长距离最稳，压缩比设计还让对手持续向 FIA 施压，被普遍看作新规则下起步最好的车队。托托·沃尔夫决定培养接班人，你将作为副领队加入：带队争夺总冠军，同时让沃尔夫保持满意，否则培养计划终止，你会被撤职。
 
   # ── 迈凯伦：2025 双冠王，底盘与轮胎管理顶级；客户版梅赛德斯动力 ──
   - id: mclaren
@@ -98,6 +100,7 @@ teams:
     sponsorIncome: 7.4
     operatingCost: 2.6
     targetPosition: 1
+    selectionDifficulty: medium
     facilities: { windTunnel: 5, cfd: 5, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 罗布·马歇尔, skill: 87, salary: 3 }
@@ -117,7 +120,7 @@ teams:
       floor: { perf: 78.5, rel: 87 }
       sidepods: { perf: 76.5, rel: 88 }
       suspension: { perf: 79.5, rel: 88 }
-    description: MCL40 · 梅赛德斯动力单元。2025 年车队与车手双冠王（833 分，诺里斯夺冠），以对轮胎友好的底盘著称。2026 年要在新规则下卫冕。
+    description: MCL40 · 梅赛德斯客户动力单元。2025 年车队与车手双冠王（833 分，诺里斯夺冠），底盘以对轮胎友好著称。2026 年初，领队安德里亚·斯特拉在交通事故中受伤，至少需要一年恢复。扎克·布朗任命你为临时领队：先解决动力单元与车体控制系统的适配故障，再管住诺里斯与皮亚斯特里的队内之争，守住冠军。
 
   # ── 红牛：首台自研红牛-福特动力单元，能量回收出色但可靠性未经验证 ──
   - id: red_bull
@@ -133,6 +136,7 @@ teams:
     sponsorIncome: 7.4
     operatingCost: 2.6
     targetPosition: 2
+    selectionDifficulty: medium
     facilities: { windTunnel: 4, cfd: 5, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 皮埃尔·瓦谢, skill: 87, salary: 3 }
@@ -152,7 +156,7 @@ teams:
       floor: { perf: 76.9, rel: 85 }
       sidepods: { perf: 74.9, rel: 86 }
       suspension: { perf: 74.9, rel: 85 }
-    description: RB23 · 红牛-福特动力单元（车队首台自研动力）。2025 年车队榜第 3（451 分）。季前动力单元表现令人意外，但测试初期出现液压问题。
+    description: RB23 · 红牛-福特动力单元（车队首台自研动力）。2025 年车队积分榜第 3（451 分），但全力争冠拖累了新车准备，季前还暴露出液压问题。马尔科被解雇，大批人才流失。你将辅助领队洛朗·梅基斯管理人手不足的团队：留住正与迈凯伦谈判的工程师 GP，并让维斯塔潘夏休时留在车手榜前三，否则他会转投梅赛德斯。
 
   # ── 法拉利：真实车队（2026 赛季），带「过渡领队」特殊机制 ──
   # 选择法拉利开局时：玩家是埃尔坎从外部请来的过渡领队，需要稳住媒体支持率，
@@ -171,6 +175,7 @@ teams:
     sponsorIncome: 7.5
     operatingCost: 2.6
     targetPosition: 4
+    selectionDifficulty: easy
     facilities: { windTunnel: 4, cfd: 4, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 洛伊克·塞拉（底盘技术总监）, skill: 84, salary: 3 }
@@ -191,11 +196,7 @@ teams:
       floor: { perf: 80.1, rel: 83 }
       sidepods: { perf: 79.1, rel: 85 }
       suspension: { perf: 81.1, rel: 85 }
-    description: >-
-      SF-26 · 法拉利动力单元。2025 年 SF-25 的底板与后悬挂问题迫使赛车抬高车身，全年无大奖赛胜利，
-      车队积分榜第 4（398 分）。年底，恩里科·瓜尔蒂耶里主导的钢制气缸盖发动机方案宣告失败，
-      埃尔坎随即解除了弗雷德·瓦塞尔的领队职务。2026 是过渡年，你将作为外聘的过渡领队接手：
-      稳住媒体、平衡汉密尔顿与勒克莱尔两边的粉丝，否则会被撤职。
+    description: SF-26 · 法拉利动力单元。2025 年 SF-25 的底板与后悬挂问题迫使赛车抬高车身，全年无大奖赛胜利，车队积分榜第 4（398 分）。年底，恩里科·瓜尔蒂耶里主导的钢制气缸盖发动机方案宣告失败，埃尔坎随即解除了弗雷德·瓦塞尔的领队职务。2026 是过渡年，你将作为外聘的过渡领队接手：稳住媒体、平衡汉密尔顿与勒克莱尔两边的粉丝，否则会被撤职。
 
   # ── 威廉姆斯：2025 年中游领头羊；季前底盘不如预期，但有顶级的梅赛德斯动力 ──
   - id: williams
@@ -210,6 +211,7 @@ teams:
     sponsorIncome: 5.2
     operatingCost: 2.4
     targetPosition: 5
+    selectionDifficulty: hard
     facilities: { windTunnel: 2, cfd: 3, simulator: 3, factory: 3 }
     staff:
       technicalDirector: { name: 帕特·弗莱, skill: 82, salary: 2.2 }
@@ -229,7 +231,7 @@ teams:
       floor: { perf: 47.9, rel: 82 }
       sidepods: { perf: 49.9, rel: 83 }
       suspension: { perf: 48.9, rel: 82 }
-    description: FW48 · 梅赛德斯动力单元。James Vowles 将在 2026 年底返回梅赛德斯，玩家从赛季初开始接受接班培养。有限资金必须在落后设施与当季升级之间分配。
+    description: FW48 · 梅赛德斯客户动力单元。2025 年车队积分榜第 5（137 分），塞恩斯在阿塞拜疆登上领奖台。但新车季前底盘不如预期，资金只有 52 M$，设施多年落后。詹姆斯·沃尔斯将在赛季末返回梅赛德斯，你作为接班人选从开季起接受培养：每周在设施、升级和现金之间分配预算，赢得沃尔斯信任，赛季末才能正式接任。
 
   # ── 小红牛：红牛二队，红牛-福特动力，阵容最年轻 ──
   - id: racing_bulls
@@ -244,6 +246,7 @@ teams:
     sponsorIncome: 4.4
     operatingCost: 2.3
     targetPosition: 7
+    selectionDifficulty: easy
     facilities: { windTunnel: 3, cfd: 3, simulator: 4, factory: 3 }
     staff:
       technicalDirector: { name: 蒂姆·戈斯, skill: 76, salary: 1.6 }
@@ -263,7 +266,7 @@ teams:
       floor: { perf: 62.1, rel: 82 }
       sidepods: { perf: 61.1, rel: 83 }
       suspension: { perf: 62.1, rel: 82 }
-    description: VCARB 03 · 红牛-福特动力单元。2025 年车队榜第 6（92 分）。2026 年由劳森和新秀林德布拉德出战。
+    description: VCARB 03 · 红牛-福特客户动力单元。2025 年车队积分榜第 6（92 分）。梅基斯调往红牛后，艾伦·佩尔曼接手车队，阵容是劳森和新秀林德布拉德。风洞与工厂等级偏低，底盘与空力偏后，但能量回收系统出色。你将以副领队身份辅佐佩尔曼：既要拿积分，又要培养车手，还要随时应对红牛临时调走正式车手。
 
   # ── 阿斯顿·马丁：纽维出任领队、本田回归；季前可靠性灾难 ──
   - id: aston_martin
@@ -279,6 +282,7 @@ teams:
     sponsorIncome: 6.5
     operatingCost: 2.6
     targetPosition: 8
+    selectionDifficulty: hard
     facilities: { windTunnel: 5, cfd: 4, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 恩里科·卡尔迪莱, skill: 84, salary: 2.8 }
@@ -299,7 +303,7 @@ teams:
       floor: { perf: 33.8, rel: 74 }
       sidepods: { perf: 33.8, rel: 76 }
       suspension: { perf: 34.8, rel: 76 }
-    description: AMR26 · 本田动力单元。2025 年车队榜第 7（89 分）。纽维设计的第一台阿斯顿·马丁赛车，但季前测试可靠性极差，几乎没有代表性的圈速。
+    description: AMR26 · 本田动力单元。2025 年车队积分榜第 7（89 分）。这是纽维设计的第一台阿斯顿·马丁赛车，但本田缺少新规经验，动力单元功率与可靠性全场最低，与车体结合后还产生危险振动。季前测试后惠特利被撤职，你被找来接手日常管理：调解本田与纽维、保护车手安全，还要平衡阿隆索粉丝与老斯特罗尔的期待。
 
   # ── 哈斯：法拉利客户车队，预算有限 ──
   - id: haas
@@ -314,6 +318,7 @@ teams:
     sponsorIncome: 4.6
     operatingCost: 2.3
     targetPosition: 8
+    selectionDifficulty: medium
     facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 2 }
     staff:
       technicalDirector: { name: 安德烈亚·德佐尔多, skill: 75, salary: 1.4 }
@@ -333,7 +338,7 @@ teams:
       floor: { perf: 54.8, rel: 81 }
       sidepods: { perf: 53.8, rel: 82 }
       suspension: { perf: 54.8, rel: 82 }
-    description: VF-26 · 法拉利动力单元。玩家与小松礼雄共同管理车队，在吉恩·哈斯和日益深入的丰田之间维持平衡。开局资金和生产能力不足，丰田会用更多干涉换取更多资金。
+    description: VF-26 · 法拉利客户动力单元。2025 年车队积分榜第 8（79 分）。2026 年以 TGR 哈斯车队名义参赛，丰田的投入逐步加大，小松礼雄已无法独自处理全部事务。开局资金只有 45 M$，工厂等级仅为 2。你将作为共同领队协助小松礼雄：在吉恩·哈斯与丰田之间维持平衡。丰田的钱越多，干涉也越多；失去哈斯的支持，你就会被解职。
 
   # ── 奥迪：索伯改组为奥迪厂商车队，季前中游的惊喜 ──
   - id: audi
@@ -349,6 +354,7 @@ teams:
     sponsorIncome: 5.6
     operatingCost: 2.5
     targetPosition: 8
+    selectionDifficulty: medium
     facilities: { windTunnel: 4, cfd: 4, simulator: 4, factory: 4 }
     staff:
       technicalDirector: { name: 詹姆斯·基, skill: 80, salary: 2.2 }
@@ -368,7 +374,7 @@ teams:
       floor: { perf: 62.3, rel: 81 }
       sidepods: { perf: 62.3, rel: 82 }
       suspension: { perf: 62.3, rel: 81 }
-    description: R26 · 奥迪动力单元（厂商首台 F1 动力）。前身索伯 2025 年车队榜第 9（70 分）。季前长距离表现排在中游前列。
+    description: R26 · 奥迪动力单元（厂商首台 F1 动力）。前身索伯 2025 年车队积分榜第 9（70 分），季前长距离表现排在中游前列。惠特利转投阿斯顿·马丁后，马蒂亚·比诺托接掌车队并主管技术。但自研动力单元存在涡轮问题，起步时常常丢位置。你将以副领队身份负责围场政治：联合其他车队推动 ADUO 追赶机制，尽快解决涡轮问题。
 
   # ── 阿尔派：改用梅赛德斯客户动力；2025 年垫底 ──
   - id: alpine
@@ -383,6 +389,7 @@ teams:
     sponsorIncome: 4.8
     operatingCost: 2.4
     targetPosition: 7
+    selectionDifficulty: easy
     facilities: { windTunnel: 4, cfd: 4, simulator: 4, factory: 4 }
     staff:
       technicalDirector: { name: 大卫·桑切斯, skill: 78, salary: 1.8 }
@@ -402,7 +409,7 @@ teams:
       floor: { perf: 63.5, rel: 82 }
       sidepods: { perf: 64.5, rel: 83 }
       suspension: { perf: 64.5, rel: 82 }
-    description: A526 · 梅赛德斯动力单元。玩家作为布里亚托利培养的副领队，必须服从其研发大方向，并在科拉平托粉丝与加斯利留队意愿之间平衡，同时解决新动力单元的匹配问题。
+    description: A526 · 梅赛德斯客户动力单元。2025 年车队积分榜第 10（22 分），全场垫底，积分几乎全靠加斯利。2026 年车队放弃雷诺厂商动力，车体、冷却与能量管理还没完全匹配。弗拉维奥·布里亚托利决定培养接班人，你以副领队身份加入：只能在他划定的研发方向内启动项目，同时平衡科拉平托粉丝与加斯利的留队意愿，令他失望就会被撤职。
 
   # ── 凯迪拉克：新加入的第 11 支车队，法拉利客户动力；跑得多但下压力不足 ──
   - id: cadillac
@@ -416,6 +423,7 @@ teams:
     sponsorIncome: 4.5
     operatingCost: 2.4
     targetPosition: 11
+    selectionDifficulty: hard
     facilities: { windTunnel: 3, cfd: 3, simulator: 4, factory: 4 }
     staff:
       technicalDirector: { name: 尼克·切斯特, skill: 74, salary: 1.8 }
@@ -435,4 +443,4 @@ teams:
       floor: { perf: 29, rel: 80 }
       sidepods: { perf: 32, rel: 82 }
       suspension: { perf: 33, rel: 82 }
-    description: 法拉利动力单元。全新的第 11 支车队，由通用汽车与 TWG 支持。季前测试比头名慢约 3 秒，但跑出约五个比赛距离，可靠性好于预期。
+    description: 法拉利客户动力单元。全新的第 11 支车队，由通用汽车与 TWG 支持，基地横跨美国费希尔斯与英国银石。季前测试比头名慢约 3 秒，下压力严重不足，底板落后全场；但跑出约五个比赛距离，可靠性好于预期。你将加入格雷姆·洛登的创始管理团队，成为车队首任领队之一：从零搭建团队，带领博塔斯和佩雷斯争取第一个积分。
