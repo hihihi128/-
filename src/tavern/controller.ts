@@ -272,6 +272,12 @@ export class F1Controller {
   private pendingRandomEventNarration: PendingRandomEventNarration | null = null;
   private adjudicatingRandomEventId: string | null = null;
   private preparingWeeklyRandomEvent = false;
+  /**
+   * Tavern Helper can briefly keep duringGenerating() true after the final
+   * assistant text is already committed. Once lifecycle events are observed,
+   * trust them instead of leaving every panel action permanently locked.
+   */
+  private generationState: 'unknown' | 'active' | 'settled' = 'unknown';
   /** 「继续生成」开始时被续写楼层的原文（用于只结算新续写的部分） */
   private continuing: { floor: number; text: string } | null = null;
   private listeners = new Set<(reason: string) => void>();
@@ -420,6 +426,19 @@ export class F1Controller {
     this.env.emit(CHANGE_EVENT, reason);
   }
 
+  private generationInProgress(): boolean {
+    return this.generationState === 'unknown' ? this.env.isGenerating() : this.generationState === 'active';
+  }
+
+  private startWeeklyRandomEvent(state: GameState): RandomEventRecord | null {
+    const ordinal = (state.randomEvents?.weeklyStarted ?? 0) + 1;
+    const seed = (state.rng
+      ^ Math.imul(state.season.year, 0x45d9f3b)
+      ^ Math.imul(state.season.roundIndex + 1, 0x119de1f3)
+      ^ Math.imul(ordinal, 0x3449f1d)) >>> 0;
+    return triggerNextWeeklyRandomEvent(state, new Rng(seed));
+  }
+
   // ───────────────────────────── 查询 ─────────────────────────────
 
   latestFloor(): number {
@@ -444,7 +463,7 @@ export class F1Controller {
       ready: true,
       chatId: this.env.chatId(),
       hasGame: !!resolved,
-      generating: this.env.isGenerating(),
+      generating: this.generationInProgress(),
       latestFloor: last,
       anchorFloor: resolved?.floor ?? null,
       revisionId: resolved?.rev.id ?? null,
@@ -650,7 +669,7 @@ export class F1Controller {
   }
 
   async newGame(opts: Partial<NewGameOptions> & { playerTeamId: string }): Promise<Outcome> {
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成，请稍后再开局' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成，请稍后再开局' };
     const report = await this.loadData();
     if (!report.ok || !this.data?.db) {
       const first = report.issues.find(i => i.level === 'error');
@@ -685,7 +704,7 @@ export class F1Controller {
   async dispatch(action: Action): Promise<Outcome> {
     if (this.busy) return { ok: false, message: '上一个操作还在处理中' };
     if (this.adjudicatingRandomEventId) return { ok: false, message: '副 API 正在判定随机事件，请等待判定结束后再操作' };
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成回复，请等待生成结束后再操作' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成回复，请等待生成结束后再操作' };
     const floor = this.latestFloor();
     let cur = this.store.resolve(floor);
     if (!cur) return { ok: false, message: '还没有开局' };
@@ -708,6 +727,7 @@ export class F1Controller {
       }
       const res = dispatch(cur.state, preparedAction);
       if (!res.ok) return { ok: false, message: res.message };
+      if (res.state.season.phase === 'pre_race') this.startWeeklyRandomEvent(res.state);
       const pendingEvent = res.state.randomEvents?.current;
       if (pendingEvent?.status === 'pending_generation') {
         const guard = { chatId: this.env.chatId(), gameId: cur.state.gameId, revisionId: cur.rev.id, revisionData: cur.rev.data, floor };
@@ -756,7 +776,7 @@ export class F1Controller {
       event: this.stateAt()?.randomEvents?.current ?? null,
       mainReply,
     });
-    if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
+    if (this.busy || this.generationInProgress()) return fail('当前已有生成或存档操作，请稍后再试');
     if (typeof request.eventId !== 'string' || typeof request.expectedRevisionId !== 'string') return fail('随机事件请求缺少有效标识');
     if (typeof request.answer !== 'string' || !request.answer.trim() || request.answer.trim().length > 1000) return fail('事件回答必须为 1–1000 个非空字符');
     const secondaryError = this.secondaryApiError();
@@ -786,10 +806,12 @@ export class F1Controller {
       await this.env.createUserMessage(randomEventNarrationMessage(current.state, event, answer));
       pending.userFloor = this.latestFloor();
       if (pending.userFloor <= floor) throw new Error('主 API 事件叙述消息未写入正常聊天');
+      this.generationState = 'active';
       await this.env.triggerGeneration();
       this.notify('random_event');
       return { ok: true, message: '已发送处理方案；主 API 正在正常聊天中叙述事件，完成后将自动交给副 API 判定。', event: this.stateAt()?.randomEvents?.current ?? null, mainReply: null };
     } catch (error) {
+      this.generationState = 'settled';
       if (this.pendingRandomEventNarration?.eventId === event.id) this.pendingRandomEventNarration = null;
       this.restoreRandomEventForRetry(event.id, error instanceof Error ? error.message : '主 API 事件叙述请求失败');
       return fail(error instanceof Error ? error.message : '随机事件处理失败');
@@ -918,7 +940,7 @@ export class F1Controller {
     const floor = this.latestFloor();
     const current = this.store.resolve(floor);
     const event = current?.state.randomEvents?.current;
-    if (this.busy || this.env.isGenerating()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', event: event ?? null, mainReply: null };
+    if (this.busy || this.generationInProgress()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', event: event ?? null, mainReply: null };
     if (!current || typeof request.expectedRevisionId !== 'string' || current.rev.id !== request.expectedRevisionId) return { ok: false, message: '存档版本已经变化，请刷新事件后重试', event: event ?? null, mainReply: null };
     if (!event || typeof request.eventId !== 'string' || event.id !== request.eventId || event.status !== 'awaiting_player') return { ok: false, message: '随机事件已经变化或完成', event: event ?? null, mainReply: null };
     const next = deepClone(current.state);
@@ -1028,7 +1050,7 @@ export class F1Controller {
   }
 
   async restoreRevision(id: string): Promise<Outcome> {
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成，请稍后' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成，请稍后' };
     const rev = this.store.getRevision(id);
     if (!rev) return { ok: false, message: '找不到该存档版本' };
     const state = this.store.stateOf(rev);
@@ -1045,7 +1067,7 @@ export class F1Controller {
   }
 
   async importSave(text: string): Promise<Outcome> {
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成，请稍后' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成，请稍后' };
     let parsed: any;
     try {
       parsed = JSON.parse(text);
@@ -1070,7 +1092,7 @@ export class F1Controller {
    * 方案排名严格按车队策略水平选择，避免强队与弱队得到同样聪明的建议。
    */
   async requestEngineerStrategy(driverId: string, requestedApi?: 'main' | 'secondary', perfect = false): Promise<EngineerStrategyResult> {
-    if (this.env.isGenerating()) return { ok: false, message: '当前正在生成内容，请稍后再请求工程师建议' };
+    if (this.generationInProgress()) return { ok: false, message: '当前正在生成内容，请稍后再请求工程师建议' };
     const state = this.stateAt();
     if (!state?.weekend) return { ok: false, message: '比赛周末开始后才能请求工程师建议' };
     if (state.weekend.liveRace) return { ok: false, message: '比赛进行中，不能重新生成赛前策略' };
@@ -1169,7 +1191,7 @@ export class F1Controller {
     if (!definition) return { ok: false, message: '未知的特殊谈判事件', session: this.getSpecialNegotiation() };
     const selected = request.api === undefined ? this.settings.engineerApi : request.api;
     if (selected !== 'main' && selected !== 'secondary') return { ok: false, message: 'API 必须是 main 或 secondary', session: this.getSpecialNegotiation() };
-    if (this.busy || this.env.isGenerating()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', session: this.getSpecialNegotiation() };
+    if (this.busy || this.generationInProgress()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', session: this.getSpecialNegotiation() };
     if (this.specialNegotiation?.status === 'active') return { ok: false, message: '请先完成或取消当前谈判', session: this.getSpecialNegotiation() };
     const secondaryError = selected === 'secondary' ? this.secondaryApiError() : null;
     if (secondaryError) return { ok: false, message: secondaryError, session: this.getSpecialNegotiation() };
@@ -1228,7 +1250,7 @@ export class F1Controller {
     if (request.sessionId !== session.id) return fail('谈判会话已经变化，请刷新后重试');
     if (typeof request.text !== 'string' || !request.text.trim() || request.text.trim().length > 1000) return fail('谈判发言必须为 1–1000 个非空字符');
     if (session.round >= session.maxRounds) return fail('谈判轮数已经用完');
-    if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
+    if (this.busy || this.generationInProgress()) return fail('当前已有生成或存档操作，请稍后再试');
     const definition = NEGOTIATIONS[session.kind];
     const current = this.resolveNegotiationContext(session);
     if (!current) {
@@ -1253,7 +1275,7 @@ export class F1Controller {
       const forcedStance = session.kind === 'fia_roundtable' ? current.state.fiaMeeting?.current?.forcedStance : null;
       if (reply.status === 'agreement' && forcedStance && reply.choice !== forcedStance) throw new Error('谈判 API 返回了车队禁止的立场');
       const latest = this.resolveNegotiationContext(session);
-      if (this.env.isGenerating() || !latest) {
+      if (this.generationInProgress() || !latest) {
         session.status = 'breakdown';
         session.outcome = '等待 API 时存档或聊天已经变化，结果已安全丢弃。';
         return fail(session.outcome);
@@ -1308,7 +1330,7 @@ export class F1Controller {
     if (selected !== 'main' && selected !== 'secondary') return fail('API 必须是 main 或 secondary');
     if (typeof request.description !== 'string' || !request.description.trim() || request.description.trim().length > 1000) return fail('干预描述必须为 1–1000 个非空字符');
     if (typeof request.expectedRevisionId !== 'string' || !request.expectedRevisionId) return fail('缺少当前存档版本号');
-    if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
+    if (this.busy || this.generationInProgress()) return fail('当前已有生成或存档操作，请稍后再试');
     const secondaryError = api === 'secondary' ? this.secondaryApiError() : null;
     if (secondaryError) return fail(secondaryError);
     const floor = this.latestFloor();
@@ -1360,7 +1382,7 @@ export class F1Controller {
       const latestFloor = this.latestFloor();
       const latest = this.store.resolve(latestFloor);
       const latestState = latest?.state;
-      if (this.env.isGenerating() || this.env.chatId() !== guard.chatId || latestFloor !== guard.floor || !latest || !latestState || latest.rev.id !== guard.revisionId || latestState.gameId !== guard.gameId || latestState.season.phase !== guard.phase || latestState.season.year !== guard.year || latestState.season.roundIndex !== guard.roundIndex || (latestState.weekend?.liveRace?.id ?? null) !== guard.liveId || !latestState.meta.supernaturalMode) return fail('等待 API 时存档或聊天已变化，结果已安全丢弃');
+      if (this.generationInProgress() || this.env.chatId() !== guard.chatId || latestFloor !== guard.floor || !latest || !latestState || latest.rev.id !== guard.revisionId || latestState.gameId !== guard.gameId || latestState.season.phase !== guard.phase || latestState.season.year !== guard.year || latestState.season.roundIndex !== guard.roundIndex || (latestState.weekend?.liveRace?.id ?? null) !== guard.liveId || !latestState.meta.supernaturalMode) return fail('等待 API 时存档或聊天已变化，结果已安全丢弃');
       const next = JSON.parse(JSON.stringify(latestState)) as GameState;
       const applied = applySupernaturalCommands(next, parsed.commands, invocationId);
       if (!applied.changed) return { ok: false, message: '没有可应用的干预；存档未改变', api, revisionId: null, results: applied.logs };
@@ -1376,12 +1398,18 @@ export class F1Controller {
 
   /** 发送一条用户消息并触发 AI 叙述待叙述事件 */
   async requestNarration(text?: string): Promise<Outcome> {
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成中' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成中' };
     const s = this.stateAt();
     if (!s) return { ok: false, message: '还没有开局' };
     await this.syncLeadershipWorldbook(s);
     await this.env.createUserMessage((text ?? this.settings.narrationText).trim() || DEFAULT_SETTINGS.narrationText);
-    await this.env.triggerGeneration();
+    this.generationState = 'active';
+    try {
+      await this.env.triggerGeneration();
+    } catch (error) {
+      this.generationState = 'settled';
+      throw error;
+    }
     return { ok: true, message: '已请求 AI 叙述' };
   }
 
@@ -1394,6 +1422,7 @@ export class F1Controller {
     this.specialNegotiation = null;
     this.pendingRandomEventNarration = null;
     this.adjudicatingRandomEventId = null;
+    this.generationState = 'unknown';
     this.recoverInterruptedRandomEvent();
     this.env.uninject(INJECT_ID);
     void this.syncLeadershipWorldbook();
@@ -1415,6 +1444,7 @@ export class F1Controller {
     let floor = last;
     const lastMsg = this.env.getMessage(last);
     if (!dryRun) {
+      this.generationState = 'active';
       this.continuing = type === 'continue' && lastMsg?.role === 'assistant' ? { floor: last, text: lastMsg.message ?? '' } : null;
     }
     if (type === 'swipe' || (type === 'regenerate' && lastMsg?.role === 'assistant')) floor = last - 1;
@@ -1432,6 +1462,7 @@ export class F1Controller {
    * 空回复（例如在第一个字之前就停止生成留下的空楼层）不会被结算，见 processAssistantMessageInner。
    */
   async onGenerationEnded(): Promise<void> {
+    this.generationState = 'settled';
     const last = this.latestFloor();
     const msg = this.env.getMessage(last);
     if (msg?.role === 'assistant') {
@@ -1455,6 +1486,7 @@ export class F1Controller {
   }
 
   async onMessageReceived(id: number, type?: string): Promise<void> {
+    this.generationState = 'settled';
     if (type === 'impersonate' || type === 'quiet' || type === 'first_message') return;
     const pendingNarration = this.isPendingRandomEventNarrationMessage(id);
     const orphanedEvent = !this.pendingRandomEventNarration && this.store.resolve(id)?.state.randomEvents?.current?.status === 'awaiting_narration';
@@ -1469,15 +1501,13 @@ export class F1Controller {
   }
 
   private async maybeStartRandomEventAfterChat(id: number): Promise<void> {
-    if (this.preparingWeeklyRandomEvent || this.busy || this.env.isGenerating() || id !== this.latestFloor()) return;
+    if (this.preparingWeeklyRandomEvent || this.busy || this.generationInProgress() || id !== this.latestFloor()) return;
     const current = this.store.resolve(id);
     if (!current || current.state.season.phase !== 'pre_race') return;
     const active = current.state.randomEvents?.current;
     if (active && !['none', 'resolved', 'unresolved'].includes(active.status)) return;
     const next = deepClone(current.state);
-    const rng = new Rng(next.rng);
-    const event = triggerNextWeeklyRandomEvent(next, rng);
-    next.rng = rng.state;
+    const event = this.startWeeklyRandomEvent(next);
     if (!event) return;
     const guard = { chatId: this.env.chatId(), revisionData: current.rev.data, floor: id };
     this.preparingWeeklyRandomEvent = true;

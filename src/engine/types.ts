@@ -952,6 +952,10 @@ export interface LiveRaceCar {
   engineerWeatherSpell?: number;
   engineerTyreOverride?: Compound | null;
   engineerTyreOverrideUntilLap?: number;
+  /** Stable public-weather target and the first lap when this AI will act on it. */
+  engineerWeatherTarget?: Compound | null;
+  engineerWeatherEligibleLap?: number;
+  lastWeatherPitLap?: number;
   /** Prevents repeated opportunistic stops during one SC/VSC period. */
   neutralStopTaken?: boolean;
 }

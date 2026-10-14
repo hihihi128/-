@@ -6,7 +6,7 @@ import { Rng } from '../../src/engine/rng';
 import { createForecast, createWeatherTrajectory } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
 import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
-import { advanceRaceSession, redFlagProbability } from '../../src/engine/race';
+import { advanceRaceSession, aiWeatherReactionDelay, redFlagProbability } from '../../src/engine/race';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -112,6 +112,22 @@ describe('resumable live race', () => {
     car.tyreAge = 6;
     advanceRaceSession(state, live, 'next_lap');
     expect(state.rules.tyres[car.tyre].wet).toBe(false);
+  });
+
+  it('staggers ordinary AI weather calls while Ferrari keeps instant reactions', () => {
+    const state = act(raceReady(711), { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    const ferrari = Object.values(live.cars).find(car => car.teamId === 'ferrari')!;
+    const ordinary = Object.values(live.cars).find(car => !car.player && car.teamId !== 'ferrari')!;
+    live.wetness = .35;
+    ordinary.tyre = state.rules.dryCompounds[0];
+    ordinary.raceEngineerWeather = 60;
+    ordinary.raceEngineerReaction = 60;
+    ordinary.plan.strategySource = 'engineer';
+    ferrari.tyre = state.rules.dryCompounds[0];
+    ferrari.plan.strategySource = 'engineer';
+    expect(aiWeatherReactionDelay(state, live, ordinary, state.rules.wetCompound)).toBeGreaterThan(0);
+    expect(aiWeatherReactionDelay(state, live, ferrari, state.rules.wetCompound)).toBe(0);
   });
 
   it('does not stop too early or twice during one safety-car period', () => {

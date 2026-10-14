@@ -659,6 +659,22 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(r.message).toContain('生成');
   });
 
+  it('收到完整回复后不再受酒馆残留生成标记永久锁定', async () => {
+    env.generating = true;
+    await env.aiReplies('回复已经完整写入聊天。');
+    expect(ctrl.status().generating).toBe(false);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+  });
+
+  it('进入赛前阶段后的面板操作会直接启动本周随机事件', async () => {
+    const save = JSON.parse(ctrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 1, maxPerWeek: 1, routineWeight: 1, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    expect((await ctrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    expect((await ctrl.dispatch({ type: 'CLEAR_NARRATION' })).ok).toBe(true);
+    expect(ctrl.stateAt()!.randomEvents?.current).toMatchObject({ status: 'awaiting_player' });
+  });
+
   it('版本数量受上限约束，且当前状态始终可解析', async () => {
     ctrl.updateSettings({ maxRevisions: 8 });
     for (let i = 0; i < 20; i++) {

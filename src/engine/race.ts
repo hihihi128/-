@@ -758,6 +758,7 @@ export function createRaceSession(
       iceReliability: groupHealth(componentReliability, PU_COMBUSTION_PARTS), electricalReliability: groupHealth(componentReliability, PU_ELECTRICAL_PARTS),
       pendingPit: null, pendingCompound: null, stayOutUntilLap: 0,
       engineerLightRainAssessed: false, engineerWetAssessed: false, engineerWeatherSpell: 0, engineerTyreOverride: null, engineerTyreOverrideUntilLap: 0,
+      engineerWeatherTarget: null, engineerWeatherEligibleLap: 0, lastWeatherPitLap: -99,
       neutralStopTaken: false,
     };
     if (entry.team.isPlayer) lapChart[id] = [];
@@ -832,6 +833,47 @@ function weatherTyreChangeWorthwhile(rules: GameState['rules'], current: Compoun
   return weatherTyreCost(rules, target, wetness) + .2 < weatherTyreCost(rules, current, wetness);
 }
 
+/**
+ * Live weather calls use the simulated race engineer, not a fresh LLM request
+ * every lap. Better engineers react sooner, while each car keeps a stable,
+ * deterministic variation. Ferrari deliberately retains its instant calls.
+ */
+export function aiWeatherReactionDelay(state: GameState, session: LiveRaceState, car: LiveRaceCar, target: Compound): number {
+  if (car.player || car.plan.strategySource !== 'engineer' || car.teamId === 'ferrari') return 0;
+  const team = state.teams[car.teamId];
+  const strategistWeather = team ? staffAbility(team.staff.strategist, 'weather') : 70;
+  const skill = (car.raceEngineerWeather + car.raceEngineerReaction + strategistWeather) / 3;
+  const advantage = weatherTyreCost(state.rules, car.tyre, session.wetness) - weatherTyreCost(state.rules, target, session.wetness);
+  const base = skill >= 85 ? 0 : 1;
+  const urgent = advantage >= 2.4 ? 1 : 0;
+  const variation = engineerDecisionRoll(session, car, `weather-delay:${target}:${Math.round(session.wetness * 20)}`, .45) ? 1 : 0;
+  return clamp(base - urgent + variation, 0, 2);
+}
+
+function aiWeatherStopReady(state: GameState, session: LiveRaceState, car: LiveRaceCar, target: Compound): boolean {
+  const immediate = car.tyreAge >= 2 && weatherTyreChangeWorthwhile(state.rules, car.tyre, target, session.wetness);
+  if (car.player || car.plan.strategySource !== 'engineer' || car.teamId === 'ferrari') return immediate;
+  const currentWet = !!state.rules.tyres[car.tyre]?.wet;
+  const targetWet = !!state.rules.tyres[target]?.wet;
+  const advantage = weatherTyreCost(state.rules, car.tyre, session.wetness) - weatherTyreCost(state.rules, target, session.wetness);
+  const minimumGain = currentWet === targetWet ? .9 : .55;
+  const cooledDown = session.lap - (car.lastWeatherPitLap ?? -99) >= 4;
+  const worthwhile = car.tyreAge >= 2
+    && cooledDown
+    && advantage >= minimumGain
+    && immediate;
+  if (!worthwhile) {
+    car.engineerWeatherTarget = null;
+    car.engineerWeatherEligibleLap = 0;
+    return false;
+  }
+  if (car.engineerWeatherTarget !== target) {
+    car.engineerWeatherTarget = target;
+    car.engineerWeatherEligibleLap = session.lap + aiWeatherReactionDelay(state, session, car, target);
+  }
+  return session.lap >= (car.engineerWeatherEligibleLap ?? session.lap);
+}
+
 function replacementCompound(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound {
   if (car.pendingCompound) return car.pendingCompound;
   if (car.engineerTyreOverride && session.lap <= (car.engineerTyreOverrideUntilLap ?? 0)) return car.engineerTyreOverride;
@@ -903,21 +945,25 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const planned = car.stintIndex < car.plannedCompounds.length - 1;
   const engineerOverride = applyEngineerWeatherDecision(state, session, car);
   const targetCompound = replacementCompound(state, session, car);
-  const weatherStop = engineerOverride || (car.tyreAge >= 2 && weatherTyreChangeWorthwhile(state.rules, car.tyre, targetCompound, session.wetness));
+  const differentCompound = targetCompound !== car.tyre;
+  const weatherReady = aiWeatherStopReady(state, session, car, targetCompound);
+  const weatherStop = differentCompound && (weatherReady || (car.teamId === 'ferrari' && engineerOverride));
+  const plannedStop = !weatherStop && planned && differentCompound && car.tyreAge >= pitTriggerLap(car);
   const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
   const neutralActive = session.scLeft > 0 || session.vscLeft > 0;
   if (!neutralActive) car.neutralStopTaken = false;
   const neutralOpportunity = car.plan.scReaction && neutralActive && !car.neutralStopTaken && planned
     && car.tyreAge >= Math.max(2, Math.round(pitTriggerLap(car) * .5)) && targetCompound !== car.tyre;
-  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || neutralOpportunity || (planned && car.tyreAge >= pitTriggerLap(car))));
+  const plannedAdvance = plannedStop || neutralOpportunity;
+  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || neutralOpportunity || plannedStop));
   if (!shouldPit) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
   const repair = car.repairPending;
   const stop = actualStationaryTime(state.teams[car.teamId], () => rng.next(), repair);
   const stationary = stop.actual;
   if (car.repairPending) { car.damage = 0; car.repairPending = false; const damage = [...session.damageLedger].reverse().find(d => d.driverId === car.driverId && !d.repairedInRace); if (damage) damage.repairedInRace = true; }
-  if (car.pendingPit === 'box' || planned || weatherStop) {
-    if (planned) car.stintIndex += 1;
+  if (car.pendingPit === 'box' || plannedAdvance || weatherStop) {
+    if (plannedAdvance) car.stintIndex += 1;
     // A decision can choose a compound, but it takes effect only after this car
     // has actually entered the pits. AI changes respond to the public surface.
     car.tyre = targetCompound;
@@ -926,6 +972,9 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
     car.tyreAge = replacement?.laps ?? 0;
   }
   car.usedCompounds.push(car.tyre); car.pits += 1; car.pitStops ??= []; car.pitStops.push({ lap: session.lap, predictedStationary: stop.predicted, actualStationary: stationary, slow: stop.slow, repair }); car.cumulativeTime += track.pitLoss * neutral + stationary;
+  car.engineerWeatherTarget = null;
+  car.engineerWeatherEligibleLap = 0;
+  if (weatherStop) car.lastWeatherPitLap = session.lap;
   if (neutralActive) car.neutralStopTaken = true;
   liveEvent(session, session.lap, stop.slow ? 'slow_stop' : 'pit', `${car.driverId} 进站，换上${state.rules.tyres[car.tyre]?.name ?? car.tyre}（预计 ${stop.predicted.toFixed(1)}s，实际 ${stationary.toFixed(1)}s${stop.slow ? '，失误' : ''}）`, [car.driverId], car.player);
   car.pendingPit = null;
