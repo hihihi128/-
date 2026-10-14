@@ -12,7 +12,7 @@ import { activeEntries, carRatings, fittedSpec, raceSkill, trackScore } from './
 import { Rng } from './rng';
 import { raceEngineerFor, staffAbility, strategyDecisionSkill } from './staff';
 import { redBullCrashMultiplier, specialFailureChance } from './teamSpecials';
-import { applyAudiStartDrop, astonVibrationActive } from './nextTeamSpecials';
+import { applyAudiStartDrop, applyFerrariStartGain, astonVibrationActive } from './nextTeamSpecials';
 import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from './raceWeather';
 import { validOrders, validRaceChoice } from './raceDecisions';
 import { actualStationaryTime } from './pitstop';
@@ -782,6 +782,7 @@ export function createRaceSession(
       }
     }
     applyAudiStartDrop(state, session, execution);
+    applyFerrariStartGain(state, session, execution);
     session.rngState = execution.state;
   }
   for (const driverId of disobedient) liveEvent(session, 0, 'order', `${driverId} 拒绝执行赛前策略，决定按自己的节奏比赛`, [driverId], true);

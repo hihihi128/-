@@ -24,7 +24,7 @@ const alpine = computed(() => v.value.alpine);
 const haas = computed(() => v.value.haas);
 const williams = computed(() => v.value.williams);
 const fia = computed(() => v.value.fiaMeeting);
-const fiaIssue: Record<string, string> = { aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
+const fiaIssue: Record<string, string> = { ferrari_turbo: '法拉利小涡轮起步前起压规则', aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
 const driverLabel = (id?: string) => v.value.drivers.find((driver: any) => driver.id === id)?.name ?? id ?? '-';
 const teamLabel = (id?: string) => v.value.teams.find((team: any) => team.id === id)?.name ?? id ?? '-';
 const demandLabels: Record<string, string> = { downforce: '下压力', efficiency: '气动效率', power: '动力', mechanical: '机械抓地' };
@@ -76,6 +76,11 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <Bar label="媒体支持率" :value="fr.media" :mark="fr.minMedia" :digits="0" color="#dc0000" :hint="`低于 ${fr.minMedia} 撤职，低于 ${fr.warnMedia} 告急`" />
       <Bar v-for="f in fr.fans" :key="f.driverId" :label="`${f.name}粉丝`" :value="f.value" :digits="0" color="#f5c518" />
       <Bar label="粉丝意见差距" :value="fr.gap" :mark="fr.maxFanGap" :digits="0" :color="fr.gap > fr.warnFanGap ? '#ff5a5a' : '#2fbf71'" :hint="`超过 ${fr.maxFanGap} 撤职`" />
+      <div class="notice small" :class="fr.turboAdvantageActive ? 'ok' : 'warn'">
+        {{ fr.turboAdvantageActive ? `小涡轮起步优势生效：每场正赛提升 ${fr.turboStartGainMin}–${fr.turboStartGainMax} 位。` : fr.turboSpoolSeconds > 0 ? `FIA 已增加 ${fr.turboSpoolSeconds} 秒起压时间，起步优势消失。` : 'ADUO 升级已装车，小涡轮起步优势消失。' }}
+      </div>
+      <div class="small">ADUO 四队联盟：<b>{{ fr.aduoAlliance ? '已加入' : '未加入' }}</b> · FIA 额外机会：<b>{{ fr.aduoLobbyGranted ? '已获得' : '尚未获得' }}</b></div>
+      <NegotiationPanel v-if="!fr.aduoAlliance" kind="aduo_alliance" />
       <div class="tiny muted">升级件分配不均、指定优先车手、要求让车、成绩和退赛都会改变两边粉丝的意见。意大利媒体每站都会消耗一点耐心。</div>
       <details v-if="fr.log.length" class="small">
         <summary class="muted">最近变化</summary>
@@ -172,8 +177,13 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
     <div v-if="fia?.current" class="card stack-s fia-meeting">
       <div class="spread"><h3>FIA 领队座谈会</h3><span class="badge warn">第 {{ fia.current.index }} 次会议</span></div>
       <div class="notice warn small">议题：{{ fiaIssue[fia.current.issue] }}。对手：{{ fia.current.opponents.map(teamLabel).join('、') }}。</div>
+      <div v-if="fia.current.issue === 'ferrari_turbo'" class="small">
+        支持增加 {{ v.specialRules.ferrari.turboSpoolSeconds }} 秒起压时间：{{ (fia.current.supporters ?? []).map(teamLabel).join('、') }}。
+        <span v-if="fia.current.supporters?.includes('audi')">奥迪本次支持限制法拉利，即使已加入 ADUO 联盟也不会改变立场。</span>
+      </div>
+      <div v-if="fia.current.forcedStance" class="notice warn small">布里亚托利已经决定支持提案。你必须以支持立场参加正常领队谈判。</div>
       <Bar label="政治资本" :value="fia.politicalCapital" color="#355c8a" hint="董事会信心、媒体声望和政治资本共同决定说服检定" />
-      <div class="row"><button class="primary" :disabled="store.busy || negotiationActiveFor('fia_roundtable')" @click="act({ type: 'FIA_DEBATE', stance: 'support' })">支持议题</button><button :disabled="store.busy || negotiationActiveFor('fia_roundtable')" @click="act({ type: 'FIA_DEBATE', stance: 'oppose' })">反对议题</button><button :disabled="store.busy || negotiationActiveFor('fia_roundtable')" @click="act({ type: 'FIA_DEBATE', stance: 'compromise' })">提出折中</button></div>
+      <div class="row"><button class="primary" :disabled="store.busy || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'support')" @click="act({ type: 'FIA_DEBATE', stance: 'support' })">支持议题</button><button :disabled="store.busy || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'oppose')" @click="act({ type: 'FIA_DEBATE', stance: 'oppose' })">反对议题</button><button :disabled="store.busy || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'compromise')" @click="act({ type: 'FIA_DEBATE', stance: 'compromise' })">提出折中</button></div>
       <NegotiationPanel kind="fia_roundtable" />
     </div>
 

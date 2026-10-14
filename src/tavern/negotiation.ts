@@ -41,16 +41,17 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
   aduo_alliance: {
     kind: 'aduo_alliance',
     title: 'ADUO 四队联盟谈判',
-    participants: ['法拉利代表', '梅赛德斯代表', '阿斯顿·马丁代表'],
-    opening: '三支车队的代表已经到场。他们要求奥迪说明共同游说 FIA 的目标、代价与信息共享边界。',
+    participants: ['奥迪代表', '法拉利代表', '梅赛德斯代表', '阿斯顿·马丁代表'],
+    opening: '四队代表已经到场。他们要求发起方说明共同游说 FIA 的目标、代价与信息共享边界。',
     choices: {
       alliance: { label: '达成四队联盟', action: { type: 'AUDI_ALLIANCE' } },
     },
     context: state => {
+      if (state.ferrari) return `法拉利尚有 ${Math.max(0, (state.teams.ferrari.aduoUpgrades ?? 0) - (state.teams.ferrari.puHomologations ?? 0))} 次 ADUO 机会。联盟目标是与奥迪、梅赛德斯和阿斯顿·马丁共同游说 FIA；成功后法拉利可额外获得一次认证机会。`;
       const audi = state.audi!;
       return `奥迪 ADUO 进度 ${audi.aduoProgress}%，政治支持 ${audi.politicalSupport}。联盟目标是与法拉利、梅赛德斯和阿斯顿·马丁共同推动 ADUO。`;
     },
-    unavailable: state => !state.audi ? '当前车队没有奥迪联盟机制' : state.audi.alliance ? '四队联盟已经成立' : null,
+    unavailable: state => !state.audi && !state.ferrari ? '当前车队不能参加 ADUO 四队联盟' : state.audi?.alliance || state.ferrari?.aduoAlliance ? '四队联盟已经成立' : null,
   },
   fia_roundtable: {
     kind: 'fia_roundtable',
@@ -64,8 +65,10 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
     },
     context: state => {
       const current = state.fiaMeeting!.current!;
-      const issue = current.issue === 'aduo' ? 'ADUO 动力单元升级' : current.issue === 'driver_safety' ? '车手安全与强制退赛' : '预算帽与新车队扶持';
-      return `第 ${current.index} 次会议，议题是${issue}。对手是${current.opponents.map(id => teamName(state, id)).join('、')}。玩家政治资本 ${state.fiaMeeting!.politicalCapital}，董事会信心 ${state.teams[state.meta.playerTeamId].boardConfidence}，媒体声望 ${state.teams[state.meta.playerTeamId].mediaReputation}。`;
+      const issue = current.issue === 'ferrari_turbo' ? `以安全为由增加 ${state.rules.ferrari.turboSpoolSeconds} 秒起步前涡轮起压时间` : current.issue === 'aduo' ? 'ADUO 动力单元升级' : current.issue === 'driver_safety' ? '车手安全与强制退赛' : '预算帽与新车队扶持';
+      const coalition = current.issue === 'ferrari_turbo' ? `支持方是${(current.supporters ?? []).map(id => teamName(state, id)).join('、')}。奥迪可能不顾 ADUO 联盟关系支持限制法拉利。` : '';
+      const forced = current.forcedStance ? `布里亚托利已经决定玩家必须选择 ${current.forcedStance}。` : '';
+      return `第 ${current.index} 次会议，议题是${issue}。${coalition}${forced}对手是${current.opponents.map(id => teamName(state, id)).join('、')}。玩家政治资本 ${state.fiaMeeting!.politicalCapital}，董事会信心 ${state.teams[state.meta.playerTeamId].boardConfidence}，媒体声望 ${state.teams[state.meta.playerTeamId].mediaReputation}。`;
     },
     unavailable: state => !state.fiaMeeting?.current ? '当前没有待处理的 FIA 领队座谈会' : null,
   },
@@ -147,7 +150,9 @@ export function negotiationDefinition(kind: unknown): NegotiationDefinition | nu
 
 export function negotiationPrompt(state: GameState, session: NegotiationSessionView, playerText: string): string {
   const definition = NEGOTIATIONS[session.kind];
-  const choices = Object.entries(definition.choices).map(([id, value]) => `${id}=${value.label}`).join('；');
+  const forcedStance = session.kind === 'fia_roundtable' ? state.fiaMeeting?.current?.forcedStance : null;
+  const availableChoices = forcedStance ? Object.fromEntries(Object.entries(definition.choices).filter(([id]) => id === forcedStance)) : definition.choices;
+  const choices = Object.entries(availableChoices).map(([id, value]) => `${id}=${value.label}`).join('；');
   const transcript = [...session.messages, { role: 'player' as const, speaker: '玩家领队', text: playerText }]
     .map(message => `${message.speaker}：${message.text}`)
     .join('\n');

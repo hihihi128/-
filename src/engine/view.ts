@@ -142,6 +142,12 @@ export interface FerrariView {
   /** 还剩几站适应期（适应期内不会被撤职） */
   graceLeft: number;
   log: Array<{ at: string; text: string }>;
+  aduoAlliance: boolean;
+  aduoLobbyGranted: boolean;
+  turboStartGainMin: number;
+  turboStartGainMax: number;
+  turboSpoolSeconds: number;
+  turboAdvantageActive: boolean;
 }
 
 export interface AduoView {
@@ -317,7 +323,7 @@ export interface GameView {
   mclaren: GameState['mclaren'];
   mercedes: GameState['mercedes'];
   redBull: (GameState['redBull'] & { verstappenPosition?: number }) | null;
-  specialRules: Pick<GameState['rules'], 'mclaren' | 'mercedes' | 'redBull'>;
+  specialRules: Pick<GameState['rules'], 'ferrari' | 'mclaren' | 'mercedes' | 'redBull'>;
   astonMartin: GameState['astonMartin'];
   racingBulls: (GameState['racingBulls'] & { candidates?: Array<{ id: string; name: string }> }) | null;
   audi: GameState['audi'];
@@ -466,6 +472,12 @@ function ferrariView(state: GameState): FerrariView | null {
         ? Math.max(0, r.graceRounds - state.season.roundIndex - (state.weekend?.roundIndex === state.season.roundIndex && state.weekend.race ? 1 : 0))
         : 0,
     log: [...f.log].reverse(),
+    aduoAlliance: f.aduoAlliance,
+    aduoLobbyGranted: f.aduoLobbyGranted,
+    turboStartGainMin: r.turboStartGainMin,
+    turboStartGainMax: r.turboStartGainMax,
+    turboSpoolSeconds: state.fiaMeeting?.ferrariTurboSpoolSeconds ?? 0,
+    turboAdvantageActive: !state.fiaMeeting?.ferrariAduoInstalled && (state.teams.ferrari.puHomologations ?? 0) === 0 && (state.fiaMeeting?.ferrariTurboSpoolSeconds ?? 0) === 0,
   };
 }
 
@@ -693,6 +705,7 @@ export function buildView(state: GameState): GameView {
       verstappenPosition: driverPos.get('verstappen') ?? 0,
     } : null,
     specialRules: {
+      ferrari: { ...rules.ferrari },
       mclaren: { ...rules.mclaren },
       mercedes: { ...rules.mercedes },
       redBull: { ...rules.redBull },

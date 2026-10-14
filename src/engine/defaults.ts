@@ -266,6 +266,9 @@ export const DEFAULT_RULES: Rules = {
     orderFans: 5,
     resultFans: 1.5,
     graceRounds: 2,
+    turboStartGainMin: 2,
+    turboStartGainMax: 4,
+    turboSpoolSeconds: 5,
   },
   mclaren: {
     failureChance: 0.2,

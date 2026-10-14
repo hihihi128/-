@@ -202,6 +202,9 @@ const RULE_RANGES: Record<string, { min?: number; max?: number; int?: boolean }>
   'mercedes.banPoliticalPressure': { min: 1, max: 120 },
   'mercedes.pressurePerRace': { min: 0, max: 120 },
   'mercedes.aduoProgressPerLobby': { min: 1, max: 100 },
+  'ferrari.turboStartGainMin': { min: 0, max: 10, int: true },
+  'ferrari.turboStartGainMax': { min: 0, max: 10, int: true },
+  'ferrari.turboSpoolSeconds': { min: 0, max: 30 },
   'redBull.mistakeMultiplier': { min: 1, max: 5 },
   'redBull.startGpRetention': { min: 0, max: 100 },
   'redBull.gpLossPerRace': { min: 0, max: 100 },
@@ -366,6 +369,9 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
   } as Rules;
   if (rules.audi.startDropMin > rules.audi.startDropMax) {
     ctx.err('rules.audi.startDropMin', '奥迪起步掉位下限不能大于上限');
+  }
+  if (rules.ferrari.turboStartGainMin > rules.ferrari.turboStartGainMax) {
+    ctx.err('rules.ferrari.turboStartGainMin', '法拉利起步提升下限不能大于上限');
   }
 
   for (const [key, def] of Object.entries(rules.parts)) {

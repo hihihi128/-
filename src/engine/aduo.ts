@@ -127,6 +127,7 @@ export function homologateUpgradePackage(state: GameState, team: TeamState, requ
   if (!pending.some(spec => spec === requested)) return [];
   for (const spec of pending) spec.homologated = true;
   team.puHomologations = (team.puHomologations ?? 0) + 1;
+  if (team.id === 'ferrari' && state.fiaMeeting) state.fiaMeeting.ferrariAduoInstalled = true;
   // 同一类型可能在两次评估之间积累多个版本。客户只接收最新版本，避免 AI 依次装上旧版并浪费配额。
   const customerSpecs = [...pending]
     .sort((a, b) => b.version - a.version)

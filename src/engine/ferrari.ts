@@ -32,6 +32,8 @@ export function initFerrari(state: GameState, team: TeamState): void {
     warned: { media: false, gap: false },
     dismissed: null,
     log: [],
+    aduoAlliance: false,
+    aduoLobbyGranted: false,
   };
 }
 

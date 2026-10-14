@@ -228,6 +228,7 @@ export interface DataReport {
   issues: DataIssue[];
   teams: Array<{ id: string; name: string; color: string; targetPosition: number; selectionDifficulty: TeamSelectionDifficulty; description: string; special: string; drivers: string[] }>;
   specialRules?: {
+    ferrari: { turboStartGainMin: number; turboStartGainMax: number; turboSpoolSeconds: number };
     astonMartin: { vibrationInterval: number; vibrationRetireChance: number };
     racingBulls: { recallChance: number };
     audi: { startDropMin: number; startDropMax: number };
@@ -638,6 +639,7 @@ export class F1Controller {
         drivers: (db?.drivers ?? []).filter(d => d.teamId === t.id && d.role === 'race').map(d => d.name),
       })),
       specialRules: db ? {
+        ferrari: { turboStartGainMin: db.rules.ferrari.turboStartGainMin, turboStartGainMax: db.rules.ferrari.turboStartGainMax, turboSpoolSeconds: db.rules.ferrari.turboSpoolSeconds },
         astonMartin: { vibrationInterval: db.rules.astonMartin.vibrationInterval, vibrationRetireChance: db.rules.astonMartin.vibrationRetireChance },
         racingBulls: { recallChance: db.rules.racingBulls.recallChance },
         audi: { startDropMin: db.rules.audi.startDropMin, startDropMax: db.rules.audi.startDropMax },

@@ -3,14 +3,14 @@ import { dispatch } from '../../src/engine/actions';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
 import { migrateState } from '../../src/engine/migrate';
-import { afterNextTeamRace, applyAudiStartDrop, astonCrisis, astonOnPriority, audiAlliance, fiaDebate, maybeTriggerRacingBullsRecall, selectRacingBullsReserve } from '../../src/engine/nextTeamSpecials';
+import { afterNextTeamRace, applyAudiStartDrop, applyFerrariStartGain, astonCrisis, astonOnPriority, audiAlliance, fiaDebate, maybeTriggerRacingBullsRecall, selectRacingBullsReserve } from '../../src/engine/nextTeamSpecials';
 import { advanceRaceSession, createRaceSession } from '../../src/engine/race';
 import { Rng } from '../../src/engine/rng';
 import type { GameState } from '../../src/engine/types';
 import { buildView } from '../../src/engine/view';
 import { act, advanceUntil, cardSources } from '../helpers';
 
-type TeamId = 'aston_martin' | 'racing_bulls' | 'audi' | 'cadillac';
+type TeamId = 'aston_martin' | 'racing_bulls' | 'audi' | 'cadillac' | 'ferrari' | 'alpine' | 'mclaren' | 'williams';
 
 function game(teamId: TeamId, seed = 123): GameState {
   const loaded = normalizeDatabase(cardSources());
@@ -137,6 +137,26 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     expect(state.audi).toMatchObject({ turboFixed: true, alliance: true });
   });
 
+  it('法拉利小涡轮每场正赛起步提升 2–4 位，ADUO 装车后优势消失', () => {
+    const state = atRace('ferrari');
+    state.rules.ferrari.turboStartGainMin = 4;
+    state.rules.ferrari.turboStartGainMax = 4;
+    state.teams.ferrari.puHomologations = 1;
+    const session = createRaceSession(state, new Rng(5), 'race');
+    const original = [...session.order];
+    state.teams.ferrari.puHomologations = 0;
+    applyFerrariStartGain(state, session, new Rng(1));
+    const ferraris = Object.values(session.cars).filter(car => car.teamId === 'ferrari');
+    expect(ferraris.every(car => session.order.indexOf(car.driverId) <= original.indexOf(car.driverId))).toBe(true);
+    expect(ferraris.some(car => session.order.indexOf(car.driverId) < original.indexOf(car.driverId))).toBe(true);
+    expect(session.events.filter(event => event.id.includes('start-ferrari')).length).toBe(2);
+
+    const upgradedOrder = [...session.order];
+    state.teams.ferrari.puHomologations = 1;
+    applyFerrariStartGain(state, session, new Rng(1));
+    expect(session.order).toEqual(upgradedOrder);
+  });
+
   it('每三站打开 FIA 座谈会，辩论完成前阻止其它操作', () => {
     const state = game('aston_martin');
     state.season.roundIndex = 2;
@@ -144,7 +164,7 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     state.teams.aston_martin.mediaReputation = 100;
     state.fiaMeeting!.politicalCapital = 100;
     afterNextTeamRace(state);
-    expect(state.fiaMeeting!.current).not.toBeNull();
+    expect(state.fiaMeeting!.current).toMatchObject({ issue: 'ferrari_turbo', supporters: expect.arrayContaining(['mercedes', 'mclaren', 'alpine']) });
     expect(dispatch(state, { type: 'ADVANCE' }).ok).toBe(false);
     expect(fiaDebate(state, 'compromise').ok).toBe(true);
     expect(state.fiaMeeting!.current).toBeNull();
@@ -154,6 +174,42 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     state.season.roundIndex = 2;
     afterNextTeamRace(state);
     expect(state.fiaMeeting!.current?.index).toBe(2);
+  });
+
+  it('首次座谈会允许奥迪反水，阿尔派玩家必须支持起压提案', () => {
+    const audi = game('audi');
+    expect(audiAlliance(audi).ok).toBe(true);
+    audi.season.roundIndex = 2;
+    afterNextTeamRace(audi);
+    expect(audi.fiaMeeting!.current?.issue).toBe('ferrari_turbo');
+    if (audi.fiaMeeting!.current!.supporters!.includes('audi')) expect(audi.audi!.alliance).toBe(true);
+
+    const alpine = game('alpine');
+    alpine.season.roundIndex = 2;
+    alpine.teams.alpine.boardConfidence = 100;
+    alpine.teams.alpine.mediaReputation = 100;
+    alpine.fiaMeeting!.politicalCapital = 100;
+    afterNextTeamRace(alpine);
+    expect(alpine.fiaMeeting!.current?.forcedStance).toBe('support');
+    expect(fiaDebate(alpine, 'oppose')).toMatchObject({ ok: false });
+    expect(fiaDebate(alpine, 'support')).toMatchObject({ ok: true });
+    expect(alpine.fiaMeeting!.ferrariTurboSpoolSeconds).toBe(alpine.rules.ferrari.turboSpoolSeconds);
+  });
+
+  it('法拉利可加入四队联盟，并在 ADUO 座谈游说成功后只获得一次机会', () => {
+    const state = game('ferrari');
+    expect(audiAlliance(state).ok).toBe(true);
+    expect(state.ferrari?.aduoAlliance).toBe(true);
+    state.teams.ferrari.boardConfidence = 100;
+    state.teams.ferrari.mediaReputation = 100;
+    state.fiaMeeting!.politicalCapital = 100;
+    state.fiaMeeting!.current = { index: 2, issue: 'aduo', opponents: ['red_bull'], supporters: [], forcedStance: null };
+    expect(fiaDebate(state, 'support').ok).toBe(true);
+    expect(state.teams.ferrari.aduoUpgrades).toBe(1);
+    expect(state.ferrari?.aduoLobbyGranted).toBe(true);
+    state.fiaMeeting!.current = { index: 5, issue: 'aduo', opponents: ['red_bull'], supporters: [], forcedStance: null };
+    expect(fiaDebate(state, 'support').ok).toBe(true);
+    expect(state.teams.ferrari.aduoUpgrades).toBe(1);
   });
 
   it('旧存档补齐新车队状态和 FIA 座谈会状态', () => {
@@ -170,7 +226,7 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     expect(state.astonMartin).toBeNull();
     expect(state.racingBulls).toBeNull();
     expect(state.audi).toBeNull();
-    expect(state.fiaMeeting).toMatchObject({ completed: 0, current: null });
+    expect(state.fiaMeeting).toMatchObject({ completed: 0, current: null, ferrariTurboSpoolSeconds: 0, ferrariAduoInstalled: false });
     expect(state.rules.fiaMeeting.interval).toBeGreaterThan(0);
     expect(state.rules.astonMartin.vibrationRetireChance).toBe(.25);
 
@@ -207,7 +263,7 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     state.teams.audi.mediaReputation = 100;
     state.fiaMeeting!.politicalCapital = 100;
     afterNextTeamRace(state);
-    expect(state.fiaMeeting!.current?.issue).toBe('aduo');
+    expect(state.fiaMeeting!.current?.issue).toBe('ferrari_turbo');
     const before = state.audi!.aduoProgress;
     expect(fiaDebate(state, 'support').ok).toBe(true);
     expect(state.audi!.aduoProgress).toBe(before);

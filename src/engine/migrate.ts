@@ -233,7 +233,17 @@ export function migrateState(state: GameState): GameState {
     for (const staff of Object.values(team.staff)) staff.affinity ??= 50;
   }
   if (state.audi) state.audi.alliance = Boolean(state.audi.alliance);
-  state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, log: [] };
+  state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, ferrariTurboSpoolSeconds: 0, ferrariAduoInstalled: false, log: [] };
+  state.fiaMeeting.ferrariTurboSpoolSeconds ??= 0;
+  state.fiaMeeting.ferrariAduoInstalled ??= (state.teams.ferrari?.puHomologations ?? 0) > 0;
+  if (state.fiaMeeting.current) {
+    state.fiaMeeting.current.supporters ??= [];
+    state.fiaMeeting.current.forcedStance ??= null;
+  }
+  if (state.ferrari) {
+    state.ferrari.aduoAlliance ??= false;
+    state.ferrari.aduoLobbyGranted ??= false;
+  }
   if (state.mclaren) state.mclaren.weeksTotal ??= state.mclaren.weeksLeft;
   state.rules.astonMartin ??= deepClone(DEFAULT_RULES.astonMartin);
   state.rules.racingBulls ??= deepClone(DEFAULT_RULES.racingBulls);

@@ -153,6 +153,8 @@ onMounted(load);
         <li>稳住媒体：<b>媒体支持率</b>过低会被撤职。</li>
         <li>平衡粉丝：<b>汉密尔顿粉丝</b>与<b>勒克莱尔粉丝</b>的意见差距过大会被撤职。</li>
         <li>升级件分配、优先车手、车队指令和比赛成绩都会影响两边粉丝。</li>
+        <li>小涡轮结构每场正赛起步提升 {{ report?.specialRules?.ferrari.turboStartGainMin ?? 2 }}–{{ report?.specialRules?.ferrari.turboStartGainMax ?? 4 }} 位；ADUO 升级装车后优势消失。</li>
+        <li>首次领队座谈会必定讨论增加 {{ report?.specialRules?.ferrari.turboSpoolSeconds ?? 5 }} 秒起步前起压时间。</li>
       </ul>
     </div>
 

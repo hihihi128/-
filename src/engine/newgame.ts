@@ -221,6 +221,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
       `内部继任人选还需要时间考察，埃尔坎把 ${state.season.year} 年定为过渡年，从外部招来一位过渡领队——${name}。`,
       reasonLine,
       `埃尔坎的要求只有两条：稳住意大利媒体（媒体支持率 ${fr.startMedia}，低于 ${fr.minMedia} 即撤职），并让${names}两边的粉丝都满意（粉丝意见差距超过 ${fr.maxFanGap} 即撤职）。`,
+      `SF-26 赛季初采用小涡轮结构，每场正赛起步可提升 ${fr.turboStartGainMin}–${fr.turboStartGainMax} 个位置。首次领队座谈会将讨论增加 ${fr.turboSpoolSeconds} 秒起步前涡轮起压时间；提案通过或首次 ADUO 升级装车都会让该优势消失。`,
       tail,
     ];
   } else if (state.mclaren) {

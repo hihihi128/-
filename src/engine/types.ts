@@ -210,6 +210,12 @@ export interface FerrariRules {
   mediaResultMul: number;
   /** 升级件分配：两台车每差 1 分综合性能，两边粉丝各变化多少 */
   allocationFans: number;
+  /** 小涡轮方案在正赛起步时最少提升的位置 */
+  turboStartGainMin: number;
+  /** 小涡轮方案在正赛起步时最多提升的位置 */
+  turboStartGainMax: number;
+  /** FIA 提案要求的起步前涡轮起压时间（秒） */
+  turboSpoolSeconds: number;
   /** 指定 / 取消优先车手的粉丝变化 */
   priorityFans: number;
   /** 执行车队指令（让车）的粉丝变化 */
@@ -1129,6 +1135,10 @@ export interface FerrariState {
   dismissed: string | null;
   /** 最近几次粉丝/媒体变化（供面板展示） */
   log: Array<{ at: string; text: string }>;
+  /** 是否加入奥迪、梅赛德斯、阿斯顿·马丁的 ADUO 联盟 */
+  aduoAlliance: boolean;
+  /** 是否已经通过 FIA 游说获得联盟承诺的一次 ADUO */
+  aduoLobbyGranted: boolean;
 }
 
 export interface McLarenState {
@@ -1272,11 +1282,21 @@ export interface RandomEventState {
   history: RandomEventRecord[];
 }
 
-export type FiaMeetingIssue = 'aduo' | 'driver_safety' | 'cost_cap';
+export type FiaMeetingIssue = 'ferrari_turbo' | 'aduo' | 'driver_safety' | 'cost_cap';
 export interface FiaMeetingState {
   politicalCapital: number;
   completed: number;
-  current: { index: number; issue: FiaMeetingIssue; opponents: string[] } | null;
+  current: {
+    index: number;
+    issue: FiaMeetingIssue;
+    opponents: string[];
+    supporters?: string[];
+    forcedStance?: 'support' | 'oppose' | 'compromise' | null;
+  } | null;
+  /** FIA 最终要求的起步前涡轮起压时间；0 表示提案未通过 */
+  ferrariTurboSpoolSeconds: number;
+  /** 法拉利是否已经把首批 ADUO 动力单元升级装车；跨赛季保留 */
+  ferrariAduoInstalled: boolean;
   log: Array<{ at: string; text: string }>;
 }
 
