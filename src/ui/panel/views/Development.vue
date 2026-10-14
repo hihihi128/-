@@ -122,6 +122,9 @@ const matrix = computed(() => {
         </label>
       </div>
       <div v-if="preview" class="preview">
+        <div v-if="v.aduo.enabled && v.aduo.developmentParts.includes(partType) && !v.aduo.isCustomer && v.aduo.upgradesLeft <= 0" class="notice warn tiny">
+          可以继续研发和生产，但当前没有 ADUO 认证机会。新规格获得认证前不能装车。
+        </div>
         <div class="grid g4 small">
           <div>花费<br /><b class="mono">${{ preview.cost }}M</b></div>
           <div>周期<br /><b class="mono">{{ preview.weeks }} 周</b></div>

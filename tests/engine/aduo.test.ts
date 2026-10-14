@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { homologationsLeft, maybeEvaluateAduo, measureManufacturers, nextEvalRound } from '../../src/engine/aduo';
 import { normalizeDatabase } from '../../src/engine/data';
-import { advanceWeeks, fitPart, previewManufacture, previewProject, startProject } from '../../src/engine/development';
+import { advanceWeeks, autoFit, fitPart, previewManufacture, previewProject, startProject } from '../../src/engine/development';
 import { costCapOf } from '../../src/engine/finance';
 import { migrateState } from '../../src/engine/migrate';
 import { createGame } from '../../src/engine/newgame';
@@ -74,6 +74,52 @@ describe('ADUO 与动力单元供应', () => {
       // AI 客户车队自动装车
       expect(s.teams[c].cars.every(car => car.fitted.ice === latest(c).id), c).toBe(true);
     }
+  });
+
+  it('关闭 ADUO 时，厂商交付后仍会立即供应客户车队', () => {
+    const s = cardGame('mercedes');
+    s.rules.aduo.enabled = false;
+    expect(startProject(s, 'mercedes', 'ice', 'standard', false, new Rng(22)).ok).toBe(true);
+    advanceWeeks(s, 20, new Rng(23));
+    for (const id of ['mclaren', 'williams', 'alpine']) {
+      expect(s.teams[id].parts.ice.specs.at(-1)!.version, id).toBe(2);
+      expect(s.teams[id].parts.ice.specs.at(-1)!.homologated, id).toBe(true);
+    }
+  });
+
+  it('同批次同类型有多个版本时，只把最新版本交付给客户', () => {
+    const s = cardGame('mercedes');
+    const works = s.teams.mercedes;
+    const base = works.parts.ice.specs[0];
+    for (const version of [2, 3]) {
+      const id = `ice-pending-${version}`;
+      works.parts.ice.specs.push({ ...base, id, version, perf: base.perf + version, homologated: false });
+      works.parts.ice.stock[id] = 2;
+    }
+    works.aduoUpgrades = 1;
+    const before = s.teams.mclaren.parts.ice.specs.length;
+    expect(fitPart(s, 'mercedes', 1, 'ice', 'ice-pending-3').ok).toBe(true);
+    expect(s.teams.mclaren.parts.ice.specs).toHaveLength(before + 1);
+    expect(s.teams.mclaren.parts.ice.specs.at(-1)!.perf).toBe(base.perf + 3);
+    expect(s.drivers[s.teams.mclaren.cars[0].driverId!]!.puUsed?.ice ?? 0).toBe(2);
+  });
+
+  it('AI 无机会时不能绕过认证，变速箱装车不受 ADUO 影响', () => {
+    const s = cardGame('ferrari');
+    const works = s.teams.mercedes;
+    const currentIce = works.cars[0].fitted.ice;
+    const ice = { ...works.parts.ice.specs[0], id: 'ice-ai-pending', version: 2, perf: 100, homologated: false };
+    works.parts.ice.specs.push(ice);
+    works.parts.ice.stock[ice.id] = 2;
+    autoFit(s, works, 'ice', ice.id);
+    expect(works.cars[0].fitted.ice).toBe(currentIce);
+    expect(works.puHomologations).toBe(0);
+
+    const gearbox = { ...works.parts.gearbox.specs[0], id: 'gearbox-unapproved', version: 2, perf: 100, homologated: false };
+    works.parts.gearbox.specs.push(gearbox);
+    works.parts.gearbox.stock[gearbox.id] = 1;
+    expect(fitPart(s, 'mercedes', 1, 'gearbox', gearbox.id).ok).toBe(true);
+    expect(works.puHomologations).toBe(0);
   });
 
   it('开局记录季前基准，不产生效果', () => {
@@ -226,6 +272,8 @@ describe('ADUO 与动力单元供应', () => {
     const m = migrateState(raw);
     expect(m.rules.aduo.baseUpgrades).toBe(0);
     expect(m.teams.mercedes.puHomologations).toBe(0);
+    expect(m.teams.mercedes.aduoUpgrades).toBe(1);
+    expect(homologationsLeft(m, m.teams.mercedes)).toBe(1);
     expect(Object.values(m.teams.mercedes.parts).flatMap(parts => parts.specs).every(spec => spec.homologated)).toBe(true);
     expect(previewProject(m, 'mercedes', 'mgu_k', 'standard').ok).toBe(true);
   });

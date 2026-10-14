@@ -8,7 +8,7 @@
  *   4. 领队决定把新件装到哪台车上（升级件分配）；不平均的分配会影响车手心态与信任。
  *   5. 新件在练习赛「新件测试」或正赛后才会验证真实性能。
  */
-import { aduoWeeksMul, homologateUpgradePackage, puDesignBlock, puFitBlock } from './aduo';
+import { aduoWeeksMul, homologateUpgradePackage, homologationsLeft, isAduoPart, puDesignBlock, puFitBlock, supplyCustomers } from './aduo';
 import { AMBITIONS, LABELS, TRACK_DEMANDS } from './defaults';
 import { affordError, capRemaining, charge, income, payWeeklySalaries } from './finance';
 import { addNews, addNarration, driverName } from './log';
@@ -486,6 +486,7 @@ function completeProject(state: GameState, team: TeamState, p: Project, rng: Rng
       };
       parts.specs.push(spec);
       parts.stock[spec.id] = (parts.stock[spec.id] ?? 0) + (p.units ?? 1);
+      if (spec.homologated !== false) supplyCustomers(state, team, pt, spec);
       if (team.isPlayer) {
         const certification = spec.homologated === false ? '，需获得 ADUO 认证后才能装车' : '';
         addNews(state, '研发', `${def.name} v${version} 已交付 ×${p.units ?? 1}（预估性能 ${spec.expected?.[0]}~${spec.expected?.[1]}）${certification}。`);
@@ -610,7 +611,11 @@ function aiTeamWeek(state: GameState, team: TeamState, rng: Rng): void {
   if (designing.length < slots && team.funds > 8 && capRemaining(team, rules) > 6) {
     const imp = partImportance(rules, upcomingDemands(state));
     const candidates = Object.keys(rules.parts)
-      .filter(pt => rules.parts[pt].developable && !designing.some(p => p.partType === pt) && !puDesignBlock(state, team, pt))
+      .filter(pt => {
+        if (!rules.parts[pt].developable || designing.some(p => p.partType === pt) || puDesignBlock(state, team, pt)) return false;
+        const pendingSameType = team.parts[pt]?.specs.some(spec => spec.homologated === false);
+        return !(isAduoPart(state, pt) && homologationsLeft(state, team) <= 0 && pendingSameType);
+      })
       .map(pt => {
         const best = bestSpec(team, pt)?.perf ?? 50;
         const score = (imp[pt] * headroom(rules, best)) / Math.max(0.5, rules.parts[pt].baseCost);

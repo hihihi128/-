@@ -697,6 +697,7 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
     const team = state.teams[tid];
     const focusBonus = (team.nextSeasonFocus / 100) * 4;
     for (const pt of Object.keys(rules.parts)) {
+      // 未认证成果仍代表已掌握的工程知识；新赛季会把它重新收敛为已认证的基础规格。
       const best = bestSpec(team, pt);
       const perf = round1(clamp((best?.perf ?? 70) * rules.carryOver + 70 * (1 - rules.carryOver) + focusBonus + rng.normal(0, 0.8), 1, 100));
       const id = `${pt}-S${state.season.number}v1`;

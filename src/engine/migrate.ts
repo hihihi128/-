@@ -299,6 +299,11 @@ export function migrateState(state: GameState): GameState {
       }
     } else delete state.weekend.supernaturalCarEffects;
   }
+  const aduoPartsBeforePuMigration = new Set([...(state.rules.aduo?.parts ?? []), 'power_unit', 'ers']);
+  const activePuDesignsBeforeMigration = new Map(Object.values(state.teams).map(team => [
+    team.id,
+    team.projects.filter(project => project.kind === 'design' && project.partType && aduoPartsBeforePuMigration.has(project.partType)).length,
+  ]));
   migrateSixPartPowerUnit(state);
   if (state.weekend?.liveRace) {
     const live = state.weekend.liveRace;
@@ -344,6 +349,7 @@ export function migrateState(state: GameState): GameState {
   const legacyAduoLifecycle = !!state.rules.aduo && Object.values(state.teams).some(team =>
     state.rules.aduo.parts.some(partType => team.parts[partType]?.specs.some(spec => spec.homologated === undefined)),
   );
+  const legacyBaseUpgrades = legacyAduoLifecycle ? state.rules.aduo.baseUpgrades : 0;
   if (legacyAduoLifecycle && state.rules.aduo.baseUpgrades === 1) state.rules.aduo.baseUpgrades = 0;
   for (const team of Object.values(state.teams)) {
     const crew = team.staff.pitCrew.skill;
@@ -359,10 +365,11 @@ export function migrateState(state: GameState): GameState {
     team.worksTeam ??= false;
     if (legacyAduoLifecycle && state.rules.aduo) {
       // 旧版在研发开工时计数。进行中的项目尚未生成规格，因此返还其误占的次数。
-      const activePuDesigns = team.projects.filter(p => p.kind === 'design' && p.partType && state.rules.aduo.parts.includes(p.partType)).length;
+      const activePuDesigns = activePuDesignsBeforeMigration.get(team.id) ?? 0;
       team.puHomologations = Math.max(0, (team.puHomologations ?? activePuDesigns) - activePuDesigns);
-      // 已经交付的旧版规格视为获批，并把历史次数转成祖父条款机会，避免出现已用次数大于总次数。
-      team.aduoUpgrades = Math.max(team.aduoUpgrades ?? 0, team.puHomologations);
+      // 已交付旧规格视为获批；旧基础机会转成祖父条款机会，进行中项目完成后仍可装车。
+      const legacyTotal = legacyBaseUpgrades + (team.aduoUpgrades ?? 0);
+      team.aduoUpgrades = Math.max(legacyTotal, team.puHomologations);
     } else team.puHomologations ??= 0;
     for (const parts of Object.values(team.parts)) {
       for (const spec of parts.specs) spec.homologated ??= true;

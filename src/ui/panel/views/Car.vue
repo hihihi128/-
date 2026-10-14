@@ -60,7 +60,7 @@ function orderPreview(s: StockView) {
     <div class="notice small">
       每台车独立装件。新研发的零件只有 1~2 件时，由你决定先给哪位车手——两台车差距达到 0.4 分以上时，吃亏的车手会在正赛前表达不满（自尊心越强越明显，若你已指定优先车手则影响减轻）。
       动力单元分成 ICE、涡轮、MGU-K、电池、控制电子和排气六类部件。每类部件都有独立性能、可靠性、磨损、库存、研发和配额；具体配额显示在部件旁，换回用过的旧件不会重复计数。
-      动力单元可以先研发和生产。未认证规格不能装车；获得 ADUO 机会后，首次装车会用 1 次机会认证当前整批待认证规格。
+      <span v-if="v.aduo.enabled">动力单元可以先研发和生产。未认证规格不能装车；获得 ADUO 机会后，首次装车会用 1 次机会认证当前整批待认证规格。</span>
       <span v-if="p.allocationGap >= 0.4" class="badge warn">当前两车差距 {{ p.allocationGap }} 分</span>
     </div>
 
@@ -99,7 +99,7 @@ function orderPreview(s: StockView) {
                 <td class="mono">{{ pt.rel.toFixed(0) }}</td>
                 <td>
                   <select :value="pt.specId" :disabled="!!locked || store.busy || options(car, pt.type).length < 2" @change="fit(car, pt.type, ($event.target as HTMLSelectElement).value)">
-                    <option v-for="o in options(car, pt.type)" :key="o.specId" :value="o.specId">
+                    <option v-for="o in options(car, pt.type)" :key="o.specId" :value="o.specId" :disabled="v.aduo.enabled && !o.homologated && v.aduo.upgradesLeft <= 0">
                       v{{ o.version }} {{ o.verified ? o.perf.toFixed(1) : '预估' + (o.expected ? o.expected.join('~') : '') }}{{ o.homologated ? '' : '（待 ADUO 认证）' }}{{ o.count ? `（库存 ${o.count}）` : '' }}
                     </option>
                   </select>
