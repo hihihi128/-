@@ -20,12 +20,21 @@ describe('旧存档升级', () => {
     team.id = 'mercedes';
     team.name = '梅赛德斯车队';
     team.staff.aeroChief.name = '梅赛德斯车队 aeroChief';
+    team.staff.raceEngineer.name = '自定义工程师';
+    team.staff.raceEngineer2.name = '比赛工程师（二号车）';
     team.staff.pitCrew.name = '梅赛德斯车队 pitCrew';
+    team.staff.strategist.name = '迈凯伦车队 strategist';
 
     migrateState(state);
 
     expect(state.teams.mercedes.staff.aeroChief.name).toBe('贾罗德·墨菲');
+    expect(state.teams.mercedes.staff.raceEngineer.name).toBe('自定义工程师');
+    expect(state.teams.mercedes.staff.raceEngineer2.name).toBe('彼得·博宁顿');
     expect(state.teams.mercedes.staff.pitCrew.name).toBe('梅赛德斯维修组');
+    expect(state.teams.mercedes.staff.strategist.name).toBe('迈凯伦车队 strategist');
+    const once = JSON.stringify(state.teams.mercedes.staff);
+    migrateState(state);
+    expect(JSON.stringify(state.teams.mercedes.staff)).toBe(once);
   });
 
   it('补齐旧随机事件的周配额、对话和个人好感度字段', () => {

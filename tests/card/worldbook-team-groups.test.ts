@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import YAML from 'yaml';
+import { DEFAULT_STAFF_NAMES } from '../../src/engine/migrate';
 
 const dir = path.resolve('src/card/worldbook');
 const strategyFiles = readdirSync(dir).filter(name => /^lore-strategy-.*\.md$/.test(name)).sort();
@@ -23,7 +24,7 @@ const slugs: Record<string, string> = {
   mercedes: 'mercedes', mclaren: 'mclaren', red_bull: 'red-bull', ferrari: 'ferrari', williams: 'williams',
   racing_bulls: 'racing-bulls', aston_martin: 'aston-martin', haas: 'haas', audi: 'audi', alpine: 'alpine', cadillac: 'cadillac',
 };
-const teamLoreSlugs = { ...slugs, red_bull: 'redbull' };
+const teamLoreSlugs: Record<string, string> = { ...slugs, red_bull: 'redbull' };
 const strategySections = ['负责人:', '决策风格:', '数据优势:', '风险偏好:', '沟通流程:', '常见失误与剧情触发:', '叙事指引:'];
 const staffSections = ['组成人员:', '技术分工:', '赛道执行:', '储备与后备:', '内部协作:', '玩家关系:', '叙事指引:'];
 const expectedReserves: Record<string, string[]> = {
@@ -81,6 +82,15 @@ describe('车队策略组与技术赛道核心组世界书', () => {
     for (const team of teams) {
       for (const [role, staff] of Object.entries(team.staff)) {
         expect(staff.name?.trim(), `${team.id}.${role}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('旧存档占位名迁移表与当前车队数据一致', () => {
+    for (const [teamId, names] of Object.entries(DEFAULT_STAFF_NAMES)) {
+      const team = teams.find(candidate => candidate.id === teamId)!;
+      for (const [role, name] of Object.entries(names)) {
+        expect(team.staff[role as keyof typeof team.staff].name, `${teamId}.${role}`).toBe(name);
       }
     }
   });

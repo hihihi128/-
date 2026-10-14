@@ -19,18 +19,18 @@ import { deepClone } from './util';
 /** 玩家可以自由增删条目的规则表：不能按默认值回填，否则会恢复被有意删除的零件 / 轮胎 */
 const OPEN_MAPS = new Set(['parts', 'tyres']);
 
-const DEFAULT_STAFF_NAMES: Record<string, Partial<Record<StaffRole, string>>> = {
-  mercedes: { aeroChief: '贾罗德·墨菲', pitCrew: '梅赛德斯维修组' },
-  mclaren: { pitCrew: '迈凯伦维修组' },
-  red_bull: { aeroChief: '恩里科·巴尔博', pitCrew: '红牛维修组' },
-  ferrari: { pitCrew: '法拉利维修组' },
-  williams: { aeroChief: '亚当·肯扬', pitCrew: '威廉姆斯维修组' },
-  racing_bulls: { aeroChief: '古鲁·乔尔', pitCrew: '小红牛维修组' },
-  aston_martin: { aeroChief: '焦阿基诺·维诺', pitCrew: '阿斯顿·马丁维修组' },
-  haas: { aeroChief: '戴维德·帕加内利', pitCrew: '哈斯维修组' },
-  audi: { aeroChief: '亚历山德罗·奇内利', pitCrew: '奥迪维修组' },
-  alpine: { aeroChief: '迈克尔·布罗德赫斯特', pitCrew: '阿尔派维修组' },
-  cadillac: { aeroChief: '乔恩·汤姆林森', pitCrew: '凯迪拉克维修组' },
+export const DEFAULT_STAFF_NAMES: Record<string, Partial<Record<StaffRole, string>>> = {
+  mercedes: { aeroChief: '贾罗德·墨菲', raceEngineer2: '彼得·博宁顿', pitCrew: '梅赛德斯维修组', strategist: '罗茜·韦特' },
+  mclaren: { raceEngineer2: '汤姆·斯托拉德', pitCrew: '迈凯伦维修组' },
+  red_bull: { aeroChief: '恩里科·巴尔博', raceEngineer2: '理查德·伍德', pitCrew: '红牛维修组' },
+  ferrari: { raceEngineer2: '布莱恩·博齐', pitCrew: '法拉利维修组' },
+  williams: { aeroChief: '亚当·肯扬', raceEngineer: '詹姆斯·厄文', raceEngineer2: '加埃唐·热戈', pitCrew: '威廉姆斯维修组', strategist: '夏尔-安托万·弗洛朗坦' },
+  racing_bulls: { aeroChief: '古鲁·乔尔', raceEngineer: '亚历山大·伊利奥普洛斯', raceEngineer2: '皮埃尔·哈梅林', pitCrew: '小红牛维修组', strategist: '马蒂厄·迪布瓦-卢卡' },
+  aston_martin: { aeroChief: '焦阿基诺·维诺', raceEngineer: '克里斯·克罗宁', raceEngineer2: '加里·甘农', pitCrew: '阿斯顿·马丁维修组', strategist: '彼得·霍尔' },
+  haas: { aeroChief: '戴维德·帕加内利', raceEngineer: '劳拉·穆勒', raceEngineer2: '罗南·奥黑尔', pitCrew: '哈斯维修组', strategist: '卡琳·克里德利希' },
+  audi: { aeroChief: '亚历山德罗·奇内利', raceEngineer: '史蒂文·佩特里克', raceEngineer2: '何塞·曼努埃尔·洛佩斯', pitCrew: '奥迪维修组', strategist: '里特维克·达南贾亚·雷迪' },
+  alpine: { aeroChief: '迈克尔·布罗德赫斯特', raceEngineer: '乔什·佩克特', raceEngineer2: '斯图尔特·巴洛', pitCrew: '阿尔派维修组', strategist: '奥里奥尔·伊塞恩' },
+  cadillac: { aeroChief: '乔恩·汤姆林森', raceEngineer: '约翰·霍华德', raceEngineer2: '卡洛·帕塞蒂', pitCrew: '凯迪拉克维修组', strategist: '亚历克斯·古迪纳夫' },
 };
 
 function replaceLegacyStaffPlaceholders(state: GameState): void {
@@ -39,7 +39,10 @@ function replaceLegacyStaffPlaceholders(state: GameState): void {
     if (!team) continue;
     for (const [role, name] of Object.entries(names) as Array<[StaffRole, string]>) {
       const staff = team.staff[role];
-      if (staff?.name === `${team.name} ${role}`) staff.name = name;
+      const placeholders = role === 'raceEngineer2'
+        ? [`${team.name} ${role}`, `${team.name}（二号车）`, `${team.name} raceEngineer（二号车）`, '比赛工程师（二号车）']
+        : [`${team.name} ${role}`];
+      if (staff && placeholders.includes(staff.name)) staff.name = name;
     }
   }
 }
