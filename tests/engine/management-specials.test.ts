@@ -169,7 +169,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     expect(delayed.narration.at(-1)?.title).toContain('延长');
   });
 
-  it('每周建立 3–4 个事件配额，并允许依次触发多个事件', () => {
+  it('每周最多建立一个事件，并在处理后拒绝同周第二个事件', () => {
     const state = game('haas');
     state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 4, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 3 };
     const before = state.teams.haas.cars.map(car => state.drivers[car.driverId!].fitness);
@@ -179,8 +179,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     expect(state.randomEvents?.current?.kind).toBe('driver_injury');
     expect(state.randomEvents?.current?.status).toBe('pending_generation');
     expect(state.randomEvents?.history).toHaveLength(1);
-    expect(state.randomEvents?.weeklyQuota).toBeGreaterThanOrEqual(3);
-    expect(state.randomEvents?.weeklyQuota).toBeLessThanOrEqual(4);
+    expect(state.randomEvents?.weeklyQuota).toBe(1);
     expect(state.randomEvents?.current?.totalDialogueTurns).toBeGreaterThanOrEqual(2);
     expect(state.randomEvents?.current?.totalDialogueTurns).toBeLessThanOrEqual(3);
     expect(state.teams.haas.cars.map(car => state.drivers[car.driverId!].fitness)).toEqual(before);
@@ -190,7 +189,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
     setRandomEventContent(state, event.id, { title: event.title, prompt: event.prompt, answerOptions: ['处理', '跳过'] });
     applyRandomEventResolution(state, event.id, 'resolved', '问题已处理。', []);
     triggerNextWeeklyRandomEvent(state, rng);
-    expect(state.randomEvents?.history).toHaveLength(2);
+    expect(state.randomEvents?.history).toHaveLength(1);
   });
 
   it('日常事件只允许一次 0.05–0.1 的个人好感度变化', () => {

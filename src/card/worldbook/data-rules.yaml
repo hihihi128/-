@@ -199,9 +199,9 @@ rules:
   #   startSuccessionReadiness: 25
   #   successionThreshold: 55
   #   dismissVowlesConfidence: 20
-  # randomEvents:              # 每周 3–4 次；约 80% 是日常小事；每次持续 2–3 轮对话
-  #   minPerWeek: 3
-  #   maxPerWeek: 4
+  # randomEvents:              # 每周最多 1 次；约 80% 是日常小事；每次持续 2–3 轮对话
+  #   minPerWeek: 1
+  #   maxPerWeek: 1
   #   routineWeight: 80
   #   noneWeight: 0            # 仅保留旧存档兼容
   #   driverInjuryWeight: 7
@@ -209,4 +209,4 @@ rules:
   #   partIssueWeight: 7
   #   minDialogueTurns: 2
   #   maxDialogueTurns: 3
-  # 若要关闭随机事件，请同时把 minPerWeek 与 maxPerWeek 设为 0。
+  # 随机事件每周最多一次。若要关闭，请同时把 minPerWeek 与 maxPerWeek 设为 0。

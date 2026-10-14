@@ -339,8 +339,8 @@ export const DEFAULT_RULES: Rules = {
     dismissVowlesConfidence: 20,
   },
   randomEvents: {
-    minPerWeek: 3,
-    maxPerWeek: 4,
+    minPerWeek: 1,
+    maxPerWeek: 1,
     routineWeight: 80,
     noneWeight: 0,
     driverInjuryWeight: 7,

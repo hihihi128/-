@@ -51,7 +51,7 @@ describe('旧存档升级', () => {
 
   it('补齐旧随机事件的周配额、对话和个人好感度字段', () => {
     const state = migrateState(legacyWeeklyEventState());
-    expect(state.rules.randomEvents).toMatchObject({ minPerWeek: 3, maxPerWeek: 4, routineWeight: 192, minDialogueTurns: 2, maxDialogueTurns: 3 });
+    expect(state.rules.randomEvents).toMatchObject({ minPerWeek: 1, maxPerWeek: 1, routineWeight: 192, minDialogueTurns: 2, maxDialogueTurns: 3 });
     expect(state.randomEvents?.current).toMatchObject({ category: 'problem', totalDialogueTurns: 2, completedDialogueTurns: 0, dialogue: [] });
     expect(state.randomEvents?.history[0]).toMatchObject({ totalDialogueTurns: 1, completedDialogueTurns: 1 });
     expect(Object.values(state.drivers).every(driver => driver.affinity === 50)).toBe(true);

@@ -77,16 +77,18 @@ function fallbackContent(state: GameState, kind: RandomEventKind, rng: Rng): Ran
   };
 }
 
-export function beginRandomEventWeek(state: GameState, rng: Rng): void {
+export function beginRandomEventWeek(state: GameState, _rng: Rng): void {
   const key = `${state.season.number}-w${state.season.week}-r${state.season.roundIndex}`;
   state.randomEvents ??= { lastRoundKey: null, weekKey: null, weeklyQuota: 0, weeklyStarted: 0, current: null, history: [] };
-  if (state.randomEvents.weekKey === key) return;
+  const weeklyQuota = state.rules.randomEvents.maxPerWeek === 0 ? 0 : 1;
+  if (state.randomEvents.weekKey === key) {
+    state.randomEvents.weeklyQuota = weeklyQuota;
+    return;
+  }
   closeUnansweredRandomEvent(state, '本周结束前没有完成该事件，因此没有产生额外效果。');
   state.randomEvents.weekKey = key;
   state.randomEvents.lastRoundKey = key;
-  const configuredMin = Math.max(0, state.rules.randomEvents.minPerWeek ?? 3);
-  const configuredMax = Math.max(0, state.rules.randomEvents.maxPerWeek ?? 4);
-  state.randomEvents.weeklyQuota = configuredMax === 0 ? 0 : rng.int(Math.min(configuredMin, configuredMax), Math.max(configuredMin, configuredMax));
+  state.randomEvents.weeklyQuota = weeklyQuota;
   state.randomEvents.weeklyStarted = 0;
   state.randomEvents.current = null;
 }

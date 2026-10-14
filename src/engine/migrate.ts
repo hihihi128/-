@@ -196,6 +196,7 @@ export function migrateState(state: GameState): GameState {
   const hadRoutineEventWeight = legacyRandomRules?.routineWeight !== undefined;
   const legacyEventsDisabled = !!legacyRandomRules && legacyRandomRules.routineWeight === undefined
     && legacyRandomRules.driverInjuryWeight === 0 && legacyRandomRules.windTunnelWeight === 0 && legacyRandomRules.partIssueWeight === 0;
+  const configuredEventsDisabled = legacyRandomRules?.minPerWeek === 0 && legacyRandomRules?.maxPerWeek === 0;
   for (let index = 0; index < state.randomEvents.history.length; index++) {
     const record = state.randomEvents.history[index];
     record.id ??= `legacy-random-event-${record.roundKey}-${index}`;
@@ -268,7 +269,7 @@ export function migrateState(state: GameState): GameState {
   fillMissing(state.rules.haas as unknown as Record<string, unknown>, DEFAULT_RULES.haas as unknown as Record<string, unknown>);
   fillMissing(state.rules.williams as unknown as Record<string, unknown>, DEFAULT_RULES.williams as unknown as Record<string, unknown>);
   fillMissing(state.rules.randomEvents as unknown as Record<string, unknown>, DEFAULT_RULES.randomEvents as unknown as Record<string, unknown>);
-  if (legacyEventsDisabled) {
+  if (legacyEventsDisabled || configuredEventsDisabled) {
     state.rules.randomEvents.routineWeight = 0;
     state.rules.randomEvents.minPerWeek = 0;
     state.rules.randomEvents.maxPerWeek = 0;
@@ -276,6 +277,13 @@ export function migrateState(state: GameState): GameState {
     const randomRules = state.rules.randomEvents;
     const problemWeight = randomRules.driverInjuryWeight + randomRules.windTunnelWeight + randomRules.partIssueWeight;
     randomRules.routineWeight = problemWeight > 0 ? problemWeight * 4 : 80;
+  }
+  if (!legacyEventsDisabled && !configuredEventsDisabled) {
+    state.rules.randomEvents.minPerWeek = 1;
+    state.rules.randomEvents.maxPerWeek = 1;
+  }
+  if (state.randomEvents.weekKey !== null) {
+    state.randomEvents.weeklyQuota = state.rules.randomEvents.maxPerWeek === 0 ? 0 : 1;
   }
   // Market rules are a closed map, unlike parts/tyres. Modern saves take the
   // puAllocation fast path below, so fill this before that return.
