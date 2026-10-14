@@ -11,9 +11,9 @@ import { addNews, driverName } from './log';
 import type { CarState, DriverState, GameState, PartType, PowerUnitPartType } from './types';
 import { addGridPenalty } from './weekend';
 
-export const PU_PART_TYPES: PowerUnitPartType[] = ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust'];
-export const PU_COMBUSTION_PARTS: PowerUnitPartType[] = ['ice', 'turbocharger', 'exhaust'];
-export const PU_ELECTRICAL_PARTS: PowerUnitPartType[] = ['mgu_k', 'energy_store', 'control_electronics'];
+export const PU_PART_TYPES: readonly PowerUnitPartType[] = ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust'];
+export const PU_COMBUSTION_PARTS: readonly PowerUnitPartType[] = ['ice', 'turbocharger', 'exhaust'];
+export const PU_ELECTRICAL_PARTS: readonly PowerUnitPartType[] = ['mgu_k', 'energy_store', 'control_electronics'];
 
 export function isPowerUnitPart(type: PartType): type is PowerUnitPartType {
   return PU_PART_TYPES.includes(type as PowerUnitPartType);

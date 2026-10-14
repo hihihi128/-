@@ -21,7 +21,8 @@
 #                   每项可写 {name, skill(1~100), salary(年薪 M$)}，也可只写一个数字表示 skill
 #   carBase         未单独填写的零件默认 {perf 性能, rel 可靠性}
 #   parts           各零件初始 {perf, rel}，键为零件类型：
-#                   power_unit 内燃机 / ers 能量回收系统（2026：MGU-K 350kW，取消 MGU-H）/
+#                   ice 内燃机 / turbocharger 涡轮 / mgu_k 动能回收电机 / energy_store 储能系统 /
+#                   control_electronics 控制电子 / exhaust 排气系统（2026：取消 MGU-H）/
 #                   gearbox 变速箱 / chassis 底盘 / front_wing 前翼（主动空力）/
 #                   rear_wing 尾翼（主动空力）/ floor 底板 / sidepods 侧箱 / suspension 悬挂
 #   description     车队简介（会显示在面板上）

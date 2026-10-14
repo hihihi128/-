@@ -27,10 +27,18 @@ const LEGACY_PU_MAP = {
 /** 把旧版两组动力单元无损拆成六类部件。 */
 function migrateSixPartPowerUnit(state: GameState): void {
   const allocation = state.rules.puAllocation;
-  if (!allocation || (allocation.ice && !allocation.power_unit && !allocation.ers && !state.rules.parts.power_unit && !state.rules.parts.ers)) return;
+  if (!allocation) return;
+  const hasLegacy = !!(
+    allocation.power_unit || allocation.ers || state.rules.parts.power_unit || state.rules.parts.ers
+    || Object.values(state.teams).some(team => team.parts.power_unit || team.parts.ers
+      || team.cars.some(car => car.fitted.power_unit || car.fitted.ers))
+    || Object.values(state.drivers ?? {}).some(driver => driver.puUsed?.power_unit || driver.puUsed?.ers || driver.puPool?.power_unit || driver.puPool?.ers)
+  );
+  if (!hasLegacy) return;
   for (const type of PU_PART_TYPES) state.rules.parts[type] ??= deepClone(DEFAULT_RULES.parts[type]);
-  for (const targets of Object.values(LEGACY_PU_MAP)) {
-    for (const type of targets) allocation[type] ??= DEFAULT_RULES.puAllocation[type];
+  for (const [legacy, targets] of Object.entries(LEGACY_PU_MAP)) {
+    const legacyLimit = allocation[legacy] ?? DEFAULT_RULES.puAllocation[targets[0]];
+    for (const type of targets) allocation[type] ??= legacyLimit;
   }
   delete allocation.power_unit;
   delete allocation.ers;
@@ -62,8 +70,11 @@ function migrateSixPartPowerUnit(state: GameState): void {
         if (car.puWearPool) delete (car.puWearPool as Record<string, unknown>)[legacy];
       }
       delete team.parts[legacy];
-      for (const project of team.projects) if (project.partType === legacy) project.partType = targets[0];
     }
+    team.projects = team.projects.flatMap(project => {
+      const targets = LEGACY_PU_MAP[project.partType as keyof typeof LEGACY_PU_MAP];
+      return targets ? targets.map(type => ({ ...deepClone(project), id: `${project.id}-${type}`, partType: type })) : [project];
+    });
   }
   for (const driver of Object.values(state.drivers ?? {})) {
     for (const [legacy, targets] of Object.entries(LEGACY_PU_MAP)) {
@@ -76,6 +87,15 @@ function migrateSixPartPowerUnit(state: GameState): void {
       if (driver.puUsed) delete driver.puUsed[legacy];
       if (driver.puPool) delete driver.puPool[legacy];
     }
+  }
+  if (state.alpine?.penalizedPowerSpecs) {
+    const migrated: typeof state.alpine.penalizedPowerSpecs = {};
+    for (const entry of Object.values(state.alpine.penalizedPowerSpecs)) {
+      const targets = LEGACY_PU_MAP[entry.partType as keyof typeof LEGACY_PU_MAP];
+      if (!targets) migrated[`${entry.partType}:${entry.specId}`] = entry;
+      else for (const type of targets) migrated[`${type}:${entry.specId}`] = { ...entry, partType: type };
+    }
+    state.alpine.penalizedPowerSpecs = migrated;
   }
 }
 

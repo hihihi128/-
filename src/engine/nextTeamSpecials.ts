@@ -1,6 +1,5 @@
 import { addNarration, addNews, playerTeam } from './log';
-import { recordPuFit, resetPuUsage } from './powerunit';
-import { PU_PART_TYPES } from './powerunit';
+import { PU_PART_TYPES, recordPuFit, resetPuUsage } from './powerunit';
 import { Rng } from './rng';
 import { ensureDriverWeekendTyres } from './tyres';
 import type { FiaMeetingIssue, GameState, LiveRaceState, TeamState } from './types';
@@ -21,11 +20,12 @@ export function initNextTeamSpecials(state: GameState, team: TeamState): void {
   state.fiaMeeting = { politicalCapital: state.rules.fiaMeeting.startPoliticalCapital, completed: 0, current: null, log: [] };
 }
 
-function buffCurrentParts(team: TeamState, partTypes: string[], gain: number): void {
+function buffCurrentParts(team: TeamState, partTypes: readonly string[], gain: number): void {
   const touched = new Set<string>();
   for (const car of team.cars) for (const partType of partTypes) {
     const spec = team.parts[partType]?.specs.find(value => value.id === car.fitted[partType]);
-    if (spec && !touched.has(spec.id)) { spec.perf = round1(spec.perf + gain); touched.add(spec.id); }
+    const key = `${partType}:${spec?.id ?? ''}`;
+    if (spec && !touched.has(key)) { spec.perf = round1(spec.perf + gain); touched.add(key); }
   }
 }
 

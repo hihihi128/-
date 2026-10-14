@@ -58,7 +58,7 @@ function orderPreview(s: StockView) {
     <div v-if="locked" class="notice warn small">🔒 {{ locked }}</div>
     <div class="notice small">
       每台车独立装件。新研发的零件只有 1~2 件时，由你决定先给哪位车手——两台车差距达到 0.4 分以上时，吃亏的车手会在正赛前表达不满（自尊心越强越明显，若你已指定优先车手则影响减轻）。
-      动力单元六类部件分别按车手限量：ICE、涡轮和排气各 3 件，MGU-K、电池和控制电子各 2 件。每类部件都有独立性能、可靠性、磨损、库存、研发和超额罚退；换回用过的旧件不会重复占用配额。
+      动力单元分成 ICE、涡轮、MGU-K、电池、控制电子和排气六类部件。每类部件都有独立性能、可靠性、磨损、库存、研发和配额；具体配额显示在部件旁，换回用过的旧件不会重复计数。
       <span v-if="p.allocationGap >= 0.4" class="badge warn">当前两车差距 {{ p.allocationGap }} 分</span>
     </div>
 

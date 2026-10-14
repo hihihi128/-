@@ -59,12 +59,12 @@ rules:
   # boostAttack: 0.12         # 「进攻」驾驶模式（Boost 按钮）进攻时的额外优势
   # boostDefence: 0.1         # 前车同样处于「进攻」模式时可抵消的优势
   # puAllocation:             # 每位车手每赛季可用的动力单元元件数（超出罚退）
-  #   ice: 3                  # 内燃机
-  #   turbocharger: 3         # 涡轮增压器
-  #   mgu_k: 2                # 动能回收电机
-  #   energy_store: 2         # 储能系统
-  #   control_electronics: 2  # 控制电子
-  #   exhaust: 3              # 排气系统总成
+  #   ice: 4                  # 内燃机
+  #   turbocharger: 4         # 涡轮增压器
+  #   mgu_k: 3                # 动能回收电机
+  #   energy_store: 3         # 储能系统
+  #   control_electronics: 3  # 控制电子
+  #   exhaust: 4              # 排气系统总成
   # puPenaltyFirst: 10        # 第一次超出配额罚退位数
   # puPenaltyNext: 5          # 之后每次超出罚退位数
   # aduo:                     # ADUO 动力单元追赶机制（车队数据中 worksTeam 标记厂商车队）
@@ -158,7 +158,7 @@ rules:
   #   aduoPressureGain: 28
   #   mediationGain: 20
   #   neweyProgressGain: 25
-  #   aduoPuBuff: 8
+  #   aduoPuBuff: 4.2
   #   chassisBuff: 2
   # racingBulls:
   #   recallChance: 0.05

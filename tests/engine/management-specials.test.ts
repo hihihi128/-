@@ -3,6 +3,7 @@ import { dispatch } from '../../src/engine/actions';
 import { supplyCustomers } from '../../src/engine/aduo';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
+import { migrateState } from '../../src/engine/migrate';
 import { afterManagementRace, applyAlpinePuPenalty, completeAlpineDriverExit, completeWilliamsHandover } from '../../src/engine/managementSpecials';
 import { applyRandomEventResolution, beginRandomEventWeek, setRandomEventContent, triggerNextWeeklyRandomEvent, triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
 import { Rng } from '../../src/engine/rng';
@@ -23,6 +24,35 @@ function run(state: GameState, action: Action) {
 }
 
 describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
+  it('旧阿尔派存档把两组动力单元惩罚迁移到六类部件', () => {
+    const state = game('alpine');
+    const team = state.teams.alpine;
+    const icePenalty = Object.values(state.alpine!.penalizedPowerSpecs).find(value => value.partType === 'ice')!;
+    const mguPenalty = Object.values(state.alpine!.penalizedPowerSpecs).find(value => value.partType === 'mgu_k')!;
+    team.parts.power_unit = team.parts.ice;
+    team.parts.ers = team.parts.mgu_k;
+    state.rules.parts.power_unit = state.rules.parts.ice;
+    state.rules.parts.ers = state.rules.parts.mgu_k;
+    state.rules.puAllocation = { power_unit: 4, ers: 3 };
+    for (const car of team.cars) {
+      car.fitted.power_unit = car.fitted.ice;
+      car.fitted.ers = car.fitted.mgu_k;
+    }
+    for (const type of ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust']) {
+      delete team.parts[type];
+      for (const car of team.cars) delete car.fitted[type];
+    }
+    state.alpine!.penalizedPowerSpecs = {
+      [`power_unit:${icePenalty.specId}`]: { ...icePenalty, partType: 'power_unit' },
+      [`ers:${mguPenalty.specId}`]: { ...mguPenalty, partType: 'ers' },
+    };
+    migrateState(state);
+    expect(Object.keys(state.alpine!.penalizedPowerSpecs)).toHaveLength(6);
+    expect(state.alpine!.penalizedPowerSpecs).not.toHaveProperty(`power_unit:${icePenalty.specId}`);
+    expect(state.alpine!.penalizedPowerSpecs).toHaveProperty(`turbocharger:${icePenalty.specId}`);
+    expect(state.alpine!.penalizedPowerSpecs).toHaveProperty(`control_electronics:${mguPenalty.specId}`);
+  });
+
   it('按车队初始化特殊状态并公开到视图', () => {
     const alpine = game('alpine');
     expect(alpine.alpine).toMatchObject({ puIntegration: 20, integrationPenaltyActive: true, gaslyLeaving: false });

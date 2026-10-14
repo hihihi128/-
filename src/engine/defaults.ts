@@ -49,7 +49,7 @@ export const DEFAULT_RULES: Rules = {
       baseWeeks: 8,
       aeroHours: 0,
       unitCost: 0.75,
-      crashDamage: 0.02,
+      crashDamage: 0.007,
     },
     turbocharger: {
       name: '涡轮增压器（TC）',
@@ -61,7 +61,7 @@ export const DEFAULT_RULES: Rules = {
       baseWeeks: 7,
       aeroHours: 0,
       unitCost: 0.45,
-      crashDamage: 0.02,
+      crashDamage: 0.007,
     },
     mgu_k: {
       name: '动能回收电机（MGU-K）',
@@ -73,7 +73,7 @@ export const DEFAULT_RULES: Rules = {
       baseWeeks: 7,
       aeroHours: 0,
       unitCost: 0.55,
-      crashDamage: 0.04,
+      crashDamage: 0.014,
     },
     energy_store: {
       name: '储能系统（ES）',
@@ -85,7 +85,7 @@ export const DEFAULT_RULES: Rules = {
       baseWeeks: 6,
       aeroHours: 0,
       unitCost: 0.45,
-      crashDamage: 0.04,
+      crashDamage: 0.014,
     },
     control_electronics: {
       name: '控制电子（CE）',
@@ -97,7 +97,7 @@ export const DEFAULT_RULES: Rules = {
       baseWeeks: 5,
       aeroHours: 0,
       unitCost: 0.3,
-      crashDamage: 0.04,
+      crashDamage: 0.013,
     },
     exhaust: {
       name: '排气系统（EXH）',
@@ -109,7 +109,7 @@ export const DEFAULT_RULES: Rules = {
       baseWeeks: 4,
       aeroHours: 0,
       unitCost: 0.2,
-      crashDamage: 0.03,
+      crashDamage: 0.006,
     },
     gearbox: {
       name: '变速箱',
@@ -233,7 +233,7 @@ export const DEFAULT_RULES: Rules = {
   overtakeModeBonus: 0.3,
   boostAttack: 0.12,
   boostDefence: 0.1,
-  puAllocation: { ice: 3, turbocharger: 3, mgu_k: 2, energy_store: 2, control_electronics: 2, exhaust: 3 },
+  puAllocation: { ice: 4, turbocharger: 4, mgu_k: 3, energy_store: 3, control_electronics: 3, exhaust: 4 },
   puPenaltyFirst: 10,
   puPenaltyNext: 5,
   aduo: {
@@ -298,7 +298,7 @@ export const DEFAULT_RULES: Rules = {
     aduoPressureGain: 28,
     mediationGain: 20,
     neweyProgressGain: 25,
-    aduoPuBuff: 8,
+    aduoPuBuff: 4.2,
     chassisBuff: 2,
   },
   racingBulls: { recallChance: 0.05 },

@@ -47,24 +47,24 @@ describe('2026 规则', () => {
     expect(s.drivers.c1.puUsed).toEqual({ ice: 1, turbocharger: 1, mgu_k: 1, energy_store: 1, control_electronics: 1, exhaust: 1 });
   });
 
-  it('动力单元配额：第 4 台内燃机罚退 10 位，之后每台罚退 5 位，换回旧件不计数', () => {
+  it('动力单元配额：第 5 台内燃机罚退 10 位，之后每台罚退 5 位，换回旧件不计数', () => {
     const s = advanceUntil(newTestGame(12), x => x.season.phase === 'practice');
-    for (const spec of ['pu2', 'pu3']) expect(recordPuFit(s, 'c1', 'ice', spec)).toBe('');
-    expect(s.drivers.c1.puUsed!.ice).toBe(3);
+    for (const spec of ['pu2', 'pu3', 'pu4']) expect(recordPuFit(s, 'c1', 'ice', spec)).toBe('');
+    expect(s.drivers.c1.puUsed!.ice).toBe(4);
     // 换回已经用过的规格：不计数
     expect(recordPuFit(s, 'c1', 'ice', 'pu2')).toBe('');
-    expect(s.drivers.c1.puUsed!.ice).toBe(3);
-    expect(recordPuFit(s, 'c1', 'ice', 'pu4')).toContain('罚退 10 位');
+    expect(s.drivers.c1.puUsed!.ice).toBe(4);
+    expect(recordPuFit(s, 'c1', 'ice', 'pu5')).toContain('罚退 10 位');
     expect(s.weekend!.penalties.c1).toBe(10);
-    expect(recordPuFit(s, 'c1', 'ice', 'pu5')).toContain('罚退 5 位');
+    expect(recordPuFit(s, 'c1', 'ice', 'pu6')).toContain('罚退 5 位');
     expect(s.weekend!.penalties.c1).toBe(15);
     // 事故后换上的新件（同规格）也计数
-    expect(recordPuFit(s, 'c1', 'ice', 'pu5', { fresh: true, replaced: 'pu5' })).toContain('罚退 5 位');
+    expect(recordPuFit(s, 'c1', 'ice', 'pu6', { fresh: true, replaced: 'pu6' })).toContain('罚退 5 位');
     // 不计配额的零件
     expect(recordPuFit(s, 'c1', 'floor', 'x')).toBe('');
     expect(s.news.some(n => n.tag === '罚退')).toBe(true);
     const pu = buildView(s).drivers.find(d => d.id === 'c1')!.pu;
-    expect(pu.find(p => p.type === 'ice')).toMatchObject({ used: 6, limit: 3 });
+    expect(pu.find(p => p.type === 'ice')).toMatchObject({ used: 7, limit: 4 });
   });
 
   it('旧存档缺少动力单元计数时，第一次装件从第一件开始计算', () => {
@@ -106,7 +106,7 @@ describe('2026 规则', () => {
 
   it('排位后的配额罚退留到下一站', () => {
     const s = advanceUntil(newTestGame(12), x => x.season.phase === 'post_race');
-    s.drivers.c2.puUsed!.mgu_k = 2;
+    s.drivers.c2.puUsed!.mgu_k = 3;
     expect(recordPuFit(s, 'c2', 'mgu_k', 'ersX')).toContain('下一站生效');
     expect(JSON.parse(String(s.flags.pendingPenalties)).c2).toBe(10);
   });

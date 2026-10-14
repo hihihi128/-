@@ -77,7 +77,7 @@ describe('旧存档升级', () => {
     const raw = legacy();
     expect(raw.rules.puAllocation).toBeUndefined();
     const s = migrateState(raw);
-    expect(s.rules.puAllocation).toEqual({ ice: 3, turbocharger: 3, mgu_k: 2, energy_store: 2, control_electronics: 2, exhaust: 3 });
+    expect(s.rules.puAllocation).toEqual({ ice: 4, turbocharger: 4, mgu_k: 3, energy_store: 3, control_electronics: 3, exhaust: 4 });
     expect(s.rules.qualiFinalists).toBe(10);
     expect(s.rules.ferrari.minMedia).toBe(20);
     expect(s.ferrari).toBeNull();
@@ -98,7 +98,7 @@ describe('旧存档升级', () => {
     const targets = ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust'];
     state.rules.parts.power_unit = state.rules.parts.ice;
     state.rules.parts.ers = state.rules.parts.mgu_k;
-    state.rules.puAllocation = { power_unit: 4, ers: 3 };
+    state.rules.puAllocation = { power_unit: 5, ers: 4 };
     state.rules.aduo.parts = ['power_unit', 'ers'];
     state.rules.aduo.measurePart = 'power_unit';
     for (const team of Object.values(state.teams)) {
@@ -120,7 +120,7 @@ describe('旧存档升级', () => {
     state.drivers.c1.puPool = { power_unit: ['a', 'b', 'c'], ers: ['d', 'e'] };
 
     migrateState(state);
-    expect(state.rules.puAllocation).toEqual({ ice: 3, turbocharger: 3, exhaust: 3, mgu_k: 2, energy_store: 2, control_electronics: 2 });
+    expect(state.rules.puAllocation).toEqual({ ice: 5, turbocharger: 5, exhaust: 5, mgu_k: 4, energy_store: 4, control_electronics: 4 });
     expect(state.rules.parts.power_unit).toBeUndefined();
     expect(state.teams.team_c.parts.power_unit).toBeUndefined();
     expect(state.drivers.c1.puUsed).toMatchObject({ ice: 3, turbocharger: 3, exhaust: 3, mgu_k: 2, energy_store: 2, control_electronics: 2 });
@@ -130,6 +130,20 @@ describe('旧存档升级', () => {
     const once = JSON.stringify(state);
     migrateState(state);
     expect(JSON.stringify(state)).toBe(once);
+  });
+
+  it('现代存档有意删除 ICE 时不把它误判成旧动力单元存档', () => {
+    const state = newTestGame(10);
+    delete state.rules.parts.ice;
+    delete state.rules.puAllocation.ice;
+    for (const team of Object.values(state.teams)) {
+      delete team.parts.ice;
+      for (const car of team.cars) delete car.fitted.ice;
+    }
+    migrateState(state);
+    expect(state.rules.parts.ice).toBeUndefined();
+    expect(state.rules.puAllocation.ice).toBeUndefined();
+    expect(state.teams.team_c.parts.ice).toBeUndefined();
   });
 
   it('不恢复玩家有意删除的零件和轮胎', () => {
