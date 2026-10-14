@@ -108,6 +108,51 @@ describe('特殊动作补充叙述', () => {
     expect(ctrl.stateAt()!.teams.mclaren.funds).toBe(funds);
   });
 
+  it('retry 的 U+2 完成后 swipe 仍从用户楼继承仅叙述标记', async () => {
+    const funds = ctrl.stateAt()!.teams.mclaren.funds;
+    const applied = await ctrl.executeSpecialAction({
+      requestId: 'u2-swipe', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '说明选择。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    await env.aiReplies('');
+    await ctrl.retrySpecialActionNarration({ requestId: 'u2-swipe', expectedRevisionId: applied.actionRevisionId! });
+    const retryReply = await env.aiReplies('重试完成。');
+    await env.swipeNew('重试后的 swipe。' + update('{"op":"funds","delta":99,"reason":"swipe 越权"}'));
+    expect(retryReply).toBe(3);
+    expect(env.getMessageVars(retryReply)[SPECIAL_ACTION_NARRATION_VAR]).toMatchObject({ requestId: 'u2-swipe' });
+    expect(ctrl.stateAt()!.teams.mclaren.funds).toBe(funds);
+    expect(env.generated).toHaveLength(0);
+  });
+
+  it('retry 的 U+2 后重生成连续助手楼仍继承仅叙述标记', async () => {
+    const funds = ctrl.stateAt()!.teams.mclaren.funds;
+    const applied = await ctrl.executeSpecialAction({
+      requestId: 'u2-regenerate', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '说明选择。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    await env.aiReplies('');
+    await ctrl.retrySpecialActionNarration({ requestId: 'u2-regenerate', expectedRevisionId: applied.actionRevisionId! });
+    await env.aiReplies('重试完成。');
+    const regenerated = await env.aiReplies('重生成内容。' + update('{"op":"funds","delta":99,"reason":"重生成越权"}'), 'regenerate');
+    expect(regenerated).toBe(4);
+    expect(env.getMessageVars(regenerated)[SPECIAL_ACTION_NARRATION_VAR]).toMatchObject({ requestId: 'u2-regenerate' });
+    expect(ctrl.stateAt()!.teams.mclaren.funds).toBe(funds);
+    expect(env.generated).toHaveLength(0);
+  });
+
+  it('retry 的 U+2 STOPPED 后 ENDED 仍隔离含命令的 partial 文本', async () => {
+    const funds = ctrl.stateAt()!.teams.mclaren.funds;
+    const applied = await ctrl.executeSpecialAction({
+      requestId: 'u2-stopped', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '说明选择。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    await env.aiReplies('');
+    await ctrl.retrySpecialActionNarration({ requestId: 'u2-stopped', expectedRevisionId: applied.actionRevisionId! });
+    env.messages.push({ role: 'assistant', swipes: ['partial' + update('{"op":"funds","delta":99,"reason":"停止后越权"}')], swipe_id: 0, variables: [{}] });
+    ctrl.onGenerationStopped();
+    await ctrl.onGenerationEnded();
+    expect(env.getMessageVars(3)[SPECIAL_ACTION_NARRATION_VAR]).toMatchObject({ requestId: 'u2-stopped' });
+    expect(ctrl.stateAt()!.teams.mclaren.funds).toBe(funds);
+    expect(env.generated).toHaveLength(0);
+  });
+
   it('创建消息失败后保留真实动作结果，错误 revision 不会销毁可重试回执', async () => {
     const originalCreate = env.createUserMessage.bind(env);
     let first = true;

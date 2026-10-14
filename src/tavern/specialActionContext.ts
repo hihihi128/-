@@ -31,7 +31,7 @@ export function validateSpecialActionRequest(request: unknown): { ok: true; requ
   if (typeof expectedRevisionId !== 'string' || !expectedRevisionId) return { ok: false, message: '存档版本标识无效' };
   if (typeof contextText !== 'string') return { ok: false, message: '补充内容必须是文本' };
   const trimmed = contextText.trim();
-  if (trimmed.length > SPECIAL_ACTION_CONTEXT_LIMIT) return { ok: false, message: `补充内容不能超过 ${SPECIAL_ACTION_CONTEXT_LIMIT} 个字符` };
+  if (trimmed.length > SPECIAL_ACTION_CONTEXT_LIMIT) return { ok: false, message: `补充内容不能超过 ${SPECIAL_ACTION_CONTEXT_LIMIT} 个字符。` };
   const parsed = validateSpecialAction(action);
   return parsed.ok ? { ok: true, requestId, action: parsed.action, contextText: trimmed, expectedRevisionId } : parsed;
 }

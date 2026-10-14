@@ -104,7 +104,7 @@ async function execute(): Promise<void> {
   }
   if (isOverLimit.value) {
     state.value = 'action_error';
-    message.value = '补充内容不能超过 1000 字符。';
+    message.value = '补充内容不能超过 1000 个字符。';
     return;
   }
   const backend = getApi();

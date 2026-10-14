@@ -2063,18 +2063,22 @@ export class F1Controller {
   }
 
   private isSpecialActionNarrationMessage(id: number): boolean {
+    const marker = this.specialActionNarrationMarkerForAssistant(id);
+    if (!marker) return false;
     const own = this.env.getMessageVars(id)[SPECIAL_ACTION_NARRATION_VAR];
-    const previous = id > 0 ? this.env.getMessageVars(id - 1)[SPECIAL_ACTION_NARRATION_VAR] : undefined;
-    const marker = isSpecialActionNarrationMarker(own)
-      ? own
-      : isSpecialActionNarrationMarker(previous) && this.env.getMessage(id - 1)?.role === 'user' ? previous : null;
-    const receipt = this.specialActionReceipt;
-    const boundMarker = !marker && receipt?.narrationStatus === 'pending' && receipt.expectedReplyFloor === id && this.specialActionCurrent(receipt)
-      ? this.specialActionMarker(receipt) : null;
-    const effectiveMarker = marker ?? boundMarker;
-    if (!effectiveMarker || this.env.getMessage(id)?.role !== 'assistant') return false;
-    if (!isSpecialActionNarrationMarker(own)) this.store.patchFloorVars(id, { [SPECIAL_ACTION_NARRATION_VAR]: effectiveMarker });
+    if (!isSpecialActionNarrationMarker(own)) this.store.patchFloorVars(id, { [SPECIAL_ACTION_NARRATION_VAR]: marker });
     return true;
+  }
+
+  private specialActionNarrationMarkerForAssistant(id: number): SpecialActionNarrationMarker | null {
+    if (this.env.getMessage(id)?.role !== 'assistant') return null;
+    let userFloor = id - 1;
+    while (userFloor >= 0 && this.env.getMessage(userFloor)?.role === 'assistant') userFloor--;
+    if (userFloor < 0 || this.env.getMessage(userFloor)?.role !== 'user') return null;
+    const marker = this.env.getMessageVars(userFloor)[SPECIAL_ACTION_NARRATION_VAR];
+    if (!isSpecialActionNarrationMarker(marker)) return null;
+    const resolved = this.store.resolve(userFloor);
+    return resolved?.state.gameId === marker.gameId && resolved.rev.id === marker.actionRevisionId ? marker : null;
   }
 
   private finishSpecialActionNarration(id: number, visibleReply: string): void {
