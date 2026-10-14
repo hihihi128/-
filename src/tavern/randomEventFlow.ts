@@ -56,18 +56,14 @@ export function parseRandomEventContent(raw: string): RandomEventContent {
 export function randomEventNarrationMessage(state: GameState, event: RandomEventRecord, answer: string): string {
   const team = state.teams[state.meta.playerTeamId];
   const turn = (event.completedDialogueTurns ?? 0) + 1;
-  const dialogue = event.dialogue ?? [];
-  const prior = dialogue.length
-    ? `此前对话：\n${dialogue.map((row, index) => `第 ${index + 1} 轮玩家：${row.player}\n第 ${index + 1} 轮剧情：${row.assistant}`).join('\n')}`
-    : '';
   return [
     '【F1M 随机事件叙述请求】',
     `你正在继续 ${team.name} 的正常剧情。请围绕以下随机事件和领队决定写一段完整、自然的中文叙事。`,
     `事件 ID：${event.id}`,
-    `事件：${event.title}。${event.prompt}`,
+    turn === 1 ? `事件：${event.title}。${event.prompt}` : `继续事件：${event.title}。此前轮次已经在上方正常聊天记录中。`,
     `当前是第 ${turn}/${event.totalDialogueTurns ?? 2} 轮。`,
-    prior,
     `领队本轮回应：${answer}`,
+    '只输出本轮新发生的剧情正文。不要复述事件介绍、领队回应或此前正文，也不要复制已有段落。',
     turn < (event.totalDialogueTurns ?? 2)
       ? '自然推进这段剧情，并在结尾给玩家一个明确、自然的回应机会。不要提前总结或结束事件。'
       : '自然完成这段剧情，并给出与此前对话一致的收束。',

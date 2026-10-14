@@ -43,12 +43,15 @@ describe('three-turn random-event adjudication', () => {
       '工程师记录第三轮最终检查。',
     ];
     for (const [index, reply] of replies.entries()) {
+      const answer = `第 ${index + 1} 轮处理方案。`;
       const result = await ctrl.resolveRandomEvent({
         eventId: event.id,
-        answer: `第 ${index + 1} 轮处理方案。`,
+        answer,
         expectedRevisionId: ctrl.status().revisionId!,
       });
       expect(result).toMatchObject({ ok: true, event: { status: 'awaiting_narration' } });
+      expect(env.created[index]).toContain(answer);
+      for (const previousReply of replies.slice(0, index)) expect(env.created[index]).not.toContain(previousReply);
       await env.aiReplies(reply);
       await tick();
 

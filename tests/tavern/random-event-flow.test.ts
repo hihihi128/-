@@ -26,6 +26,27 @@ describe('随机事件双 API 协议', () => {
     expect(prompt).not.toContain('"skill"');
   });
 
+  it('后续轮次依靠正常聊天记录衔接，不把此前正文再次塞进叙述请求', () => {
+    const state = newTestGame(12);
+    const event = {
+      ...state.randomEvents?.current,
+      id: 'event-repeat',
+      title: '训练计划复查',
+      prompt: '医疗组建议分三步确认训练负荷。',
+      completedDialogueTurns: 1,
+      totalDialogueTurns: 3,
+      dialogue: [{ player: '先安排复查。', assistant: '医疗主管完成第一轮负荷评估。' }],
+    } as any;
+
+    const message = randomEventNarrationMessage(state, event, '继续确认恢复情况。');
+
+    expect(message).toContain('此前轮次已经在上方正常聊天记录中');
+    expect(message).toContain('只输出本轮新发生的剧情正文');
+    expect(message).not.toContain('医疗组建议分三步确认训练负荷。');
+    expect(message).not.toContain('先安排复查。');
+    expect(message).not.toContain('医疗主管完成第一轮负荷评估。');
+  });
+
   it('只接受匹配事件 ID 和白名单效果', () => {
     const parsed = parseRandomEventResolution('{"eventId":"event-1","outcome":"resolved","summary":"处理完成。","effects":[{"op":"funds","targetId":null,"delta":2,"reason":"赞助支持"}]}', 'event-1');
     expect(parsed.effects[0]).toMatchObject({ op: 'funds', delta: 2 });
