@@ -20,6 +20,7 @@ import { PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES } from './power
 import { ensureDriverWeekendTyres, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
 import {
   degFactor,
+  predictedTyreLife,
   optimizeStints,
   PACE_MODE_TIME,
   planLabel,
@@ -188,8 +189,9 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
     const e = entries.find(x => x.driver.id === id)!;
     const ratings = carRatings(e.team, e.car, rules);
     const plan = e.team.isPlayer ? planOf(state, id) : { ...DEFAULT_PLAN };
-    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
-    const ctx = { driverTyre: e.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge };
+    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, thermalKnowledge: 30, trackKnowledge: 30, qualiBonus: 0 });
+    const performanceContext = buildPerformanceContext({ driverTyre: e.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
+    const ctx = { driverTyre: e.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge, performanceContext };
     const factor = degFactor(track, ctx);
     const options = strategyOptions(rules, track, totalLaps, ctx, { wet, sprint });
     const sim: SimCar = {
@@ -229,7 +231,7 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
       crashedOut: false,
     };
     sim.compounds = chooseCompounds(state, sim, options, wet, sprint, rng);
-    sim.stints = optimizeStints(rules, track, sim.compounds, totalLaps, factor);
+    sim.stints = optimizeStints(rules, track, sim.compounds, totalLaps, factor, { context: performanceContext, paceMode: plan.paceMode });
     // 进站时机偏好：提前（Undercut）/ 推迟（Overcut）
     const shift = plan.pitTiming === 'early' ? -2 : plan.pitTiming === 'late' ? 2 : 0;
     if (shift && sim.stints.length > 1) {
@@ -614,14 +616,14 @@ function freeRedFlagTyreChange(state: GameState, session: LiveRaceState, car: Li
   const nextStint = car.stintIndex + 1;
   const remainingLaps = Math.max(1, session.totalLaps - session.completedLaps);
   const remainingCompounds = [compound, ...car.plannedCompounds.slice(nextStint + 1)];
-  const tyreLife = (state.rules.tyres[compound]?.cliff ?? remainingLaps) * car.tyreFactor;
+  const tyreLife = predictedTyreLife(state.rules.tyres[compound], car.tyreFactor, { context: car.performanceContext, paceMode: car.plan.paceMode, rules: state.rules });
   if (!state.rules.tyres[compound]?.wet && remainingLaps > tyreLife && remainingCompounds.length === 1) {
     remainingCompounds.push(state.rules.dryCompounds.find(candidate => candidate !== compound) ?? compound);
   }
   car.plannedCompounds.splice(nextStint, car.plannedCompounds.length - nextStint, ...remainingCompounds);
   // Replanning needs to stay constant-time enough for a live safety-car tick;
   // tyre temperature remains in the actual per-lap physics below.
-  car.stints.splice(nextStint, car.stints.length - nextStint, ...optimizeStints(state.rules, currentTrack(state), remainingCompounds, remainingLaps, car.tyreFactor));
+  car.stints.splice(nextStint, car.stints.length - nextStint, ...optimizeStints(state.rules, currentTrack(state), remainingCompounds, remainingLaps, car.tyreFactor, { context: car.performanceContext, paceMode: car.plan.paceMode }));
   car.stintIndex = nextStint;
   car.tyre = compound;
   const replacement = takeTyreSet(state.teams[car.teamId], car.driverId, compound, weekendTyreKey(state), car.tyreSetId);
@@ -757,7 +759,7 @@ export function createRaceSession(
       raceEngineerReaction: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'reaction'),
       raceEngineerWeather: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'weather'),
       plan, tyre: compounds[0], tyreAge: startingSet?.laps ?? 0, tyreTemperature: (rules.tyres[compounds[0]]?.temperatureWindow?.[0] ?? 80) - 18, tyreWearAge: startingSet?.wearAge ?? startingSet?.laps ?? 0, performanceContext, tyreSetId: startingSet?.id, usedCompounds: [compounds[0]], plannedCompounds: compounds,
-      stints: optimizeStints(rules, track, compounds, totalLaps, factor), stintIndex: 0, pits: 0, pitStops: [], cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
+      stints: optimizeStints(rules, track, compounds, totalLaps, factor, { context: performanceContext, paceMode: plan.paceMode }), stintIndex: 0, pits: 0, pitStops: [], cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
       damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced',
       iceHealth: groupHealth(componentHealth, PU_COMBUSTION_PARTS), electricalHealth: groupHealth(componentHealth, PU_ELECTRICAL_PARTS),
       puComponentHealth: componentHealth, puComponentReliability: componentReliability,

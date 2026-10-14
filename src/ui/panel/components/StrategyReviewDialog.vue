@@ -43,7 +43,7 @@ const props = defineProps<{
   unavailableReason?: string;
 }>();
 
-const emit = defineEmits<{ close: []; applied: [] }>();
+const emit = defineEmits<{ close: [] }>();
 
 type ReviewState = 'idle' | 'loading' | 'sound' | 'changes' | 'error' | 'stale' | 'applying' | 'applied' | 'kept';
 const state = ref<ReviewState>('idle');
@@ -57,6 +57,8 @@ const originalPlan = computed(() => result.value?.originalPlan ?? props.plan);
 const correctedPlan = computed(() => review.value?.correctedPlan ?? null);
 const issues = computed(() => review.value?.issues ?? []);
 const canApply = computed(() => state.value === 'changes' && !!result.value?.reviewId && !!correctedPlan.value);
+const isApplying = computed(() => state.value === 'applying');
+const needsSecondaryApiSetup = computed(() => state.value === 'error' && /副\s*API.*(?:未配置|配置|不可用)|secondary\s*api/i.test(statusMessage.value));
 const statusMessage = computed(() => {
   if (state.value === 'idle' && !props.canReview) return props.unavailableReason ?? '请先使用“听工程师”生成当前工程师策略。';
   if (state.value === 'loading') return '正在通过副 API 检查当前工程师方案…';
@@ -139,7 +141,6 @@ async function applyReview(): Promise<void> {
     return;
   }
   state.value = 'applied';
-  emit('applied');
 }
 
 async function keepOriginal(): Promise<void> {
@@ -149,6 +150,7 @@ async function keepOriginal(): Promise<void> {
 }
 
 async function close(): Promise<void> {
+  if (isApplying.value) return;
   closed.value = true;
   if (state.value !== 'applied') await discardPending();
   emit('close');
@@ -157,6 +159,7 @@ async function close(): Promise<void> {
 function trapFocus(event: KeyboardEvent): void {
   if (event.key === 'Escape') {
     event.preventDefault();
+    if (isApplying.value) return;
     void close();
     return;
   }
@@ -165,7 +168,7 @@ function trapFocus(event: KeyboardEvent): void {
   if (!focusable.length) return;
   const first = focusable[0];
   const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.value)) {
     event.preventDefault();
     last.focus();
   } else if (!event.shiftKey && document.activeElement === last) {
@@ -182,14 +185,14 @@ onUnmounted(() => { closed.value = true; });
 </script>
 
 <template>
-  <div class="strategy-review-backdrop" @click.self="close">
+  <div class="strategy-review-backdrop" @click.self="!isApplying && close()">
     <section ref="dialog" class="strategy-review-dialog" role="dialog" aria-modal="true" aria-labelledby="strategy-review-title" aria-describedby="strategy-review-description" tabindex="-1" @keydown="trapFocus">
       <header class="strategy-review-head">
         <div>
           <div class="row"><h2 id="strategy-review-title">策略点评</h2><span class="badge">固定使用副 API</span></div>
           <p id="strategy-review-description" class="small muted">检查当前工程师方案；只有你明确确认后才会更正策略。</p>
         </div>
-        <button ref="closeButton" class="small ghost strategy-review-close" aria-label="关闭策略点评并保留原策略" @click="close">✕</button>
+        <button ref="closeButton" class="small ghost strategy-review-close" aria-label="关闭策略点评并保留原策略" :disabled="isApplying" @click="close">✕</button>
       </header>
 
       <div class="strategy-review-body">
@@ -210,7 +213,7 @@ onUnmounted(() => { closed.value = true; });
         </section>
         <section v-else-if="state === 'loading' || state === 'applying'" class="notice strategy-review-notice" aria-live="polite"><b>{{ statusMessage }}</b><div class="tiny muted">请勿重复提交，当前策略保持不变。</div></section>
         <section v-else-if="state === 'sound' || state === 'applied' || state === 'kept'" class="notice ok strategy-review-notice" aria-live="polite"><b>{{ statusMessage }}</b><div class="tiny">{{ state === 'sound' ? '副 API 未建议更改，当前工程师策略保持不变。' : state === 'applied' ? '只修改了该车手的正赛策略。' : '未提交任何策略改动。' }}</div></section>
-        <section v-else-if="state === 'error' || state === 'stale'" class="notice bad strategy-review-notice" role="alert"><b>{{ statusMessage }}</b><div class="tiny">当前策略未改变。</div></section>
+        <section v-else-if="state === 'error' || state === 'stale'" class="notice bad strategy-review-notice" role="alert"><b>{{ statusMessage }}</b><div class="tiny">当前策略未改变。</div><div v-if="needsSecondaryApiSetup" class="tiny">请在酒馆助手的连接/API 设置中配置副 API 的代理、URL 和密钥，然后返回此处重试。</div></section>
 
         <section v-if="state === 'changes' || state === 'applied'" class="strategy-review-results">
           <div class="spread"><h3>点评结论</h3><span class="badge warn">{{ issues.length }} 个问题</span></div>
@@ -226,14 +229,14 @@ onUnmounted(() => { closed.value = true; });
       </div>
 
       <footer class="strategy-review-foot">
-        <span class="tiny muted">{{ state === 'changes' ? `仅修改 ${driverName} 的正赛策略` : '关闭等同保留原策略' }}</span>
+        <span class="tiny muted">{{ state === 'applying' ? '正在提交，请勿关闭此窗口' : state === 'applied' ? '更正已应用，请确认后关闭' : state === 'changes' ? `仅修改 ${driverName} 的正赛策略` : '关闭等同保留原策略' }}</span>
         <button v-if="state === 'idle'" class="primary" :disabled="!canReview" @click="requestReview">开始点评</button>
         <button v-else-if="state === 'error' || state === 'stale'" class="primary" @click="requestReview">重试点评</button>
         <template v-else-if="state === 'changes'">
           <button @click="keepOriginal">保留原策略</button>
           <button class="primary" :disabled="!canApply" @click="applyReview">使用更正策略</button>
         </template>
-        <button v-else-if="state === 'sound' || state === 'applied' || state === 'kept'" @click="close">关闭</button>
+        <button v-else-if="state === 'sound' || state === 'applied' || state === 'kept'" @click="close">{{ state === 'applied' ? '确认并关闭' : '关闭' }}</button>
       </footer>
     </section>
   </div>

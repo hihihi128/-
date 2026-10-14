@@ -332,6 +332,11 @@ export function migrateState(state: GameState): GameState {
     if (!Array.isArray(tyre.temperatureWindow) || tyre.temperatureWindow.length !== 2 || !tyre.temperatureWindow.every(Number.isFinite) || tyre.temperatureWindow[0] < 20 || tyre.temperatureWindow[1] > 140 || tyre.temperatureWindow[0] >= tyre.temperatureWindow[1]) tyre.temperatureWindow = fallback;
     if (!Number.isFinite(tyre.warmupRate) || tyre.warmupRate! < .05 || tyre.warmupRate! > 1) tyre.warmupRate = tyre.wet ? .4 : .32;
   }
+  const dryWindows: Record<string, [number, number]> = { soft: [80, 100], medium: [85, 105], hard: [90, 110] };
+  const namedDry = ['soft', 'medium', 'hard'].map(key => state.rules.tyres[key]);
+  if (namedDry.every(Boolean) && !(namedDry[0].temperatureWindow![0] < namedDry[1].temperatureWindow![0] && namedDry[1].temperatureWindow![0] < namedDry[2].temperatureWindow![0])) {
+    for (const [key, window] of Object.entries(dryWindows)) state.rules.tyres[key].temperatureWindow = window;
+  }
   const aduoPartsBeforePuMigration = new Set([...(state.rules.aduo?.parts ?? []), 'power_unit', 'ers']);
   const activePuDesignsBeforeMigration = new Map(Object.values(state.teams).map(team => [
     team.id,
@@ -378,7 +383,9 @@ export function migrateState(state: GameState): GameState {
         ]);
         if (live.physicsVersion === 2) {
           car.tyreWearAge ??= car.tyreAge;
-          car.tyreTemperature ??= 70;
+          const tyre = state.rules.tyres[car.tyre];
+          car.tyreTemperature ??= (tyre?.temperatureWindow?.[0] ?? (tyre?.wet ? 58 : 80)) - 18;
+          if (car.performanceContext) car.performanceContext.tyreStress ??= state.tracks[state.calendar[live.roundIndex]?.trackId]?.tyreStress ?? 50;
         }
       }
     }

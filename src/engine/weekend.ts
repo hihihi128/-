@@ -126,7 +126,11 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     weekend.setup[driver.id] = baseSetup(team, car.slot);
     (weekend.practiceBaseline ??= {})[driver.id] = deepClone(weekend.setup[driver.id]);
     const old = prev?.plans[driver.id];
-    weekend.plans[driver.id] = old ? { ...deepClone(old), tyrePlan: 'auto', sprintTyre: 'auto' } : deepClone(DEFAULT_PLAN);
+    if (old) {
+      const inherited = { ...deepClone(old), tyrePlan: 'auto' as const, sprintTyre: 'auto' as const };
+      delete inherited.strategyReview;
+      weekend.plans[driver.id] = inherited;
+    } else weekend.plans[driver.id] = deepClone(DEFAULT_PLAN);
   }
   if (!round?.sprint) {
     weekend.weather.sprint = 'dry';
@@ -187,6 +191,7 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
     const thermalGain = base * f.thermal * sessionMul * (wet ? .6 : 1);
     const trackGain = base * f.track * sessionMul * (wet ? .75 : 1);
     const qualiGain = f.quali * (0.6 + driver.attrs.feedback / 250);
+    const before = { confidence: setup.confidence, tyre: setup.tyreKnowledge, thermal: setup.thermalKnowledge ?? 0, track: setup.trackKnowledge ?? 0, quali: setup.qualiBonus };
     setup.confidence = round1(clamp(setup.confidence + setupGain, 0, 100));
     setup.tyreKnowledge = round1(clamp(setup.tyreKnowledge + tyreGain, 0, 100));
     setup.thermalKnowledge = round1(clamp((setup.thermalKnowledge ?? 0) + thermalGain, 0, 100));
@@ -203,7 +208,7 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
         }
       }
     }
-    result.gains[driver.id] = { setup: round1(setupGain), tyre: round1(tyreGain), thermal: round1(thermalGain), track: round1(trackGain), quali: round3(qualiGain), program, verified };
+    result.gains[driver.id] = { setup: round1(setup.confidence - before.confidence), tyre: round1(setup.tyreKnowledge - before.tyre), thermal: round1(setup.thermalKnowledge - before.thermal), track: round1(setup.trackKnowledge - before.track), quali: round3(setup.qualiBonus - before.quali), program, verified };
 
     const score = trackScore(carRatings(team, car, rules), track);
     const time =

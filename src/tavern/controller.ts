@@ -8,7 +8,7 @@
  * - 每次生成前把「实时数据」注入提示词。
  * - 在 AI 回复末尾补上 <F1M_HUD/> 占位符（正则会把它渲染成状态条）。
  */
-import { dispatch } from '../engine/actions';
+import { createReviewedPlanAction, dispatch, type InternalReviewedPlanAction } from '../engine/actions';
 import { normalizeDatabase, type NormalizeResult } from '../engine/data';
 import { LABELS } from '../engine/defaults';
 import {
@@ -404,6 +404,7 @@ export class F1Controller {
       || next.engineerProxyPreset !== this.settings.engineerProxyPreset
       || next.engineerApiUrl !== this.settings.engineerApiUrl
       || next.engineerModel !== this.settings.engineerModel;
+    const apiKeyChanged = clearEngineerApiKey || (typeof engineerApiKey === 'string' && engineerApiKey.trim() !== '' && engineerApiKey.trim() !== this.engineerApiKey);
     const settingsError = !clearEngineerApiKey && apiSettingsChanged && next.engineerApi === 'secondary' ? this.secondaryApiError(next) : null;
     if (settingsError) throw new Error(settingsError);
     if (clearEngineerApiKey) {
@@ -415,7 +416,7 @@ export class F1Controller {
       this.engineerApiKey = nextKey;
     }
     this.settings = next;
-    if (apiSettingsChanged) this.pendingStrategyReviews.clear();
+    if (apiSettingsChanged || apiKeyChanged) this.invalidateStrategyReviews();
     this.store.opts.maxRevisions = next.maxRevisions;
     const vars = this.env.getScriptVars() ?? {};
     this.env.setScriptVars({ ...vars, settings: next });
@@ -460,6 +461,11 @@ export class F1Controller {
     return hashString(JSON.stringify({ engineerProxyPreset, engineerApiUrl, engineerModel }));
   }
 
+  private invalidateStrategyReviews(): void {
+    for (const [driverId, token] of this.strategyReviewTokens) this.strategyReviewTokens.set(driverId, token + 1);
+    this.pendingStrategyReviews.clear();
+  }
+
   private strategyReviewPlanFingerprint(plan: RacePlanFields): string {
     return hashString(JSON.stringify(plan));
   }
@@ -496,7 +502,7 @@ export class F1Controller {
     };
   }
 
-  private strategyReviewPrediction(state: GameState, driverId: string, plan: RacePlanFields): StrategyReviewPrediction | null {
+  private strategyReviewPrediction(state: GameState, driverId: string, plan: RacePlanFields, originalCost?: number): StrategyReviewPrediction | null {
     const weekend = state.weekend;
     const team = state.teams[state.meta.playerTeamId];
     const driver = state.drivers[driverId];
@@ -524,9 +530,21 @@ export class F1Controller {
     const model = { context: performanceContext, paceMode: plan.paceMode };
     const stints = optimizeStints(state.rules, track, plan.tyrePlan, track.laps, factor, model);
     if (stints.some(laps => !Number.isInteger(laps) || laps <= 0) || stints.reduce((sum, laps) => sum + laps, 0) !== track.laps) return null;
-    const cost = stints.reduce((sum, laps, index) => sum + stintLoss(state.rules.tyres[plan.tyrePlan[index]], laps, factor, { ...model, rules: state.rules }), 0) + (plan.tyrePlan.length - 1) * (track.pitLoss + 2.6);
-    const best = strategyOptions(state.rules, track, track.laps, context, { wet: false, sprint: false })[0]?.cost ?? cost;
-    return { compounds: [...plan.tyrePlan], stints, stops: plan.tyrePlan.length - 1, cost: round1(cost), delta: round1(cost - best) };
+    const candidate = strategyOptions(state.rules, track, track.laps, context, { wet: false, sprint: false })
+      .find(option => option.compounds.length === plan.tyrePlan.length && option.compounds.every((compound, index) => compound === plan.tyrePlan[index]));
+    const cost = candidate?.cost ?? stints.reduce((sum, laps, index) => sum + stintLoss(state.rules.tyres[plan.tyrePlan[index]], laps, factor, { ...model, rules: state.rules }), 0) + (plan.tyrePlan.length - 1) * (track.pitLoss + 2.6);
+    const roundedCost = round1(cost);
+    return { compounds: [...plan.tyrePlan], stints, stops: plan.tyrePlan.length - 1, cost: roundedCost, delta: originalCost === undefined ? 0 : round1(roundedCost - originalCost) };
+  }
+
+  private reviewTyreSetCount(compounds: string[], compound: string): number {
+    let longest = 0;
+    let run = 0;
+    for (const value of compounds) {
+      run = value === compound ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+    return longest;
   }
 
   private validateReviewedPlan(state: GameState, driverId: string, plan: RacePlanFields): string | null {
@@ -541,7 +559,10 @@ export class F1Controller {
     const key = `${state.season.year}:r${weekend.roundIndex + 1}`;
     const inventory = team.tyreInventory?.[driverId] ?? [];
     for (const compound of new Set(plan.tyrePlan)) {
-      const needed = plan.tyrePlan.filter(value => value === compound).length;
+      // takeTyreSet excludes only the current set. A set may legally return
+      // after another compound stint, so only a consecutive run needs distinct
+      // physical sets.
+      const needed = this.reviewTyreSetCount(plan.tyrePlan, compound);
       const available = inventory.filter(set => set.weekendKey === key && !set.returned && set.compound === compound).length;
       if (available < needed) return `更正策略需要 ${needed} 组「${compound}」轮胎，但只剩 ${available} 组可用`;
     }
@@ -836,7 +857,7 @@ export class F1Controller {
     this.specialNegotiation = null;
     const floor = Math.max(0, this.latestFloor());
     this.store.commit(state, { floor, kind: 'new', label: `新开局：${state.teams[state.meta.playerTeamId].name}`, parent: null });
-    this.pendingStrategyReviews.clear();
+    this.invalidateStrategyReviews();
     await this.syncLeadershipWorldbook(state);
     this.notify('new_game');
     const role = state.ferrari ? '过渡领队' : state.mclaren || state.astonMartin ? '临时领队' : state.mercedes || state.racingBulls || state.audi || state.alpine ? '副领队' : state.haas ? '共同领队' : state.williams ? '接班人' : state.redBull ? '助理领队' : '领队';
@@ -845,7 +866,7 @@ export class F1Controller {
 
   // ───────────────────────────── 动作 ─────────────────────────────
 
-  async dispatch(action: Action): Promise<Outcome> {
+  async dispatch(action: Action | InternalReviewedPlanAction): Promise<Outcome> {
     if (this.busy) return { ok: false, message: '上一个操作还在处理中' };
     if (this.adjudicatingRandomEventId) return { ok: false, message: '副 API 正在判定随机事件，请等待判定结束后再操作' };
     if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成回复，请等待生成结束后再操作' };
@@ -884,9 +905,9 @@ export class F1Controller {
         }
       }
       this.store.commit(res.state, { floor: Math.max(0, floor), kind: 'ui', label: res.message });
-      this.pendingStrategyReviews.clear();
+      this.invalidateStrategyReviews();
       this.notify('action');
-      if (this.settings.autoNarrate && isSimulation(action) && res.state.narration.length) {
+      if (this.settings.autoNarrate && isSimulation(action as Action) && res.state.narration.length) {
         void this.requestNarration();
       }
       return { ok: true, message: `${res.message}${strategySummary}` };
@@ -1122,8 +1143,9 @@ export class F1Controller {
     const aiEntries = entries.filter(entry => !entry.team.isPlayer);
     const candidates: AiGridStrategyCandidate[] = aiEntries
       .map(entry => {
-        const setup = weekend.setup[entry.driver.id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
+        const setup = effectiveSetup(state, entry.driver.id, weekend.setup[entry.driver.id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
         const ratings = carRatings(entry.team, entry.car, state.rules, 'disclosed');
+        const performanceContext = buildPerformanceContext({ driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
         return {
           driverId: entry.driver.id,
           options: strategyOptions(state.rules, track, track.laps, {
@@ -1131,6 +1153,7 @@ export class F1Controller {
             carTyre: ratings.tyre,
             paceMode: 'balanced',
             knowledge: setup.tyreKnowledge,
+            performanceContext,
           }, { wet: false, sprint: false }).slice(0, 5),
         };
       });
@@ -1201,7 +1224,7 @@ export class F1Controller {
     if (!rev) return { ok: false, message: '找不到该存档版本' };
     const state = this.store.stateOf(rev);
     this.specialNegotiation = null;
-    this.pendingStrategyReviews.clear();
+    this.invalidateStrategyReviews();
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'restore', label: `读档：${rev.label}` });
     await this.syncLeadershipWorldbook(state);
     this.notify('restore');
@@ -1227,7 +1250,7 @@ export class F1Controller {
     }
     migrateState(state);
     this.specialNegotiation = null;
-    this.pendingStrategyReviews.clear();
+    this.invalidateStrategyReviews();
     this.store.reset(state.gameId);
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'import', label: '导入存档', parent: null });
     await this.syncLeadershipWorldbook(state);
@@ -1408,7 +1431,7 @@ export class F1Controller {
       const correctedPlan = review.correctedPlan;
       const validation = correctedPlan ? this.validateReviewedPlan(latest.state, request.driverId, correctedPlan) : null;
       if (validation) return fail(validation);
-      const correctedPrediction = correctedPlan ? this.strategyReviewPrediction(latest.state, request.driverId, correctedPlan) : null;
+      const correctedPrediction = correctedPlan ? this.strategyReviewPrediction(latest.state, request.driverId, correctedPlan, originalPrediction.cost) : null;
       if (correctedPlan && !correctedPrediction) return fail('更正策略无法生成本地预测');
       const id = `review-${(++this.strategyReviewSerial).toString(36)}`;
       const pending: PendingStrategyReview = { id, token, ...pendingBase, originalPlan, review, originalPrediction, correctedPrediction };
@@ -1442,16 +1465,16 @@ export class F1Controller {
     if (validation) return fail(validation);
     // Remove before awaiting dispatch so double clicks cannot create two revisions.
     this.pendingStrategyReviews.delete(pending.driverId);
-    const applied = await this.dispatch({
-      type: 'SET_PLAN',
-      driverId: pending.driverId,
-      plan: {
+    const applied = await this.dispatch(createReviewedPlanAction(
+      pending.driverId,
+      {
         strategySource: 'engineer',
         tyrePlan: [...correctedPlan.tyrePlan],
         paceMode: correctedPlan.paceMode,
         pitTiming: correctedPlan.pitTiming,
         scReaction: correctedPlan.scReaction,
-        strategyReview: {
+      },
+      {
           source: 'secondary',
           originalPlan: deepClone(pending.originalPlan),
           summary: pending.review.summary,
@@ -1462,9 +1485,8 @@ export class F1Controller {
           })),
           modelLabel: 'performance-v2',
           roundKey: `${latest.state.season.year}:r${latest.state.weekend!.roundIndex + 1}`,
-        },
       },
-    });
+    ));
     if (!applied.ok) return fail(`更正策略未应用：${applied.message}`);
     return {
       ok: true, message: '已应用副 API 更正的工程师策略', api: 'secondary', reviewId: pending.id,
@@ -1724,6 +1746,7 @@ export class F1Controller {
     this.data = null;
     this.continuing = null;
     this.specialNegotiation = null;
+    this.invalidateStrategyReviews();
     this.pendingRandomEventNarration = null;
     this.adjudicatingRandomEventId = null;
     this.generationState = 'unknown';

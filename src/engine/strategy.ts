@@ -32,6 +32,18 @@ export function effectiveCliff(tyre: TyreDef, factor: number): number {
   return tyre.cliff / Math.pow(Math.max(0.3, factor), 0.8);
 }
 
+/** Estimate usable laps with the same thermal/wear stepping as the live race. */
+export function predictedTyreLife(tyre: TyreDef, factor: number, model?: { context?: RacePerformanceContext; rules: Rules; paceMode: PaceMode }): number {
+  if (!model?.context) return effectiveCliff(tyre, factor);
+  const cliff = effectiveCliff(tyre, 1);
+  let previous: { temperature?: number; wearAge?: number } = { temperature: (tyre.temperatureWindow?.[0] ?? (tyre.wet ? 58 : 80)) - 18, wearAge: 0 };
+  for (let lap = 1; lap <= 200; lap++) {
+    previous = stepTyre(model.context, tyre, previous, { paceMode: model.paceMode }, model.rules);
+    if ((previous.wearAge ?? 0) >= cliff) return lap;
+  }
+  return 200;
+}
+
 /** 胎龄为 age（第 age 圈）时相对新中性胎的圈速损失（秒），含配方本身快慢 */
 export function tyreLapDelta(tyre: TyreDef, age: number, factor: number): number {
   const cliff = effectiveCliff(tyre, factor);
@@ -40,17 +52,17 @@ export function tyreLapDelta(tyre: TyreDef, age: number, factor: number): number
 }
 
 /** 一段 laps 圈的轮胎总损失 */
-export function stintLoss(tyre: TyreDef, laps: number, factor: number, model?: { context: RacePerformanceContext; rules: Rules; paceMode: PaceMode }): number {
+export function stintLoss(tyre: TyreDef, laps: number, factor: number, model?: { context?: RacePerformanceContext; rules: Rules; paceMode: PaceMode }): number {
   let s = 0;
   let previous: { temperature?: number; wearAge?: number } = {};
   for (let a = 1; a <= laps; a++) {
-    if (model) {
+    if (model?.context) {
       const step = stepTyre(model.context, tyre, previous, { paceMode: model.paceMode }, model.rules);
       previous = step;
       s += tyreLapDelta(tyre, step.wearAge, 1) + step.lapPenalty;
     } else s += tyreLapDelta(tyre, a, factor);
   }
-  return s;
+  return s + PACE_MODE_TIME[model?.paceMode ?? 'balanced'] * laps;
 }
 
 export interface StrategyOption {
@@ -67,7 +79,7 @@ export interface StrategyOption {
 }
 
 interface StrategyModel {
-  context: RacePerformanceContext;
+  context?: RacePerformanceContext;
   paceMode: PaceMode;
   lossCache?: Map<string, number>;
 }
@@ -101,7 +113,7 @@ export function optimizeStints(rules: Rules, track: TrackDef, compounds: Compoun
     const key = `${compound}:${laps}`;
     const cached = lossCache.get(key);
     if (cached !== undefined) return cached;
-    const value = stintLoss(rules.tyres[compound], laps, factor, model ? { context: model.context, paceMode: model.paceMode, rules } : undefined);
+  const value = stintLoss(rules.tyres[compound], laps, factor, { context: model?.context, paceMode: model?.paceMode ?? 'balanced', rules });
     lossCache.set(key, value);
     return value;
   };
@@ -156,7 +168,7 @@ export function strategyOptions(
   opts: { wet: boolean; sprint: boolean },
 ): StrategyOption[] {
   const factor = degFactor(track, ctx);
-  const model: StrategyModel | undefined = ctx.performanceContext ? { context: ctx.performanceContext, paceMode: ctx.paceMode, lossCache: new Map() } : undefined;
+  const model: StrategyModel = { context: ctx.performanceContext, paceMode: ctx.paceMode, lossCache: new Map() };
   const pitCost = track.pitLoss + 2.6;
   const candidates: Array<{ compounds: Compound[]; stints: number[]; cost: number }> = [];
   const evaluate = (compounds: Compound[]) => {
@@ -165,7 +177,7 @@ export function strategyOptions(
       const key = `${compounds[i]}:${l}`;
       const cached = model?.lossCache?.get(key);
       if (cached !== undefined) return acc + cached;
-      const value = stintLoss(rules.tyres[compounds[i]], l, factor, model ? { context: model.context, paceMode: model.paceMode, rules } : undefined);
+      const value = stintLoss(rules.tyres[compounds[i]], l, factor, { context: model.context, paceMode: model.paceMode, rules });
       model?.lossCache?.set(key, value);
       return acc + value;
     }, 0);
@@ -198,17 +210,18 @@ export function strategyOptions(
     let nextLap = 1;
     const summaries = c.stints.map((stint, index) => {
       const tyre = rules.tyres[c.compounds[index]];
-      let temperature = (tyre.temperatureWindow?.[0] ?? 80) - 18;
+      const low = tyre.temperatureWindow?.[0] ?? (tyre.wet ? 58 : 80);
+      let temperature = low - 18;
       let wearAge = 0;
       let min = temperature, max = temperature, outside = 0;
       for (let lap = 0; lap < stint; lap++) {
-        if (model) {
+        if (model.context) {
           const step = stepTyre(model.context, tyre, { temperature, wearAge }, { paceMode: model.paceMode }, rules);
           temperature = step.temperature; wearAge = step.wearAge; if (step.state !== 'optimal') outside++;
         } else wearAge++;
         min = Math.min(min, temperature); max = Math.max(max, temperature);
       }
-      const summary = { startLap: nextLap, endLap: nextLap + stint - 1, endLoss: round1(tyreLapDelta(tyre, wearAge || stint, model ? 1 : factor)), temperatureRange: [round1(min), round1(max)] as [number, number], outsideWindowLaps: outside, cliffMargin: round1(effectiveCliff(tyre, model ? 1 : factor) - wearAge) };
+      const summary = { startLap: nextLap, endLap: nextLap + stint - 1, endLoss: round1(tyreLapDelta(tyre, wearAge || stint, model.context ? 1 : factor) + PACE_MODE_TIME[model.paceMode]), temperatureRange: [round1(min), round1(max)] as [number, number], outsideWindowLaps: outside, cliffMargin: round1(effectiveCliff(tyre, model.context ? 1 : factor) - wearAge) };
       nextLap += stint;
       return summary;
     });

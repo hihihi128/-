@@ -13,6 +13,18 @@ import { legacyWeeklyEventState } from '../fixtures/weekly-random-events';
 const legacy = (): GameState => JSON.parse(readFileSync(resolve(__dirname, '../fixtures/legacy-save-2025.json'), 'utf8'));
 
 describe('旧存档升级', () => {
+  it('保留 v2 实时比赛的物理版本、上下文和低温起点', () => {
+    let state = advanceUntil(newTestGame(94), value => value.season.phase === 'race');
+    state = act(state, { type: 'START_RACE', kind: 'race' });
+    const restored = migrateState(JSON.parse(JSON.stringify(state)) as GameState);
+    const live = restored.weekend!.liveRace!;
+    const car = Object.values(live.cars)[0];
+    const tyre = restored.rules.tyres[car.tyre];
+    expect(live.physicsVersion).toBe(2);
+    expect(car.performanceContext?.tyreStress).toBeGreaterThanOrEqual(0);
+    expect(car.tyreTemperature).toBe((tyre.temperatureWindow?.[0] ?? (tyre.wet ? 58 : 80)) - 18);
+  });
+
   it('把默认车队旧存档中的员工占位名替换为正式显示名', () => {
     const state = newTestGame();
     const team = state.teams.team_c;

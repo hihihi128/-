@@ -938,6 +938,7 @@ export interface RacePerformanceContext {
   trackScore: number;
   surfaceTemperature: number;
   thermalDemand: number;
+  tyreStress: number;
 }
 
 export interface LiveRaceCar {

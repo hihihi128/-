@@ -1,5 +1,5 @@
 /** Shared, deterministic performance model used by qualifying, race and strategy. */
-import type { CarRatings, } from './ratings';
+import type { CarRatings } from './ratings';
 import type { PaceMode, RacePerformanceContext, Rules, SetupState, TrackDef, TyreDef } from './types';
 import { clamp, round1, round3 } from './util';
 
@@ -21,7 +21,8 @@ export function practiceEffects(setup: SetupState, rules: Rules, fit = 50): { qu
   const knowledge = clamp(finite(setup.tyreKnowledge, 0), 0, 100) / 100;
   const trackKnowledge = clamp(finite(setup.trackKnowledge, 0), 0, 100) / 100;
   const fitAdjustment = ((fit - 50) / 50) * rules.performance.trackFitMax;
-  const adaptation = 1 + Math.max(-rules.performance.trackFitMax, fitAdjustment * (1 - trackKnowledge * .5));
+  // Knowledge compensates only a poor car/track match; it must not dilute a good fit.
+  const adaptation = 1 + (fitAdjustment < 0 ? fitAdjustment * (1 - trackKnowledge * .5) : fitAdjustment);
   return {
     quali: round3(Math.min(rules.performance.qualiSetupMax, rules.performance.qualiSetupMax * confidence * adaptation) + clamp(finite(setup.qualiBonus, 0), 0, rules.performance.qualiBonusMax)),
     race: round3(Math.min(rules.performance.raceSetupMax, rules.performance.raceSetupMax * confidence * adaptation)),
@@ -44,6 +45,7 @@ export function buildPerformanceContext(input: {
     trackScore: input.ratings.overall,
     surfaceTemperature: clamp(finite(input.track.surfaceTemperature, 32), 10, 65),
     thermalDemand: clamp(finite(input.track.thermalDemand, input.track.tyreStress), 0, 100),
+    tyreStress: clamp(finite(input.track.tyreStress, 50), 0, 100),
   };
 }
 
@@ -69,7 +71,7 @@ export function stepTyre(
   rules: Rules,
 ): TyreStepResult {
   const [low, high] = tyre.temperatureWindow ?? (tyre.wet ? [58, 78] : [80, 105]);
-  const temperature = clamp(finite(previous.temperature, (low + high) / 2 - 18), 20, 160);
+  const temperature = clamp(finite(previous.temperature, low - 18), 20, 160);
   const wetness = clamp(finite(conditions.wetness, 0), 0, 1);
   const thermalKnowledge = clamp(finite(context.setup.thermalKnowledge, 0), 0, 100) / 100;
   const target = clamp(context.surfaceTemperature + 43 + context.thermalDemand * .22 + paceHeat[conditions.paceMode] - wetness * 24 - (conditions.neutral ? 20 : 0) - thermalKnowledge * 3, 35, 135);
@@ -83,6 +85,7 @@ export function stepTyre(
   const driverWear = 1.15 - context.driverTyre / 100 * .3;
   const carWear = 1.15 - context.carTyre / 100 * .3;
   const paceWear = conditions.paceMode === 'push' ? 1.25 : conditions.paceMode === 'conserve' ? .82 : 1;
-  const wearMultiplier = round3((1 + overheat + fitPenalty) * practiceEffects(context.setup, rules, context.trackFit).wearMultiplier * driverWear * carWear * paceWear);
+  const trackWear = .6 + context.tyreStress / 100 * .8;
+  const wearMultiplier = round3(trackWear * (1 + overheat + fitPenalty) * practiceEffects(context.setup, rules, context.trackFit).wearMultiplier * driverWear * carWear * paceWear);
   return { temperature: round1(next), wearAge: round3(Math.max(0, finite(previous.wearAge, 0)) + wearMultiplier), wearMultiplier, state, lapPenalty: penalty };
 }

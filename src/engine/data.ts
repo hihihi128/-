@@ -414,6 +414,12 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
       tyre.warmupRate = tyre.wet ? .4 : .32;
     }
   }
+  const dryWindows: Record<string, [number, number]> = { soft: [80, 100], medium: [85, 105], hard: [90, 110] };
+  const namedDry = ['soft', 'medium', 'hard'].map(key => rules.tyres[key]);
+  if (namedDry.every(Boolean) && !(namedDry[0].temperatureWindow![0] < namedDry[1].temperatureWindow![0] && namedDry[1].temperatureWindow![0] < namedDry[2].temperatureWindow![0])) {
+    ctx.warn('rules.tyres', '软、中、硬胎最低温窗必须依次升高，已恢复平衡默认值');
+    for (const [key, window] of Object.entries(dryWindows)) rules.tyres[key].temperatureWindow = window;
+  }
   if (!rules.tyres[rules.wetCompound]) ctx.err('rules.wetCompound', `雨地配方「${rules.wetCompound}」未定义`);
   if (!rules.tyres[rules.fullWetCompound]) ctx.err('rules.fullWetCompound', `全雨胎配方「${rules.fullWetCompound}」未定义`);
   if (rules.fullWetCompound === rules.wetCompound) ctx.warn('rules.fullWetCompound', '全雨胎与半雨胎使用了同一配方，大雨策略不会产生差异');

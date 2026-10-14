@@ -106,6 +106,11 @@ function reviewUnavailableReason(d: WeekendDriverView): string {
     ? '完美策略不属于工程师方案，不能作为策略点评对象。'
     : '请先选择“听工程师”生成当前工程师策略，再请求点评。';
 }
+function currentStrategyReview(d: WeekendDriverView): DriverPlan['strategyReview'] | null {
+  const review = d.plan.strategyReview;
+  const roundKey = `${v.value.season.year}:r${(w.value?.roundIndex ?? -1) + 1}`;
+  return review?.source === 'secondary' && review.roundKey === roundKey ? review : null;
+}
 type DriverPerformanceSummary = {
   qualiGain?: number;
   raceGain?: number;
@@ -136,9 +141,6 @@ function gainSeconds(value: number | undefined): string {
 }
 function percentChange(value: number | undefined): string {
   return typeof value === 'number' && Number.isFinite(value) ? `${value > 0 ? '+' : ''}${Math.round(value * 100)}%` : '数据待生成';
-}
-function reviewApplied() {
-  closeStrategyReview();
 }
 watch(() => w.value?.roundIndex, () => {
   customPlans.value = {};
@@ -272,7 +274,6 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
       :can-review="canReviewStrategy(reviewDriver)"
       :unavailable-reason="reviewUnavailableReason(reviewDriver)"
       @close="closeStrategyReview"
-      @applied="reviewApplied"
     />
     <button v-if="current && w && !w.liveRace" ref="perfectFab" class="codex-fab" title="打开完美策略 AI" aria-label="打开完美策略 AI" @click="perfectOpen = true">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 15 7l5.2.7-3.3 4.1.8 5.2-4.8-2.2L8.1 17l.8-5.2-3.3-4.1L10.8 7 12 2.5Zm0 5.1-1.2 3.1-3.3.2 2.5 2.2-.8 3.2 2.8-1.7 2.8 1.7-.8-3.2 2.5-2.2-3.3-.2L12 7.6Z" /></svg>
@@ -422,15 +423,17 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                 <button class="small" :disabled="done.race || store.busy" @click="setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)] })">采用</button>
               </div>
               <div v-else class="plan engineer-plan on">
-                <span class="badge">工程师</span>
+                <span v-if="currentStrategyReview(d)" class="badge warn">副 API 点评更正</span>
+                <span v-else class="badge">工程师</span>
                 <span class="grow stack-s">
-                  <b class="small">{{ d.plan.strategySource === 'perfect' ? '完美 AI 策略已自动执行' : '工程师策略已自动执行' }}</b>
+                  <b class="small">{{ currentStrategyReview(d) ? '副 API 点评更正的工程师策略已执行' : d.plan.strategySource === 'perfect' ? '完美 AI 策略已自动执行' : '工程师策略已自动执行' }}</b>
+                  <span v-if="currentStrategyReview(d)" class="tiny">{{ currentStrategyReview(d)?.summary }}</span>
                   <span v-if="engineerSuggestions[d.driverId]?.explanation" class="tiny">{{ engineerSuggestions[d.driverId].explanation }}</span>
                   <span v-if="engineerSuggestions[d.driverId]?.weatherResponse && !engineerSuggestions[d.driverId]?.explanation?.includes(engineerSuggestions[d.driverId].weatherResponse!)" class="tiny muted">{{ engineerSuggestions[d.driverId].weatherResponse }}</span>
                   <span v-if="!engineerSuggestions[d.driverId]?.explanation && !engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">{{ d.plan.strategySource === 'perfect' ? '当前使用已保存的完美策略，不受车队策略人员水平影响。' : '当前使用已保存的工程师方案。建议质量取决于车队策略部门水平。' }}</span>
                 </span>
                 <span class="engineer-actions">
-                  <button class="small review-entry" :disabled="done.race || store.busy" @click="openStrategyReview(d, $event)">策略点评</button>
+                  <button v-if="d.plan.strategySource === 'engineer'" class="small review-entry" :disabled="done.race || store.busy" @click="openStrategyReview(d, $event)">策略点评</button>
                   <button class="small" :disabled="done.race || store.busy" @click="askEngineer(d)">重新询问并应用</button>
                 </span>
               </div>

@@ -206,9 +206,9 @@ export const DEFAULT_RULES: Rules = {
     },
   },
   tyres: {
-    soft: { name: '软胎', short: 'S', pace: -0.65, deg: 0.095, cliff: 17, wet: false, color: '#e10600', temperatureWindow: [88, 108], warmupRate: 0.42 },
-    medium: { name: '中性胎', short: 'M', pace: 0, deg: 0.06, cliff: 27, wet: false, color: '#ffd400', temperatureWindow: [82, 104], warmupRate: 0.34 },
-    hard: { name: '硬胎', short: 'H', pace: 0.5, deg: 0.04, cliff: 40, wet: false, color: '#f2f2f2', temperatureWindow: [78, 100], warmupRate: 0.27 },
+    soft: { name: '软胎', short: 'S', pace: -0.65, deg: 0.095, cliff: 17, wet: false, color: '#e10600', temperatureWindow: [80, 100], warmupRate: 0.42 },
+    medium: { name: '中性胎', short: 'M', pace: 0, deg: 0.06, cliff: 27, wet: false, color: '#ffd400', temperatureWindow: [85, 105], warmupRate: 0.34 },
+    hard: { name: '硬胎', short: 'H', pace: 0.5, deg: 0.04, cliff: 40, wet: false, color: '#f2f2f2', temperatureWindow: [90, 110], warmupRate: 0.27 },
     inter: { name: '半雨胎', short: 'I', pace: 0.15, deg: 0.055, cliff: 34, wet: true, color: '#3fb950', temperatureWindow: [62, 82], warmupRate: 0.38 },
     wet: { name: '全雨胎', short: 'W', pace: 0.75, deg: 0.04, cliff: 42, wet: true, color: '#2387d9', temperatureWindow: [58, 78], warmupRate: 0.4 },
   },

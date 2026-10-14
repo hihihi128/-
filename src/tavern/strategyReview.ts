@@ -128,7 +128,7 @@ export function strategyReviewPrompt(context: StrategyReviewPromptContext): stri
   return [
     '你是 F1 策略点评助手。只点评当前工程师赛前正赛策略；不要预测私有天气、事故或比赛结果。',
     `车队=${context.teamName}；车手=${context.driverName}；driverId=${context.driverId}；赛道=${context.trackName}；圈数=${context.laps}；发车=${grid}。`,
-    `公开降雨概率=${Math.round(context.rainChance * 100)}%；${rain}。干胎可用=${context.dryCompounds.join('|')}；至少 ${context.mandatoryCompounds} 种不同干胎；可用胎组=${JSON.stringify(context.availableTyres)}。`,
+    `公开降雨概率=${Math.round(context.rainChance * 100)}%；${rain}。干胎可用=${context.dryCompounds.join('|')}；至少 ${context.mandatoryCompounds} 种不同干胎；可用于正赛的实体胎组数=${JSON.stringify(context.availableTyres)}。同一胎组可在穿插其他配方后复用；仅连续相同配方的每一段需要不同胎组。`,
     `当前工程师策略：配方=${plan.tyrePlan.join('→')}；驾驶=${plan.paceMode}；进站=${plan.pitTiming}；安全车=${plan.scReaction ? '积极' : '保守'}。`,
     `本地预测：${context.originalPrediction.stints.join('/')} 圈，${context.originalPrediction.stops} 停，轮胎加进站成本 ${context.originalPrediction.cost.toFixed(1)} 秒。`,
     '只输出一个 JSON 对象，或完整单一 ```json 代码围栏；不要输出任何额外文本。',

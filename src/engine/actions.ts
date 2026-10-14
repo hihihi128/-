@@ -42,7 +42,7 @@ import {
 import { validatePlan } from './strategy';
 import { completedPracticeSessions, practiceSessionCount } from './weekend';
 import { ENERGY_MODES, PACE_MODES, PIT_TIMINGS, validOrders } from './raceDecisions';
-import type { Action, ActionResult, DriverPlan, GameState } from './types';
+import type { Action, ActionResult, DriverPlan, GameState, StrategyReviewMetadata } from './types';
 import { clamp, deepClone, hashString, round1 } from './util';
 
 export interface DispatchOptions {
@@ -56,8 +56,40 @@ const PROGRAMS = ['setup', 'longrun', 'quali_sim', 'parts'];
 const APPROACHES = ['safe', 'standard', 'aggressive'];
 const PACE = ['conserve', 'balanced', 'push'];
 const TIMING = ['early', 'standard', 'late'];
+const REVIEW_CODES = ['legality', 'tyre_life', 'temperature', 'track_fit', 'pace', 'pit_window', 'weather', 'other'];
+const REVIEW_CAPABILITY = Symbol('strategy-review');
 
-function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>): Outcome {
+export interface InternalReviewedPlanAction {
+  type: 'APPLY_STRATEGY_REVIEW';
+  driverId: string;
+  plan: Partial<DriverPlan>;
+  review: StrategyReviewMetadata;
+  capability: typeof REVIEW_CAPABILITY;
+}
+
+/** Only the controller can create an action carrying this private capability. */
+export function createReviewedPlanAction(driverId: string, plan: Partial<DriverPlan>, review: StrategyReviewMetadata): InternalReviewedPlanAction {
+  return { type: 'APPLY_STRATEGY_REVIEW', driverId, plan, review, capability: REVIEW_CAPABILITY };
+}
+
+function validReviewMetadata(review: StrategyReviewMetadata, rules: GameState['rules']): boolean {
+  return review.source === 'secondary'
+    && Array.isArray(review.originalPlan.tyrePlan)
+    && review.originalPlan.tyrePlan.length >= 2 && review.originalPlan.tyrePlan.length <= 5
+    && !validatePlan(rules, review.originalPlan.tyrePlan, false)
+    && PACE.includes(review.originalPlan.paceMode)
+    && TIMING.includes(review.originalPlan.pitTiming)
+    && typeof review.originalPlan.scReaction === 'boolean'
+    && typeof review.summary === 'string' && review.summary.trim().length > 0 && review.summary.length <= 800
+    && typeof review.modelLabel === 'string' && review.modelLabel.length > 0 && review.modelLabel.length <= 64
+    && typeof review.roundKey === 'string' && /^\d{4}:r\d{1,2}$/.test(review.roundKey)
+    && Array.isArray(review.issues) && review.issues.length <= 8
+    && review.issues.every(issue => typeof issue.code === 'string' && REVIEW_CODES.includes(issue.code)
+      && ['low', 'medium', 'high'].includes(issue.severity)
+      && typeof issue.message === 'string' && issue.message.trim().length > 0 && issue.message.length <= 400);
+}
+
+function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>, trustedReview?: StrategyReviewMetadata): Outcome {
   if (state.weekend?.liveRace) return fail('比赛进行中，请使用实时策略指令');
   const team = state.teams[state.meta.playerTeamId];
   if (!team.cars.some(c => c.driverId === driverId)) return fail('只能为本队正式车手设置策略');
@@ -99,14 +131,10 @@ function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>)
     plan.sprintTyre = patch.sprintTyre;
   }
   const changesRaceStrategy = patch.strategySource !== undefined || patch.tyrePlan !== undefined || patch.paceMode !== undefined || patch.pitTiming !== undefined || patch.scReaction !== undefined;
-  if (patch.strategyReview !== undefined) {
-    const review = patch.strategyReview;
-    if (review.source !== 'secondary' || !Array.isArray(review.originalPlan.tyrePlan)
-      || !PACE.includes(review.originalPlan.paceMode) || !TIMING.includes(review.originalPlan.pitTiming)
-      || typeof review.originalPlan.scReaction !== 'boolean' || typeof review.summary !== 'string'
-      || typeof review.modelLabel !== 'string' || typeof review.roundKey !== 'string'
-      || !Array.isArray(review.issues)
-      || review.issues.some(issue => typeof issue.code !== 'string' || !['low', 'medium', 'high'].includes(issue.severity) || typeof issue.message !== 'string')) return fail('策略点评来源信息无效');
+  if (patch.strategyReview !== undefined) return fail('策略点评来源只能由受控点评流程写入');
+  if (trustedReview !== undefined) {
+    const review = trustedReview;
+    if (!validReviewMetadata(review, rules)) return fail('策略点评来源信息无效');
     plan.strategyReview = {
       source: 'secondary',
       originalPlan: {
@@ -170,7 +198,7 @@ function setTeamOrders(state: GameState, mode: string, favor: string | null): Ou
 /** 法拉利撤职后仍允许的操作（只读 / 清理） */
 const ALLOWED_AFTER_DISMISSAL = new Set(['CLEAR_NARRATION']);
 
-function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
+function run(state: GameState, action: Action | InternalReviewedPlanAction, rng: Rng, depth = 0): Outcome {
   const tid = state.meta.playerTeamId;
   const dismissed = dismissalReason(state);
   if (dismissed && !ALLOWED_AFTER_DISMISSAL.has(action?.type)) {
@@ -178,7 +206,7 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
   }
   const specialBlocker = specialDecisionBlocker(state, action?.type);
   if (specialBlocker) return fail(specialBlocker);
-  const managementBlocker = managementActionBlocker(state, action);
+  const managementBlocker = managementActionBlocker(state, action as Action);
   if (managementBlocker) return fail(managementBlocker);
   switch (action.type) {
     case 'ADVANCE': {
@@ -280,6 +308,9 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
     }
     case 'SET_PLAN':
       return setPlan(state, action.driverId, action.plan ?? {});
+    case 'APPLY_STRATEGY_REVIEW':
+      if (action.capability !== REVIEW_CAPABILITY) return fail('策略点评来源只能由受控点评流程写入');
+      return setPlan(state, action.driverId, action.plan, action.review);
     case 'SET_TEAM_ORDERS':
       return setTeamOrders(state, action.orders?.mode, action.orders?.favorDriverId ?? null);
     case 'SET_PRIORITY':
@@ -351,7 +382,7 @@ function run(state: GameState, action: Action, rng: Rng, depth = 0): Outcome {
 /** 会产生随机结果的动作（用于「每次重新随机」模式） */
 const RANDOM_ACTIONS = new Set(['ADVANCE', 'START_SEASON', 'ADVANCE_WEEK', 'START_WEEKEND', 'RUN_PRACTICE', 'RUN_SPRINT_QUALIFYING', 'RUN_SPRINT', 'RUN_QUALIFYING', 'RUN_RACE', 'START_RACE', 'FINISH_ROUND', 'START_NEXT_SEASON', 'START_PROJECT']);
 
-export function dispatch(input: GameState, action: Action, opts: DispatchOptions = {}): ActionResult {
+export function dispatch(input: GameState, action: Action | InternalReviewedPlanAction, opts: DispatchOptions = {}): ActionResult {
   const state = deepClone(input);
   let seed = state.rng;
   // An in-progress race owns its persisted RNG stream. Fresh randomness applies
