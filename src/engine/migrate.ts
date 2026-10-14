@@ -73,7 +73,13 @@ function migrateSixPartPowerUnit(state: GameState): void {
     }
     team.projects = team.projects.flatMap(project => {
       const targets = LEGACY_PU_MAP[project.partType as keyof typeof LEGACY_PU_MAP];
-      return targets ? targets.map(type => ({ ...deepClone(project), id: `${project.id}-${type}`, partType: type })) : [project];
+      return targets ? targets.map(type => ({
+        ...deepClone(project),
+        id: `${project.id}-${type}`,
+        partType: type,
+        cost: project.cost / targets.length,
+        label: `${project.label} · ${state.rules.parts[type]?.name ?? type}`,
+      })) : [project];
     });
   }
   for (const driver of Object.values(state.drivers ?? {})) {
@@ -97,6 +103,7 @@ function migrateSixPartPowerUnit(state: GameState): void {
     }
     state.alpine.penalizedPowerSpecs = migrated;
   }
+  if (state.rules.astonMartin.aduoPuBuff === 8) state.rules.astonMartin.aduoPuBuff = DEFAULT_RULES.astonMartin.aduoPuBuff;
 }
 
 export const DEFAULT_STAFF_NAMES: Record<string, Partial<Record<StaffRole, string>>> = {

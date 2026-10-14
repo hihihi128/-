@@ -219,7 +219,7 @@ export interface LiveRaceView {
   restart: 'standing' | 'rolling' | null;
   weather: { rain: number; surface: 'dry' | 'damp' | 'wet'; forecast: import('./types').RaceForecast };
   timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; pits: number }>;
-  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; iceHealth: number; electricalHealth: number; puTemperature: number; puStatus: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
+  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; iceHealth: number; electricalHealth: number; weakestPuHealth: number; weakestPuName: string; puTemperature: number; puStatus: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
   events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; driverNames: string[]; key: boolean }>;
   pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number } | null;
   teamOrders: import('./types').TeamOrders;
@@ -783,7 +783,10 @@ function buildWeekendView(state: GameState): WeekendView | null {
           raceControl: live.redFlag?.active ? 'red_flag' : live.scLeft > 0 ? 'sc' : live.vscLeft > 0 ? 'vsc' : null,
           restart: live.redFlag?.restartPending ? live.redFlag.restart : null,
           weather: { rain: live.rain, surface: live.surface, forecast: live.forecast }, timing,
-          playerCars: Object.values(live.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, tyreState: state.teams[c.teamId]?.tyreInventory?.[c.driverId]?.find(set => set.id === c.tyreSetId)?.state ?? 'used', damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming, iceHealth: c.iceHealth ?? 100, electricalHealth: c.electricalHealth ?? 100, puTemperature: c.puTemperature ?? 78, puStatus: c.puStatus ?? 'normal', predictedStationary: predictedStationaryTime(state.teams[c.teamId], c.repairPending), lastPit: c.pitStops?.at(-1) ?? null })),
+          playerCars: Object.values(live.cars).filter(c => c.player).map(c => {
+            const weakest = Object.entries(c.puComponentHealth ?? {}).sort((a, b) => (a[1] ?? 100) - (b[1] ?? 100))[0];
+            return { driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, tyreState: state.teams[c.teamId]?.tyreInventory?.[c.driverId]?.find(set => set.id === c.tyreSetId)?.state ?? 'used', damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming, iceHealth: c.iceHealth ?? 100, electricalHealth: c.electricalHealth ?? 100, weakestPuHealth: weakest?.[1] ?? 100, weakestPuName: state.rules.parts[weakest?.[0] ?? '']?.name ?? '动力单元', puTemperature: c.puTemperature ?? 78, puStatus: c.puStatus ?? 'normal', predictedStationary: predictedStationaryTime(state.teams[c.teamId], c.repairPending), lastPit: c.pitStops?.at(-1) ?? null };
+          }),
           events: live.events.slice(-20).map(event => {
             const names = event.drivers.map(id => state.drivers[id]?.short ?? state.drivers[id]?.name ?? id);
             let text = event.text;

@@ -118,6 +118,8 @@ describe('旧存档升级', () => {
     });
     state.drivers.c1.puUsed = { power_unit: 3, ers: 2 };
     state.drivers.c1.puPool = { power_unit: ['a', 'b', 'c'], ers: ['d', 'e'] };
+    state.teams.team_c.projects.push({ id: 'legacy-pu', kind: 'design', label: '旧动力升级', partType: 'power_unit', cost: 9, weeksTotal: 3, weeksLeft: 2, startedAt: 'legacy' });
+    state.rules.astonMartin.aduoPuBuff = 8;
 
     migrateState(state);
     expect(state.rules.puAllocation).toEqual({ ice: 5, turbocharger: 5, exhaust: 5, mgu_k: 4, energy_store: 4, control_electronics: 4 });
@@ -126,6 +128,11 @@ describe('旧存档升级', () => {
     expect(state.drivers.c1.puUsed).toMatchObject({ ice: 3, turbocharger: 3, exhaust: 3, mgu_k: 2, energy_store: 2, control_electronics: 2 });
     expect(car.puWear?.ice?.wear).toBe(21);
     expect(car.puWear?.turbocharger?.wear).toBe(21);
+    const splitProjects = state.teams.team_c.projects.filter(project => project.id.startsWith('legacy-pu-'));
+    expect(splitProjects).toHaveLength(3);
+    expect(splitProjects.reduce((sum, project) => sum + project.cost, 0)).toBe(9);
+    expect(splitProjects.every(project => project.label.includes('旧动力升级 · '))).toBe(true);
+    expect(state.rules.astonMartin.aduoPuBuff).toBe(4.2);
     expect(() => buildView(state)).not.toThrow();
     const once = JSON.stringify(state);
     migrateState(state);
