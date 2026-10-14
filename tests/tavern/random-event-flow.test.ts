@@ -41,8 +41,8 @@ describe('随机事件双 API 协议', () => {
     const message = randomEventNarrationMessage(state, event, '继续确认恢复情况。');
 
     expect(message).toContain('此前轮次已经在上方正常聊天记录中');
+    expect(message).toContain('事件背景（只供理解，不要复述）：训练计划复查。医疗组建议分三步确认训练负荷。');
     expect(message).toContain('只输出本轮新发生的剧情正文');
-    expect(message).not.toContain('医疗组建议分三步确认训练负荷。');
     expect(message).not.toContain('先安排复查。');
     expect(message).not.toContain('医疗主管完成第一轮负荷评估。');
   });

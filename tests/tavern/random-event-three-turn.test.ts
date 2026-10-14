@@ -50,8 +50,9 @@ describe('three-turn random-event adjudication', () => {
         expectedRevisionId: ctrl.status().revisionId!,
       });
       expect(result).toMatchObject({ ok: true, event: { status: 'awaiting_narration' } });
-      expect(env.created[index]).toContain(answer);
-      for (const previousReply of replies.slice(0, index)) expect(env.created[index]).not.toContain(previousReply);
+      const narrationRequest = env.created.at(-1)!;
+      expect(narrationRequest).toContain(answer);
+      for (const previousReply of replies.slice(0, index)) expect(narrationRequest).not.toContain(previousReply);
       await env.aiReplies(reply);
       await tick();
 

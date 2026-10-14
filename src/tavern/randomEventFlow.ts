@@ -60,7 +60,7 @@ export function randomEventNarrationMessage(state: GameState, event: RandomEvent
     '【F1M 随机事件叙述请求】',
     `你正在继续 ${team.name} 的正常剧情。请围绕以下随机事件和领队决定写一段完整、自然的中文叙事。`,
     `事件 ID：${event.id}`,
-    turn === 1 ? `事件：${event.title}。${event.prompt}` : `继续事件：${event.title}。此前轮次已经在上方正常聊天记录中。`,
+    turn === 1 ? `事件：${event.title}。${event.prompt}` : `事件背景（只供理解，不要复述）：${event.title}。${event.prompt} 此前轮次已经在上方正常聊天记录中。`,
     `当前是第 ${turn}/${event.totalDialogueTurns ?? 2} 轮。`,
     `领队本轮回应：${answer}`,
     '只输出本轮新发生的剧情正文。不要复述事件介绍、领队回应或此前正文，也不要复制已有段落。',
