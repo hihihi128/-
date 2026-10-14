@@ -35,6 +35,7 @@
 #   sponsorIncome   每站赞助收入（M$）
 #   operatingCost   每站运营成本（M$，计入预算帽）
 #   targetPosition  董事会期望的车队排名
+#   selectionDifficulty  开局选队难度分组：easy 简单 / medium 中等 / hard 困难（省略时为 medium）
 #   facilities      设施等级 1~5：windTunnel 风洞 / cfd CFD / simulator 模拟器 / factory 工厂
 #                   （模拟器等级影响周末初始调校信心）
 #   staff           关键员工：technicalDirector 技术总监 / aeroChief 空气动力学主管 /
@@ -64,6 +65,7 @@ teams:
     sponsorIncome: 7.2
     operatingCost: 2.6
     targetPosition: 1
+    selectionDifficulty: easy
     facilities: { windTunnel: 5, cfd: 5, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 詹姆斯·艾利森, skill: 90, salary: 3.5 }
@@ -98,6 +100,7 @@ teams:
     sponsorIncome: 7.4
     operatingCost: 2.6
     targetPosition: 1
+    selectionDifficulty: medium
     facilities: { windTunnel: 5, cfd: 5, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 罗布·马歇尔, skill: 87, salary: 3 }
@@ -133,6 +136,7 @@ teams:
     sponsorIncome: 7.4
     operatingCost: 2.6
     targetPosition: 2
+    selectionDifficulty: medium
     facilities: { windTunnel: 4, cfd: 5, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 皮埃尔·瓦谢, skill: 87, salary: 3 }
@@ -171,6 +175,7 @@ teams:
     sponsorIncome: 7.5
     operatingCost: 2.6
     targetPosition: 4
+    selectionDifficulty: easy
     facilities: { windTunnel: 4, cfd: 4, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 洛伊克·塞拉（底盘技术总监）, skill: 84, salary: 3 }
@@ -210,6 +215,7 @@ teams:
     sponsorIncome: 5.2
     operatingCost: 2.4
     targetPosition: 5
+    selectionDifficulty: hard
     facilities: { windTunnel: 2, cfd: 3, simulator: 3, factory: 3 }
     staff:
       technicalDirector: { name: 帕特·弗莱, skill: 82, salary: 2.2 }
@@ -244,6 +250,7 @@ teams:
     sponsorIncome: 4.4
     operatingCost: 2.3
     targetPosition: 7
+    selectionDifficulty: easy
     facilities: { windTunnel: 3, cfd: 3, simulator: 4, factory: 3 }
     staff:
       technicalDirector: { name: 蒂姆·戈斯, skill: 76, salary: 1.6 }
@@ -279,6 +286,7 @@ teams:
     sponsorIncome: 6.5
     operatingCost: 2.6
     targetPosition: 8
+    selectionDifficulty: hard
     facilities: { windTunnel: 5, cfd: 4, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 恩里科·卡尔迪莱, skill: 84, salary: 2.8 }
@@ -314,6 +322,7 @@ teams:
     sponsorIncome: 4.6
     operatingCost: 2.3
     targetPosition: 8
+    selectionDifficulty: medium
     facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 2 }
     staff:
       technicalDirector: { name: 安德烈亚·德佐尔多, skill: 75, salary: 1.4 }
@@ -349,6 +358,7 @@ teams:
     sponsorIncome: 5.6
     operatingCost: 2.5
     targetPosition: 8
+    selectionDifficulty: medium
     facilities: { windTunnel: 4, cfd: 4, simulator: 4, factory: 4 }
     staff:
       technicalDirector: { name: 詹姆斯·基, skill: 80, salary: 2.2 }
@@ -383,6 +393,7 @@ teams:
     sponsorIncome: 4.8
     operatingCost: 2.4
     targetPosition: 7
+    selectionDifficulty: easy
     facilities: { windTunnel: 4, cfd: 4, simulator: 4, factory: 4 }
     staff:
       technicalDirector: { name: 大卫·桑切斯, skill: 78, salary: 1.8 }
@@ -416,6 +427,7 @@ teams:
     sponsorIncome: 4.5
     operatingCost: 2.4
     targetPosition: 11
+    selectionDifficulty: hard
     facilities: { windTunnel: 3, cfd: 3, simulator: 4, factory: 4 }
     staff:
       technicalDirector: { name: 尼克·切斯特, skill: 74, salary: 1.8 }

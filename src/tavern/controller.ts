@@ -30,7 +30,7 @@ import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
 import { strategyOptions } from '../engine/strategy';
 import { applySupernaturalCommands, effectiveSetup, parseSupernaturalCommands, SUPERNATURAL_LIMITS } from '../engine/supernatural';
 import { dismissalReason } from '../engine/teamSpecials';
-import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, RandomEventRecord, StaffRole } from '../engine/types';
+import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, RandomEventRecord, StaffRole, TeamSelectionDifficulty } from '../engine/types';
 import { deepClone, hashString, money, round1 } from '../engine/util';
 import { buildView, supernaturalAvailability, type GameView } from '../engine/view';
 import type { TavernEnv, TextGenerationOptions } from './env';
@@ -226,7 +226,7 @@ export interface DataReport {
   origin: string;
   entries: string[];
   issues: DataIssue[];
-  teams: Array<{ id: string; name: string; color: string; targetPosition: number; description: string; special: string; drivers: string[] }>;
+  teams: Array<{ id: string; name: string; color: string; targetPosition: number; selectionDifficulty: TeamSelectionDifficulty; description: string; special: string; drivers: string[] }>;
   specialRules?: {
     astonMartin: { vibrationInterval: number; vibrationRetireChance: number };
     racingBulls: { recallChance: number };
@@ -632,6 +632,7 @@ export class F1Controller {
         name: t.name,
         color: t.color,
         targetPosition: t.targetPosition,
+        selectionDifficulty: t.selectionDifficulty,
         description: t.description,
         special: t.special,
         drivers: (db?.drivers ?? []).filter(d => d.teamId === t.id && d.role === 'race').map(d => d.name),

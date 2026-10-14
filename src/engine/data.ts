@@ -21,6 +21,7 @@ import type {
   StaffMember,
   StaffRole,
   TeamDef,
+  TeamSelectionDifficulty,
   TrackDef,
   TrackDemand,
   TyreDef,
@@ -519,9 +520,20 @@ function normalizeTeam(ctx: Ctx, raw: unknown, index: number, rules: Rules): Tea
     staff: normalizeStaff(ctx, raw.staff, `${path}.staff`),
     parts,
     targetPosition: Math.round(ctx.num(raw, 'targetPosition', path, { def: 5, min: 1 })),
+    selectionDifficulty: normalizeSelectionDifficulty(ctx, raw, path),
     description: ctx.str(raw, 'description', path),
     special: normalizeSpecial(ctx, raw, path),
   };
+}
+
+const SELECTION_DIFFICULTIES: readonly TeamSelectionDifficulty[] = ['easy', 'medium', 'hard'];
+
+function normalizeSelectionDifficulty(ctx: Ctx, raw: Record<string, unknown>, path: string): TeamSelectionDifficulty {
+  const v = ctx.str(raw, 'selectionDifficulty', path).toLowerCase();
+  if (!v) return 'medium';
+  if ((SELECTION_DIFFICULTIES as readonly string[]).includes(v)) return v as TeamSelectionDifficulty;
+  ctx.warn(`${path}.selectionDifficulty`, `未知的选队难度「${v}」，已视为 medium（可用：${SELECTION_DIFFICULTIES.join('、')}）`);
+  return 'medium';
 }
 
 /** 目前支持的特殊机制 */

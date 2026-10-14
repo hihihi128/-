@@ -13,6 +13,17 @@ const supernaturalMode = ref(false);
 const selectionReason = ref('');
 const REASON_MAX = 300;
 
+const difficultyGroups = [
+  { id: 'easy', label: '简单车队', hint: '赛车基础较好，目标相对容易达成' },
+  { id: 'medium', label: '中等车队', hint: '有竞争力，但特殊机制或资源会带来压力' },
+  { id: 'hard', label: '困难车队', hint: '起点差或危机严重，需要长期追赶' },
+] as const;
+const teamGroups = computed(() =>
+  difficultyGroups
+    .map(group => ({ ...group, teams: report.value?.teams.filter(t => (t.selectionDifficulty ?? 'medium') === group.id) ?? [] }))
+    .filter(group => group.teams.length),
+);
+
 const selectedTeam = computed(() => report.value?.teams.find(t => t.id === teamId.value) ?? null);
 const isFerrari = computed(() => selectedTeam.value?.special === 'ferrari');
 const special = computed(() => selectedTeam.value?.special ?? '');
@@ -112,16 +123,24 @@ onMounted(load);
 
     <div v-if="report?.teams.length" class="card">
       <h3>选择车队</h3>
-      <div class="grid g3">
-        <button v-for="t in report.teams" :key="t.id" class="team-card" :class="{ on: teamId === t.id }" :style="{ '--c': t.color }" @click="teamId = t.id">
-          <div class="spread">
-            <b>{{ t.name }}</b>
-            <span class="badge">目标 P{{ t.targetPosition }}</span>
+      <div class="team-groups">
+        <section v-for="group in teamGroups" :key="group.id" class="team-group" :class="group.id" :data-difficulty="group.id">
+          <div class="group-head">
+            <b>{{ group.label }}</b>
+            <span class="tiny muted">{{ group.hint }} · {{ group.teams.length }} 支</span>
           </div>
-          <div class="tiny muted">{{ t.drivers.join(' / ') || '无正式车手' }}</div>
-          <div v-if="t.special" class="tiny"><span class="badge warn">特殊机制：{{ specialLabels[t.special] ?? t.special }}</span></div>
-          <div v-if="t.description" class="tiny desc">{{ t.description }}</div>
-        </button>
+          <div class="grid g3">
+            <button v-for="t in group.teams" :key="t.id" class="team-card" :class="{ on: teamId === t.id }" :style="{ '--c': t.color }" @click="teamId = t.id">
+              <div class="spread">
+                <b>{{ t.name }}</b>
+                <span class="badge">目标 P{{ t.targetPosition }}</span>
+              </div>
+              <div class="tiny muted">{{ t.drivers.join(' / ') || '无正式车手' }}</div>
+              <div v-if="t.special" class="tiny"><span class="badge warn">特殊机制：{{ specialLabels[t.special] ?? t.special }}</span></div>
+              <div v-if="t.description" class="tiny desc">{{ t.description }}</div>
+            </button>
+          </div>
+        </section>
       </div>
     </div>
 
@@ -252,6 +271,37 @@ onMounted(load);
   inset: 0 auto 0 0;
   width: 6px;
   background: var(--red);
+}
+.team-groups {
+  display: grid;
+  gap: 12px;
+  margin-top: 8px;
+}
+.team-group {
+  --group: var(--yellow);
+  border: 2px solid var(--group);
+  border-radius: var(--radius);
+  padding: 10px;
+  background: color-mix(in srgb, var(--group) 6%, transparent);
+}
+.team-group.easy {
+  --group: var(--blue);
+}
+.team-group.medium {
+  --group: var(--yellow);
+}
+.team-group.hard {
+  --group: var(--red);
+}
+.group-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.group-head b {
+  color: var(--group);
 }
 .team-card {
   text-align: left;
