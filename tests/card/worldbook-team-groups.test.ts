@@ -2,6 +2,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import YAML from 'yaml';
+import { DEFAULT_STAFF_NAMES } from '../../src/engine/migrate';
 
 const dir = path.resolve('src/card/worldbook');
 const strategyFiles = readdirSync(dir).filter(name => /^lore-strategy-.*\.md$/.test(name)).sort();
@@ -10,10 +11,11 @@ const teams = YAML.parse(readFileSync(path.join(dir, 'data-teams.yaml'), 'utf8')
   id: string;
   name: string;
   staff: {
-    technicalDirector: { name?: string };
-    aeroChief: { name?: string };
+    technicalDirector: { name: string };
+    aeroChief: { name: string };
     raceEngineer: { name: string };
     raceEngineer2: { name: string };
+    pitCrew: { name: string };
     strategist: { name: string; abilities: { risk: number } };
   };
 }>;
@@ -22,6 +24,7 @@ const slugs: Record<string, string> = {
   mercedes: 'mercedes', mclaren: 'mclaren', red_bull: 'red-bull', ferrari: 'ferrari', williams: 'williams',
   racing_bulls: 'racing-bulls', aston_martin: 'aston-martin', haas: 'haas', audi: 'audi', alpine: 'alpine', cadillac: 'cadillac',
 };
+const teamLoreSlugs: Record<string, string> = { ...slugs, red_bull: 'redbull' };
 const strategySections = ['负责人:', '决策风格:', '数据优势:', '风险偏好:', '沟通流程:', '常见失误与剧情触发:', '叙事指引:'];
 const staffSections = ['组成人员:', '技术分工:', '赛道执行:', '储备与后备:', '内部协作:', '玩家关系:', '叙事指引:'];
 const expectedReserves: Record<string, string[]> = {
@@ -75,6 +78,23 @@ describe('车队策略组与技术赛道核心组世界书', () => {
     }
   });
 
+  it('所有员工条目都有可显示的姓名或组名', () => {
+    for (const team of teams) {
+      for (const [role, staff] of Object.entries(team.staff)) {
+        expect(staff.name?.trim(), `${team.id}.${role}`).toBeTruthy();
+      }
+    }
+  });
+
+  it('旧存档占位名迁移表与当前车队数据一致', () => {
+    for (const [teamId, names] of Object.entries(DEFAULT_STAFF_NAMES)) {
+      const team = teams.find(candidate => candidate.id === teamId)!;
+      for (const [role, name] of Object.entries(names)) {
+        expect(team.staff[role as keyof typeof team.staff].name, `${teamId}.${role}`).toBe(name);
+      }
+    }
+  });
+
   it('策略组包含负责人、团队风格、作用域和完整标签', () => {
     for (const team of teams) {
       const file = `lore-strategy-${slugs[team.id]}.md`;
@@ -111,6 +131,8 @@ describe('车队策略组与技术赛道核心组世界书', () => {
       expect(text.trimEnd().endsWith('</核心人员组资料>'), file).toBe(true);
       expect(text.includes(team.staff.raceEngineer.name), `${file}: ${team.staff.raceEngineer.name}`).toBe(true);
       expect(text.includes(team.staff.raceEngineer2.name), `${file}: ${team.staff.raceEngineer2.name}`).toBe(true);
+      expect(text.includes(team.staff.aeroChief.name), `${file}: ${team.staff.aeroChief.name}`).toBe(true);
+      expect(source(`lore-${teamLoreSlugs[team.id]}.md`).includes(team.staff.aeroChief.name), `lore-${teamLoreSlugs[team.id]}.md: ${team.staff.aeroChief.name}`).toBe(true);
       expect(text.includes('玩家关系与专属机制只在实时数据表明玩家执掌本队时生效'), file).toBe(true);
       for (const heading of staffSections) expect(text.includes(heading), `${file}: ${heading}`).toBe(true);
 

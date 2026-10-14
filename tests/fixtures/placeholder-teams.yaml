@@ -164,7 +164,7 @@ teams:
       technicalDirector: { name: 洛伊克·塞拉（底盘技术总监）, skill: 84, salary: 3 }
       aeroChief: { name: 迭戈·通迪, skill: 80, salary: 2 }
       raceEngineer: { name: 布莱恩·博齐, skill: 79, salary: 1 }
-      pitCrew: { skill: 87, salary: 1.6 }
+      pitCrew: { name: 法拉利维修组, skill: 87, salary: 1.6 }
       strategist: { name: 拉文·贾恩, skill: 77, salary: 1 }
     carBase: { perf: 81, rel: 82 }
     parts:
