@@ -177,12 +177,17 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
   });
 
   it('首次座谈会允许奥迪反水，阿尔派玩家必须支持起压提案', () => {
-    const audi = game('audi');
-    expect(audiAlliance(audi).ok).toBe(true);
-    audi.season.roundIndex = 2;
-    afterNextTeamRace(audi);
-    expect(audi.fiaMeeting!.current?.issue).toBe('ferrari_turbo');
-    if (audi.fiaMeeting!.current!.supporters!.includes('audi')) expect(audi.audi!.alliance).toBe(true);
+    let audiDefection: GameState | null = null;
+    for (let seed = 0; seed < 100 && !audiDefection; seed++) {
+      const candidate = game('ferrari');
+      candidate.meta.createdAt = seed;
+      expect(audiAlliance(candidate).ok).toBe(true);
+      candidate.season.roundIndex = 2;
+      afterNextTeamRace(candidate);
+      if (candidate.fiaMeeting!.current!.supporters!.includes('audi')) audiDefection = candidate;
+    }
+    expect(audiDefection?.ferrari?.aduoAlliance).toBe(true);
+    expect(audiDefection?.fiaMeeting?.current?.supporters).toContain('audi');
 
     const alpine = game('alpine');
     alpine.season.roundIndex = 2;
@@ -222,19 +227,33 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     delete (state.rules as Partial<GameState['rules']>).racingBulls;
     delete (state.rules as Partial<GameState['rules']>).audi;
     delete (state.rules as Partial<GameState['rules']>).fiaMeeting;
+    delete (state.rules.ferrari as Partial<GameState['rules']['ferrari']>).turboStartGainMin;
+    delete (state.rules.ferrari as Partial<GameState['rules']['ferrari']>).turboStartGainMax;
+    delete (state.rules.ferrari as Partial<GameState['rules']['ferrari']>).turboSpoolSeconds;
     migrateState(state);
     expect(state.astonMartin).toBeNull();
     expect(state.racingBulls).toBeNull();
     expect(state.audi).toBeNull();
-    expect(state.fiaMeeting).toMatchObject({ completed: 0, current: null, ferrariTurboSpoolSeconds: 0, ferrariAduoInstalled: false });
+    expect(state.fiaMeeting).toMatchObject({ completed: 0, current: null, ferrariTurboSpoolSeconds: 0, ferrariAduoInstalled: false, ferrariTurboDebated: false });
     expect(state.rules.fiaMeeting.interval).toBeGreaterThan(0);
     expect(state.rules.astonMartin.vibrationRetireChance).toBe(.25);
+    expect(state.rules.ferrari).toMatchObject({ turboStartGainMin: 2, turboStartGainMax: 4, turboSpoolSeconds: 5 });
 
     let legacyRace = atRace('cadillac');
     delete (legacyRace.rules as Partial<GameState['rules']>).fiaMeeting;
     migrateState(legacyRace);
     legacyRace = advanceUntil(legacyRace, value => value.season.phase === 'post_race');
     expect(legacyRace.season.phase).toBe('post_race');
+  });
+
+  it('旧存档错过首次座谈后会在下一次会议补办小涡轮议题', () => {
+    const state = game('ferrari');
+    state.fiaMeeting!.completed = 1;
+    delete (state.fiaMeeting! as Partial<NonNullable<GameState['fiaMeeting']>>).ferrariTurboDebated;
+    migrateState(state);
+    state.season.roundIndex = 5;
+    afterNextTeamRace(state);
+    expect(state.fiaMeeting!.current?.issue).toBe('ferrari_turbo');
   });
 
   it('把旧奥迪单一盟友存档迁移为四队联盟', () => {

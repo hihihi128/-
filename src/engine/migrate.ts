@@ -233,9 +233,10 @@ export function migrateState(state: GameState): GameState {
     for (const staff of Object.values(team.staff)) staff.affinity ??= 50;
   }
   if (state.audi) state.audi.alliance = Boolean(state.audi.alliance);
-  state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, ferrariTurboSpoolSeconds: 0, ferrariAduoInstalled: false, log: [] };
+  state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, ferrariTurboSpoolSeconds: 0, ferrariAduoInstalled: false, ferrariTurboDebated: false, log: [] };
   state.fiaMeeting.ferrariTurboSpoolSeconds ??= 0;
   state.fiaMeeting.ferrariAduoInstalled ??= (state.teams.ferrari?.puHomologations ?? 0) > 0;
+  state.fiaMeeting.ferrariTurboDebated ??= state.fiaMeeting.ferrariAduoInstalled || state.fiaMeeting.current?.issue === 'ferrari_turbo';
   if (state.fiaMeeting.current) {
     state.fiaMeeting.current.supporters ??= [];
     state.fiaMeeting.current.forcedStance ??= null;
@@ -245,6 +246,7 @@ export function migrateState(state: GameState): GameState {
     state.ferrari.aduoLobbyGranted ??= false;
   }
   if (state.mclaren) state.mclaren.weeksTotal ??= state.mclaren.weeksLeft;
+  state.rules.ferrari ??= deepClone(DEFAULT_RULES.ferrari);
   state.rules.astonMartin ??= deepClone(DEFAULT_RULES.astonMartin);
   state.rules.racingBulls ??= deepClone(DEFAULT_RULES.racingBulls);
   state.rules.audi ??= deepClone(DEFAULT_RULES.audi);
@@ -254,6 +256,7 @@ export function migrateState(state: GameState): GameState {
   state.rules.williams ??= deepClone(DEFAULT_RULES.williams);
   state.rules.randomEvents ??= deepClone(DEFAULT_RULES.randomEvents);
   state.rules.practiceReturnSets ??= DEFAULT_RULES.practiceReturnSets;
+  fillMissing(state.rules.ferrari as unknown as Record<string, unknown>, DEFAULT_RULES.ferrari as unknown as Record<string, unknown>);
   fillMissing(state.rules.astonMartin as unknown as Record<string, unknown>, DEFAULT_RULES.astonMartin as unknown as Record<string, unknown>);
   fillMissing(state.rules.racingBulls as unknown as Record<string, unknown>, DEFAULT_RULES.racingBulls as unknown as Record<string, unknown>);
   fillMissing(state.rules.audi as unknown as Record<string, unknown>, DEFAULT_RULES.audi as unknown as Record<string, unknown>);

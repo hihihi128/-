@@ -2,7 +2,8 @@
  * 提示词构建：把存档压缩成给 AI 看的「实时数据」块。
  * 引擎是唯一事实来源；AI 据此叙事，并按协议输出少量可量化的剧情后果。
  */
-import { LABELS } from './defaults';
+import { FIA_ISSUE_LABELS, LABELS } from './defaults';
+import { ferrariTurboAdvantageActive } from './nextTeamSpecials';
 import { rankOfTeam } from './development';
 import { capRemaining, costCapOf } from './finance';
 import { aduoLine } from './aduo';
@@ -95,7 +96,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
     L.push(
       f.dismissed
         ? `【法拉利·已撤职】玩家已被埃尔坎解除过渡领队职务：${f.dismissed}。本局结束，叙事应围绕离任与余波展开。`
-        : `【法拉利·过渡领队考核】媒体支持率 ${team.mediaReputation.toFixed(0)}（低于 ${fr.minMedia} 撤职，低于 ${fr.warnMedia} 告急）· ${fans}（差距 ${fanGap(f).toFixed(0)}，超过 ${fr.maxFanGap} 撤职）。升级件分配、优先车手、车队指令和成绩都会影响两边粉丝；意大利媒体比别处苛刻。小涡轮起步优势${!state.fiaMeeting?.ferrariAduoInstalled && (state.fiaMeeting?.ferrariTurboSpoolSeconds ?? 0) === 0 ? `仍生效，每场正赛提升 ${fr.turboStartGainMin}–${fr.turboStartGainMax} 位` : '已经消失'}；ADUO 四队联盟${f.aduoAlliance ? `已加入${f.aduoLobbyGranted ? '，且已获得一次额外认证机会' : '，等待后续 FIA 游说'}` : '尚未加入'}。`,
+        : `【法拉利·过渡领队考核】媒体支持率 ${team.mediaReputation.toFixed(0)}（低于 ${fr.minMedia} 撤职，低于 ${fr.warnMedia} 告急）· ${fans}（差距 ${fanGap(f).toFixed(0)}，超过 ${fr.maxFanGap} 撤职）。升级件分配、优先车手、车队指令和成绩都会影响两边粉丝；意大利媒体比别处苛刻。小涡轮起步优势${ferrariTurboAdvantageActive(state) ? `仍生效，每场正赛提升 ${fr.turboStartGainMin}–${fr.turboStartGainMax} 位` : '已经消失'}；ADUO 四队联盟${f.aduoAlliance ? `已加入${f.aduoLobbyGranted ? '，且已获得一次额外认证机会' : '，等待后续 FIA 游说'}` : '尚未加入'}。`,
     );
   }
   if (state.mclaren) {
@@ -142,12 +143,11 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   if (state.randomEvents?.current && (state.randomEvents.current.status === 'resolved' || state.randomEvents.current.status === 'unresolved')) L.push(`【本周随机事件】${state.randomEvents.current.title}：${state.randomEvents.current.detail}`);
   if (state.meta.playerTeamId === 'cadillac') L.push('【凯迪拉克·新军】车队通过全球公开招募组建，没有额外特殊机制，但初始赛车性能很差，需要依靠研发和人才市场追赶。');
   if (state.fiaMeeting?.current) {
-    const labels = { ferrari_turbo: '法拉利小涡轮起步前起压规则', aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
     const f = state.fiaMeeting;
     const current = f.current!;
     const forced = current.forcedStance ? `布里亚托利已经决定玩家必须${current.forcedStance === 'support' ? '支持' : '反对'}。` : '';
     const proposal = current.issue === 'ferrari_turbo' ? `支持方：${(current.supporters ?? []).map(id => teamName(state, id)).join('、')}；奥迪是否支持独立于 ADUO 联盟关系。` : '';
-    L.push(`【FIA 领队座谈会·必须先处理】议题：${labels[current.issue]}。辩论对手：${current.opponents.map(id => teamName(state, id)).join('、')}。${proposal}${forced}政治资本 ${f.politicalCapital}。玩家必须通过正常领队谈话选择立场，系统按董事会信心、媒体声望、政治资本与确定性随机数进行说服检定。`);
+    L.push(`【FIA 领队座谈会·必须先处理】议题：${FIA_ISSUE_LABELS[current.issue]}。辩论对手：${current.opponents.map(id => teamName(state, id)).join('、')}。${proposal}${forced}政治资本 ${f.politicalCapital}。玩家必须通过正常领队谈话选择立场，系统按董事会信心、媒体声望、政治资本与确定性随机数进行说服检定。`);
   }
 
   // 赛车

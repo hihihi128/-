@@ -1297,6 +1297,8 @@ export interface FiaMeetingState {
   ferrariTurboSpoolSeconds: number;
   /** 法拉利是否已经把首批 ADUO 动力单元升级装车；跨赛季保留 */
   ferrariAduoInstalled: boolean;
+  /** 是否已经完成小涡轮起压规则的专门座谈 */
+  ferrariTurboDebated: boolean;
   log: Array<{ at: string; text: string }>;
 }
 

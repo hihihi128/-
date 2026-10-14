@@ -1,3 +1,5 @@
+import { homologationsLeft } from '../engine/aduo';
+import { FIA_ISSUE_LABELS } from '../engine/defaults';
 import type { Action, GameState } from '../engine/types';
 
 export type NegotiationKind = 'aduo_alliance' | 'fia_roundtable' | 'mercedes_politics' | 'aston_honda' | 'red_bull_gp' | 'haas_toyota';
@@ -41,13 +43,13 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
   aduo_alliance: {
     kind: 'aduo_alliance',
     title: 'ADUO 四队联盟谈判',
-    participants: ['奥迪代表', '法拉利代表', '梅赛德斯代表', '阿斯顿·马丁代表'],
-    opening: '四队代表已经到场。他们要求发起方说明共同游说 FIA 的目标、代价与信息共享边界。',
+    participants: ['ADUO 联盟协调代表', '梅赛德斯代表', '阿斯顿·马丁代表'],
+    opening: '联盟各方代表已经到场。他们要求发起方说明共同游说 FIA 的目标、代价与信息共享边界。',
     choices: {
       alliance: { label: '达成四队联盟', action: { type: 'AUDI_ALLIANCE' } },
     },
     context: state => {
-      if (state.ferrari) return `法拉利尚有 ${Math.max(0, (state.teams.ferrari.aduoUpgrades ?? 0) - (state.teams.ferrari.puHomologations ?? 0))} 次 ADUO 机会。联盟目标是与奥迪、梅赛德斯和阿斯顿·马丁共同游说 FIA；成功后法拉利可额外获得一次认证机会。`;
+      if (state.ferrari) return `法拉利尚有 ${homologationsLeft(state, state.teams.ferrari)} 次 ADUO 机会。联盟目标是与奥迪、梅赛德斯和阿斯顿·马丁共同游说 FIA；成功后法拉利可额外获得一次认证机会。`;
       const audi = state.audi!;
       return `奥迪 ADUO 进度 ${audi.aduoProgress}%，政治支持 ${audi.politicalSupport}。联盟目标是与法拉利、梅赛德斯和阿斯顿·马丁共同推动 ADUO。`;
     },
@@ -65,7 +67,7 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
     },
     context: state => {
       const current = state.fiaMeeting!.current!;
-      const issue = current.issue === 'ferrari_turbo' ? `以安全为由增加 ${state.rules.ferrari.turboSpoolSeconds} 秒起步前涡轮起压时间` : current.issue === 'aduo' ? 'ADUO 动力单元升级' : current.issue === 'driver_safety' ? '车手安全与强制退赛' : '预算帽与新车队扶持';
+      const issue = current.issue === 'ferrari_turbo' ? `以安全为由增加 ${state.rules.ferrari.turboSpoolSeconds} 秒起步前涡轮起压时间` : FIA_ISSUE_LABELS[current.issue];
       const coalition = current.issue === 'ferrari_turbo' ? `支持方是${(current.supporters ?? []).map(id => teamName(state, id)).join('、')}。奥迪可能不顾 ADUO 联盟关系支持限制法拉利。` : '';
       const forced = current.forcedStance ? `布里亚托利已经决定玩家必须选择 ${current.forcedStance}。` : '';
       return `第 ${current.index} 次会议，议题是${issue}。${coalition}${forced}对手是${current.opponents.map(id => teamName(state, id)).join('、')}。玩家政治资本 ${state.fiaMeeting!.politicalCapital}，董事会信心 ${state.teams[state.meta.playerTeamId].boardConfidence}，媒体声望 ${state.teams[state.meta.playerTeamId].mediaReputation}。`;

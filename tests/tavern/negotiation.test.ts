@@ -23,14 +23,14 @@ describe('特殊事件多轮谈判协议', () => {
   it('最低轮数前只能继续谈判', () => {
     const definition = NEGOTIATIONS.aduo_alliance;
     expect(() => parseNegotiationReply(
-      '{"speaker":"法拉利代表","reply":"我们同意。","status":"agreement","choice":"alliance"}',
+      '{"speaker":"ADUO 联盟协调代表","reply":"我们同意。","status":"agreement","choice":"alliance"}',
       definition,
       1,
       2,
       4,
     )).toThrow('至少需要 2 轮');
     expect(parseNegotiationReply(
-      '{"speaker":"法拉利代表","reply":"先说明信息共享边界。","status":"continue","choice":null}',
+      '{"speaker":"ADUO 联盟协调代表","reply":"先说明信息共享边界。","status":"continue","choice":null}',
       definition,
       1,
       2,

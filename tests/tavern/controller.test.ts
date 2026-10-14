@@ -136,7 +136,7 @@ describe('后端控制器（模拟酒馆环境）', () => {
       callCount++;
       expect(options).toEqual({ proxyPreset: '政治谈判副线', model: 'roleplay-model' });
       return callCount === 1
-        ? '{"speaker":"法拉利代表","reply":"先明确各队共享哪些技术资料。","status":"continue","choice":null}'
+        ? '{"speaker":"ADUO 联盟协调代表","reply":"先明确各队共享哪些技术资料。","status":"continue","choice":null}'
         : '{"speaker":"梅赛德斯代表","reply":"四队接受共同游说方案，但各自保留技术边界。","status":"agreement","choice":"alliance"}';
     };
 
@@ -161,7 +161,7 @@ describe('后端控制器（模拟酒馆环境）', () => {
 
     let replies = 0;
     specialEnv.generateText = async () => ++replies === 1
-      ? '{"speaker":"法拉利代表","reply":"还需要更明确的边界。","status":"continue","choice":null}'
+      ? '{"speaker":"ADUO 联盟协调代表","reply":"还需要更明确的边界。","status":"continue","choice":null}'
       : '{"speaker":"梅赛德斯代表","reply":"条件无法统一，本轮谈判结束。","status":"breakdown","choice":null}';
     const started = specialCtrl.startSpecialNegotiation({ kind: 'aduo_alliance', api: 'main' });
     await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '先讨论联盟边界。' });
@@ -178,7 +178,7 @@ describe('后端控制器（模拟酒馆环境）', () => {
     const replacement = JSON.parse(specialCtrl.exportSave()!);
     replacement.state.gameId = 'replacement-negotiation-game';
     expect((await specialCtrl.importSave(JSON.stringify(replacement))).ok).toBe(true);
-    release('{"speaker":"法拉利代表","reply":"继续讨论。","status":"continue","choice":null}');
+    release('{"speaker":"ADUO 联盟协调代表","reply":"继续讨论。","status":"continue","choice":null}');
     const stale = await pending;
     expect(stale.ok).toBe(false);
     expect(stale.message).toContain('安全丢弃');

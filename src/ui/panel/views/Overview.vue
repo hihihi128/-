@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { FIA_ISSUE_LABELS } from '../../../engine/defaults';
 import Bar from '../components/Bar.vue';
 import Kpi from '../components/Kpi.vue';
 import NegotiationPanel from '../components/NegotiationPanel.vue';
@@ -24,7 +25,7 @@ const alpine = computed(() => v.value.alpine);
 const haas = computed(() => v.value.haas);
 const williams = computed(() => v.value.williams);
 const fia = computed(() => v.value.fiaMeeting);
-const fiaIssue: Record<string, string> = { ferrari_turbo: '法拉利小涡轮起步前起压规则', aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
+const fiaIssue: Record<string, string> = FIA_ISSUE_LABELS;
 const driverLabel = (id?: string) => v.value.drivers.find((driver: any) => driver.id === id)?.name ?? id ?? '-';
 const teamLabel = (id?: string) => v.value.teams.find((team: any) => team.id === id)?.name ?? id ?? '-';
 const demandLabels: Record<string, string> = { downforce: '下压力', efficiency: '气动效率', power: '动力', mechanical: '机械抓地' };
@@ -181,7 +182,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
         支持增加 {{ v.specialRules.ferrari.turboSpoolSeconds }} 秒起压时间：{{ (fia.current.supporters ?? []).map(teamLabel).join('、') }}。
         <span v-if="fia.current.supporters?.includes('audi')">奥迪本次支持限制法拉利，即使已加入 ADUO 联盟也不会改变立场。</span>
       </div>
-      <div v-if="fia.current.forcedStance" class="notice warn small">布里亚托利已经决定支持提案。你必须以支持立场参加正常领队谈判。</div>
+      <div v-if="fia.current.forcedStance" class="notice warn small">{{ p.team.id === 'alpine' ? '布里亚托利已经决定支持提案。' : '车队已经公开支持提案。' }}你必须以支持立场参加正常领队谈判。</div>
       <Bar label="政治资本" :value="fia.politicalCapital" color="#355c8a" hint="董事会信心、媒体声望和政治资本共同决定说服检定" />
       <div class="row"><button class="primary" :disabled="store.busy || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'support')" @click="act({ type: 'FIA_DEBATE', stance: 'support' })">支持议题</button><button :disabled="store.busy || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'oppose')" @click="act({ type: 'FIA_DEBATE', stance: 'oppose' })">反对议题</button><button :disabled="store.busy || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'compromise')" @click="act({ type: 'FIA_DEBATE', stance: 'compromise' })">提出折中</button></div>
       <NegotiationPanel kind="fia_roundtable" />

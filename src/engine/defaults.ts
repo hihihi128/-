@@ -360,6 +360,13 @@ export const FACILITIES: FacilityType[] = ['windTunnel', 'cfd', 'simulator', 'fa
 export const STAFF_ROLES: StaffRole[] = ['technicalDirector', 'aeroChief', 'raceEngineer', 'raceEngineer2', 'pitCrew', 'strategist'];
 export const AMBITIONS: Ambition[] = ['conservative', 'standard', 'aggressive'];
 
+export const FIA_ISSUE_LABELS = {
+  ferrari_turbo: '法拉利小涡轮起步前起压规则',
+  aduo: 'ADUO 动力单元升级',
+  driver_safety: '车手安全与强制退赛',
+  cost_cap: '预算帽与新车队扶持',
+} as const;
+
 export const LABELS = {
   phase: {
     preseason: '季前准备',

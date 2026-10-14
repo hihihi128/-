@@ -13,6 +13,7 @@ import {
   worksTeamFor,
 } from './aduo';
 import { AMBITIONS, FACILITIES, LABELS, STAFF_ROLES } from './defaults';
+import { ferrariTurboAdvantageActive } from './nextTeamSpecials';
 import { isPowerUnitPart } from './powerunit';
 import {
   allocationGap,
@@ -477,7 +478,7 @@ function ferrariView(state: GameState): FerrariView | null {
     turboStartGainMin: r.turboStartGainMin,
     turboStartGainMax: r.turboStartGainMax,
     turboSpoolSeconds: state.fiaMeeting?.ferrariTurboSpoolSeconds ?? 0,
-    turboAdvantageActive: !state.fiaMeeting?.ferrariAduoInstalled && (state.teams.ferrari.puHomologations ?? 0) === 0 && (state.fiaMeeting?.ferrariTurboSpoolSeconds ?? 0) === 0,
+    turboAdvantageActive: ferrariTurboAdvantageActive(state),
   };
 }
 

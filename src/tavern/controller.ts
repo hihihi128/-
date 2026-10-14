@@ -1244,6 +1244,8 @@ export class F1Controller {
       );
       if (new TextEncoder().encode(generated).byteLength > 16 * 1024) return fail('谈判 API 返回超过 16 KiB');
       const reply = parseNegotiationReply(generated, definition, nextRound, session.minRounds, session.maxRounds);
+      const forcedStance = session.kind === 'fia_roundtable' ? current.state.fiaMeeting?.current?.forcedStance : null;
+      if (reply.status === 'agreement' && forcedStance && reply.choice !== forcedStance) throw new Error('谈判 API 返回了车队禁止的立场');
       const latest = this.resolveNegotiationContext(session);
       if (this.env.isGenerating() || !latest) {
         session.status = 'breakdown';
