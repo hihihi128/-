@@ -120,7 +120,8 @@ describe('旧存档升级', () => {
     state.drivers.c1.puPool = { power_unit: ['a', 'b', 'c'], ers: ['d', 'e'] };
     state.teams.team_c.projects.push({ id: 'legacy-pu', kind: 'design', label: '旧动力升级', partType: 'power_unit', cost: 9, weeksTotal: 3, weeksLeft: 2, startedAt: 'legacy' });
     state.rules.aduo.baseUpgrades = 1;
-    state.teams.team_c.puHomologations = 1;
+    state.teams.team_c.puHomologations = 2;
+    state.teams.team_c.aduoUpgrades = 1;
     for (const team of Object.values(state.teams)) {
       for (const parts of Object.values(team.parts)) for (const spec of parts.specs) delete spec.homologated;
     }
@@ -138,8 +139,9 @@ describe('旧存档升级', () => {
     expect(splitProjects.reduce((sum, project) => sum + project.cost, 0)).toBe(9);
     expect(splitProjects.every(project => project.label.includes('旧动力升级 · '))).toBe(true);
     expect(state.rules.aduo.baseUpgrades).toBe(0);
-    expect(state.teams.team_c.puHomologations).toBe(0);
-    expect(state.teams.team_c.aduoUpgrades).toBe(1);
+    expect(state.teams.team_c.puHomologations).toBe(1);
+    expect(state.teams.team_c.aduoUpgrades).toBe(2);
+    expect(state.teams.team_c.aduoUpgrades - state.teams.team_c.puHomologations).toBe(1);
     expect(state.rules.astonMartin.aduoPuBuff).toBe(4.2);
     expect(() => buildView(state)).not.toThrow();
     const once = JSON.stringify(state);

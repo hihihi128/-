@@ -349,7 +349,7 @@ export function migrateState(state: GameState): GameState {
   const legacyAduoLifecycle = !!state.rules.aduo && Object.values(state.teams).some(team =>
     state.rules.aduo.parts.some(partType => team.parts[partType]?.specs.some(spec => spec.homologated === undefined)),
   );
-  const legacyBaseUpgrades = legacyAduoLifecycle ? state.rules.aduo.baseUpgrades : 0;
+  const legacyBaseUpgrades = legacyAduoLifecycle && state.rules.aduo.baseUpgrades === 1 ? 1 : 0;
   if (legacyAduoLifecycle && state.rules.aduo.baseUpgrades === 1) state.rules.aduo.baseUpgrades = 0;
   for (const team of Object.values(state.teams)) {
     const crew = team.staff.pitCrew.skill;
