@@ -34,4 +34,12 @@ describe('strategy mode interface', () => {
     expect(liveRace).toContain('role="dialog"');
     expect(liveRace).toContain('红旗下免费更换前翼');
   });
+
+  it('offers main-chat narration at important live-race pauses and the finish', () => {
+    expect(liveRace).toContain("!!live.value?.pendingDecision || live.value?.stage === 'finished'");
+    expect(liveRace).toContain('让 AI 叙述当前暂停');
+    expect(liveRace).toContain('让 AI 叙述比赛结果');
+    expect(liveRace).toContain('api.requestNarration');
+    expect(liveRace).toContain('不要替领队作出任何策略选择');
+  });
 });

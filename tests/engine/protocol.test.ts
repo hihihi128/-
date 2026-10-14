@@ -89,6 +89,8 @@ describe('提示词', () => {
     expect(p).toContain('待叙述事件');
     expect(p).toContain('F1M_UPDATE');
     expect(p).toContain('排位');
+    expect(p).toContain('正文保密规则');
+    expect(p).toContain('某个 XX 分水平的工程师做了某事');
     expect(p.length).toBeLessThan(4000);
   });
 

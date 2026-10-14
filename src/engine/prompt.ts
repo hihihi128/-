@@ -41,6 +41,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
 
   L.push('<F1领队模拟器·实时数据>');
   L.push('（以下内容由游戏引擎计算，是唯一事实来源。叙事必须与之一致：不得编造未发生的比赛结果、圈速或零件数值；没跑过的场次不要写出结果。）');
+  L.push('【正文保密规则】员工、工程师、策略师和维修组的能力分、技能分、等级、内部评分、判定概率及随机检定仅供引擎计算。正文不得直接或变相写出这些数值，也不得使用“某个 XX 分水平的工程师做了某事”之类表达；只能用姓名、职务、实际言行和定性表现叙述。');
 
   // 赛季与赛道
   const next = nextActionFor(state);
@@ -63,7 +64,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
     const live = w.liveRace;
     if (live) {
       const recent = live.events.slice(-3).map(e => `第${e.lap}圈 ${e.text}`).join('；');
-      const decision = live.pendingDecision ? `当前暂停等待领队确认：${live.pendingDecision.reasons.join('、')}。` : '比赛正在等待下一次引擎推进。';
+      const decision = live.pendingDecision ? `当前暂停等待领队确认：${live.pendingDecision.reasons.join('、')}。` : live.stage === 'finished' ? '比赛已经结束，可以总结已确认的比赛结果。' : '比赛正在等待下一次引擎推进。';
       L.push(`【实时比赛】${live.kind === 'sprint' ? '冲刺赛' : '正赛'}第 ${live.completedLaps}/${live.totalLaps} 圈，赛道${live.surface}，当前降雨强度 ${Math.round(live.rain * 100)}%，未来 ${live.forecast.horizonLaps} 圈预报仅供参考（降雨概率 ${pct(live.forecast.rainProbability)}，置信度 ${pct(live.forecast.confidence)}）。${recent ? `已发生：${recent}。` : ''}${decision}AI 只能叙述已发生事件或讨论选项，不能推进圈数、选择轮胎、改变天气或编造结果。`);
     }
   }
