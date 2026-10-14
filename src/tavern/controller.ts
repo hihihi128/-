@@ -238,7 +238,10 @@ interface SpecialActionReceipt {
   gameId: string;
   floor: number;
   actionRevisionId: string;
+  appliedMessage: string;
   userFloor: number | null;
+  narrationFloor: number | null;
+  expectedReplyFloor: number | null;
   narrationStatus: SpecialActionNarrationStatus;
   message: string;
 }
@@ -980,7 +983,7 @@ export class F1Controller {
       const revision = this.store.commit(applied.state, { floor: Math.max(0, floor), kind: 'ui', label: applied.message });
       const receipt: SpecialActionReceipt = {
         requestId: invalid.requestId, action: invalid.action, contextText: invalid.contextText,
-        chatId: guard.chatId, gameId: guard.gameId, floor: guard.floor, actionRevisionId: revision.id, userFloor: null,
+        chatId: guard.chatId, gameId: guard.gameId, floor: guard.floor, actionRevisionId: revision.id, appliedMessage: applied.message, userFloor: null, narrationFloor: null, expectedReplyFloor: null,
         narrationStatus: invalid.contextText ? 'pending' : 'not_requested',
         message: invalid.contextText ? '动作已执行，正在请求主聊天叙述' : applied.message,
       };
@@ -990,7 +993,7 @@ export class F1Controller {
       this.invalidateStrategyReviews();
       this.notify('special_action');
       if (!invalid.contextText) return this.specialActionResult(receipt, true);
-      return await this.startSpecialActionNarration(receipt, applied.message);
+      return await this.startSpecialActionNarration(receipt);
     } finally {
       this.busy = false;
     }
@@ -1001,31 +1004,35 @@ export class F1Controller {
     const receipt = this.specialActionReceipts.get(request.requestId);
     if (!receipt || receipt.requestId !== request.requestId) return this.specialActionFailure(request.requestId, '找不到可重试的特殊动作叙述');
     if (receipt.narrationStatus !== 'failed') return this.specialActionResult(receipt, this.specialActionCurrent(receipt));
-    if (this.busy || this.generationInProgress()) return this.specialActionFailure(receipt.requestId, '当前已有生成或存档操作，请稍后再试', true, receipt);
-    if (request.expectedRevisionId !== receipt.actionRevisionId || !this.specialActionCurrent(receipt)) return this.staleSpecialActionResult(receipt);
+    if (this.busy || this.generationInProgress() || this.adjudicatingRandomEventId || this.preparingWeeklyRandomEvent) return this.specialActionFailure(receipt.requestId, '当前已有生成或存档操作，请稍后再试', true, receipt);
+    if (request.expectedRevisionId !== receipt.actionRevisionId) return this.specialActionFailure(receipt.requestId, '存档版本已经变化，请刷新后重试', true, receipt);
+    if (!this.specialActionCurrent(receipt)) return this.staleSpecialActionResult(receipt);
     this.busy = true;
     try {
       receipt.narrationStatus = 'pending';
       receipt.message = '正在重试主聊天叙述';
       this.notify('special_action');
-      return await this.startSpecialActionNarration(receipt, receipt.message);
+      return await this.startSpecialActionNarration(receipt);
     } finally {
       this.busy = false;
     }
   }
 
-  private async startSpecialActionNarration(receipt: SpecialActionReceipt, actionMessage: string): Promise<SpecialActionResult> {
+  private async startSpecialActionNarration(receipt: SpecialActionReceipt): Promise<SpecialActionResult> {
     try {
       if (receipt.userFloor === null) {
-        await this.env.createUserMessage(specialActionNarrationMessage(receipt.action, actionMessage, receipt.contextText));
-        receipt.userFloor = this.latestFloor();
-        if (receipt.userFloor <= receipt.floor || this.env.chatId() !== receipt.chatId) return this.staleSpecialActionResult(receipt);
-        this.store.patchFloorVars(receipt.userFloor, { [SPECIAL_ACTION_NARRATION_VAR]: this.specialActionMarker(receipt) });
+        await this.env.createUserMessage(specialActionNarrationMessage(receipt.action, receipt.appliedMessage, receipt.contextText));
+        const createdFloor = this.latestFloor();
+        if (this.env.chatId() === receipt.chatId && createdFloor > receipt.floor && this.env.getMessage(createdFloor)?.role === 'user') {
+          receipt.userFloor = createdFloor;
+          this.store.patchFloorVars(createdFloor, { [SPECIAL_ACTION_NARRATION_VAR]: this.specialActionMarker(receipt) });
+        } else return this.staleSpecialActionResult(receipt);
       }
       if (!this.specialActionCurrent(receipt)) return this.staleSpecialActionResult(receipt);
+      receipt.expectedReplyFloor = this.latestFloor() + 1;
       this.generationState = 'active';
       await this.env.triggerGeneration();
-      receipt.message = '动作已执行，等待主聊天叙述完成';
+      if (receipt.narrationStatus === 'pending') receipt.message = '动作已执行，等待主聊天叙述完成';
       this.notify('special_action');
       return this.specialActionResult(receipt, true);
     } catch (error) {
@@ -1033,7 +1040,7 @@ export class F1Controller {
       receipt.narrationStatus = 'failed';
       receipt.message = `动作已执行，叙述未完成：${error instanceof Error ? error.message : '主聊天请求失败'}`;
       this.notify('special_action');
-      return this.specialActionResult(receipt, false);
+      return this.specialActionResult(receipt, this.specialActionCurrent(receipt));
     }
   }
 
@@ -1045,7 +1052,7 @@ export class F1Controller {
     const latest = this.latestFloor();
     const current = this.store.resolve(latest);
     return this.env.chatId() === receipt.chatId && !!current && current.state.gameId === receipt.gameId && current.rev.id === receipt.actionRevisionId
-      && (receipt.userFloor === null ? latest === receipt.floor : latest === receipt.userFloor || latest === receipt.userFloor + 1)
+      && (receipt.userFloor === null ? latest === receipt.floor : latest === receipt.userFloor || latest === receipt.narrationFloor || latest === receipt.expectedReplyFloor)
       && (receipt.userFloor === null || isSpecialActionNarrationMarker(this.env.getMessageVars(receipt.userFloor)[SPECIAL_ACTION_NARRATION_VAR]));
   }
 
@@ -1972,6 +1979,14 @@ export class F1Controller {
         } else await this.settleRandomEventNarration(last);
       }
       if (!randomEventNarration && !specialActionNarration) await this.maybeStartRandomEventAfterChat(last);
+    } else {
+      const receipt = this.specialActionReceipt;
+      if (receipt?.narrationStatus === 'pending' && receipt.userFloor === last && receipt.expectedReplyFloor === last + 1 && this.specialActionCurrent(receipt)) {
+        receipt.narrationStatus = 'failed';
+        receipt.expectedReplyFloor = null;
+        receipt.message = '动作已执行，主聊天没有返回叙述；可仅重试叙述';
+        this.notify('special_action');
+      }
     }
   }
 
@@ -2053,14 +2068,20 @@ export class F1Controller {
     const marker = isSpecialActionNarrationMarker(own)
       ? own
       : isSpecialActionNarrationMarker(previous) && this.env.getMessage(id - 1)?.role === 'user' ? previous : null;
-    if (!marker || this.env.getMessage(id)?.role !== 'assistant') return false;
-    if (!isSpecialActionNarrationMarker(own)) this.store.patchFloorVars(id, { [SPECIAL_ACTION_NARRATION_VAR]: marker });
+    const receipt = this.specialActionReceipt;
+    const boundMarker = !marker && receipt?.narrationStatus === 'pending' && receipt.expectedReplyFloor === id && this.specialActionCurrent(receipt)
+      ? this.specialActionMarker(receipt) : null;
+    const effectiveMarker = marker ?? boundMarker;
+    if (!effectiveMarker || this.env.getMessage(id)?.role !== 'assistant') return false;
+    if (!isSpecialActionNarrationMarker(own)) this.store.patchFloorVars(id, { [SPECIAL_ACTION_NARRATION_VAR]: effectiveMarker });
     return true;
   }
 
   private finishSpecialActionNarration(id: number, visibleReply: string): void {
     const receipt = this.specialActionReceipt;
     if (!receipt || receipt.narrationStatus !== 'pending' || !this.isSpecialActionNarrationMessage(id) || !this.specialActionCurrent(receipt)) return;
+    receipt.narrationFloor = id;
+    receipt.expectedReplyFloor = null;
     receipt.narrationStatus = visibleReply && visibleReply !== STREAM_PLACEHOLDER ? 'completed' : 'failed';
     receipt.message = receipt.narrationStatus === 'completed' ? '动作已执行，主聊天叙述已完成' : '动作已执行，主聊天没有返回叙述；可仅重试叙述';
     this.notify('special_action');

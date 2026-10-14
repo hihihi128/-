@@ -93,6 +93,108 @@ describe('特殊动作补充叙述', () => {
     expect(env.triggered).toBe(2);
   });
 
+  it('已有助手楼后的重试会显式绑定下一楼，不能让该楼获得数值命令权限', async () => {
+    const funds = ctrl.stateAt()!.teams.mclaren.funds;
+    const applied = await ctrl.executeSpecialAction({
+      requestId: 'retry-after-assistant', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '说明技术选择。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    await env.aiReplies('第一次叙述为空。');
+    (ctrl as any).specialActionReceipt.narrationStatus = 'failed';
+    const retried = await ctrl.retrySpecialActionNarration({ requestId: 'retry-after-assistant', expectedRevisionId: applied.actionRevisionId! });
+    expect(retried).toMatchObject({ ok: true, narrationStatus: 'pending' });
+    const replay = await env.aiReplies('第二次叙述。' + update('{"op":"funds","delta":99,"reason":"越权"}'));
+    expect(replay).toBe(3);
+    expect(env.getMessageVars(replay)[SPECIAL_ACTION_NARRATION_VAR]).toMatchObject({ requestId: 'retry-after-assistant' });
+    expect(ctrl.stateAt()!.teams.mclaren.funds).toBe(funds);
+  });
+
+  it('创建消息失败后保留真实动作结果，错误 revision 不会销毁可重试回执', async () => {
+    const originalCreate = env.createUserMessage.bind(env);
+    let first = true;
+    env.createUserMessage = async text => {
+      if (first) { first = false; throw new Error('write failed'); }
+      return originalCreate(text);
+    };
+    const applied = await ctrl.executeSpecialAction({
+      requestId: 'create-fails', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '说明选择。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    expect(applied).toMatchObject({ actionApplied: true, narrationStatus: 'failed' });
+    const rejected = await ctrl.retrySpecialActionNarration({ requestId: 'create-fails', expectedRevisionId: 'wrong-revision' });
+    expect(rejected).toMatchObject({ ok: false, narrationStatus: 'failed', actionApplied: true });
+    const retried = await ctrl.retrySpecialActionNarration({ requestId: 'create-fails', expectedRevisionId: applied.actionRevisionId! });
+    expect(retried.narrationStatus).toBe('pending');
+    expect(env.created[0]).toContain('引擎结果：迈凯伦启动自主车体与动力单元软件适配项目，预计 8 周完成。');
+  });
+
+  it('无助手回复的 generation ended 标记失败，swipe 重生成仍隔离数值命令', async () => {
+    const funds = ctrl.stateAt()!.teams.mclaren.funds;
+    const applied = await ctrl.executeSpecialAction({
+      requestId: 'empty-generation', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '保持克制。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    await ctrl.onGenerationEnded();
+    expect(ctrl.status().specialAction).toMatchObject({ narrationStatus: 'failed' });
+    await ctrl.retrySpecialActionNarration({ requestId: 'empty-generation', expectedRevisionId: applied.actionRevisionId! });
+    const assistant = await env.aiReplies('初稿。');
+    await env.swipeNew('重生成稿。' + update('{"op":"funds","delta":99,"reason":"swipe 越权"}'));
+    expect(env.getMessageVars(assistant)[SPECIAL_ACTION_NARRATION_VAR]).toMatchObject({ requestId: 'empty-generation' });
+    expect(ctrl.stateAt()!.teams.mclaren.funds).toBe(funds);
+  });
+
+  it('triggerGeneration 报错且没有助手楼时保留动作，并能仅重试叙述', async () => {
+    const trigger = env.triggerGeneration.bind(env);
+    env.triggerGeneration = async () => { throw new Error('generation unavailable'); };
+    const applied = await ctrl.executeSpecialAction({
+      requestId: 'trigger-fails', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '请说明。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    expect(applied).toMatchObject({ ok: false, actionApplied: true, narrationStatus: 'failed' });
+    expect(env.messages).toHaveLength(2);
+    env.triggerGeneration = trigger;
+    expect(await ctrl.retrySpecialActionNarration({ requestId: 'trigger-fails', expectedRevisionId: applied.actionRevisionId! })).toMatchObject({ ok: true, narrationStatus: 'pending' });
+  });
+
+  it('用户消息写入后发生回滚仍会写入楼层标记，不留下可执行的未标记消息', async () => {
+    const create = env.createUserMessage.bind(env);
+    env.createUserMessage = async text => {
+      await create(text);
+      await ctrl.restoreRevision('r1');
+    };
+    const result = await ctrl.executeSpecialAction({
+      requestId: 'marker-after-rollback', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '请说明。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    expect(result.narrationStatus).toBe('stale');
+    expect(env.getMessageVars(1)[SPECIAL_ACTION_NARRATION_VAR]).toMatchObject({ requestId: 'marker-after-rollback', mode: 'narration_only' });
+  });
+
+  it('pre_race 的只叙述回复不会启动新的随机事件判定', async () => {
+    const applied = await ctrl.executeSpecialAction({
+      requestId: 'pre-race-narration', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '简短说明。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    expect(applied.actionApplied).toBe(true);
+    const state = ctrl.stateAt()!;
+    state.season.phase = 'pre_race';
+    const before = state.randomEvents?.weeklyStarted ?? 0;
+    await env.aiReplies('这是一段仅叙述的赛前回应。');
+    expect(ctrl.stateAt()!.randomEvents?.weeklyStarted ?? 0).toBe(before);
+  });
+
+  it('聊天切换或回滚后的迟到回复保持过期且不能结算命令', async () => {
+    const funds = ctrl.stateAt()!.teams.mclaren.funds;
+    const originalChatId = env.chatId.bind(env);
+    let switched = false;
+    env.chatId = () => switched ? 'chat-2' : originalChatId();
+    await ctrl.executeSpecialAction({
+      requestId: 'late-reply', action: { type: 'START_MCLAREN_FIX', route: 'independent' }, contextText: '说明选择。', expectedRevisionId: ctrl.status().revisionId!,
+    });
+    switched = true;
+    ctrl.onChatChanged();
+    switched = false;
+    await env.aiReplies('迟到回复。' + update('{"op":"funds","delta":99,"reason":"迟到越权"}'));
+    expect(ctrl.status().specialAction).toMatchObject({ narrationStatus: 'stale' });
+    expect(ctrl.stateAt()!.teams.mclaren.funds).toBe(funds);
+    await ctrl.restoreRevision('r1');
+    expect(ctrl.status().specialAction).toMatchObject({ narrationStatus: 'stale' });
+  });
+
   it('拒绝未知字段、未知动作和超过上限的文本，且不修改存档', async () => {
     const revision = ctrl.status().revisionId;
     const before = JSON.stringify(ctrl.stateAt());

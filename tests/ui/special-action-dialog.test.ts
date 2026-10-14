@@ -97,6 +97,49 @@ describe('special action dialog', () => {
     await flush();
     expect(host.textContent).toContain('本周已经表态');
     expect(host.querySelector<HTMLTextAreaElement>('textarea')?.value).toBe('保留这段话');
+    expect(host.querySelector('textarea')?.getAttribute('aria-describedby')).toContain('special-action-input-error');
+    button(host, '执行并叙述').click();
+    await flush();
+    expect(executeSpecialAction).toHaveBeenCalledTimes(2);
+    expect(executeSpecialAction.mock.calls[1][0]).toMatchObject({ expectedRevisionId: 'rev-1' });
+    expect(executeSpecialAction.mock.calls[1][0].requestId).toBe(executeSpecialAction.mock.calls[0][0].requestId);
+  });
+
+  it('freezes the opening revision, turns idle and action errors stale, and permits exactly 1000 trimmed characters', async () => {
+    const executeSpecialAction = vi.fn(async request => ({ ok: false, message: '暂不可执行', requestId: request.requestId, actionApplied: false, narrationStatus: 'not_requested' }));
+    const host = mount({ executeSpecialAction, retrySpecialActionNarration: vi.fn() });
+    const textarea = host.querySelector<HTMLTextAreaElement>('textarea')!;
+    textarea.value = `  ${'x'.repeat(1000)}  `;
+    textarea.dispatchEvent(new Event('input', { bubbles: true }));
+    await flush();
+    expect(host.textContent).toContain('1000/1000');
+    expect(button(host, '执行并叙述').disabled).toBe(false);
+    button(host, '执行并叙述').click();
+    await flush();
+    expect(executeSpecialAction).toHaveBeenLastCalledWith(expect.objectContaining({ expectedRevisionId: 'rev-1', contextText: 'x'.repeat(1000) }));
+
+    store.status = { revisionId: 'rev-2', generating: false } as never;
+    await flush();
+    expect(host.textContent).toContain('当前状态已变化');
+    expect([...host.querySelectorAll('button')].some(item => item.textContent?.trim() === '执行并叙述')).toBe(false);
+  });
+
+  it('reconciles a bridge exception by its stable request id instead of blindly resubmitting', async () => {
+    let requestId = '';
+    const executeSpecialAction = vi.fn(async request => {
+      requestId = request.requestId;
+      throw new Error('bridge disconnected');
+    });
+    const host = mount({
+      executeSpecialAction,
+      retrySpecialActionNarration: vi.fn(),
+      status: () => ({ revisionId: 'rev-2', generating: false, specialAction: { requestId, message: '动作已执行', actionApplied: true, actionRevisionId: 'rev-2', narrationStatus: 'not_requested' } }),
+    });
+    button(host, '直接执行').click();
+    await flush();
+    expect(executeSpecialAction).toHaveBeenCalledTimes(1);
+    expect(host.textContent).toContain('动作已执行');
+    expect([...host.querySelectorAll('button')].some(item => item.textContent?.trim() === '直接执行')).toBe(false);
   });
 
   it('locks dismiss controls during submission and only retries narration after an applied action fails', async () => {
@@ -140,6 +183,18 @@ describe('special action dialog', () => {
     }
     expect(overview).toContain('<RandomEventPanel mode="card" />');
     expect(overview).toContain('<NegotiationPanel kind="fia_roundtable" />');
+    expect(overview).toContain('fiaStanceLabel[fia.current.forcedStance]');
+    expect(overview).toContain(':fallback-focus="overviewRoot"');
     expect(overview).not.toMatch(/@click="act\(\{ type: '(?:START_MCLAREN_FIX|MERCEDES_POLITICS|RED_BULL_RETAIN_GP|ASTON_CRISIS|RACING_BULLS_SELECT_RESERVE|AUDI_ALLIANCE|ALPINE_MANAGEMENT|HAAS_BALANCE|WILLIAMS_BUDGET_FOCUS|FIA_DEBATE)/);
+  });
+
+  it('moves focus to dialog status after submit and offers a close path while narrating', async () => {
+    const host = mount({ executeSpecialAction: vi.fn(async request => ({ ok: true, message: '叙述已开始', requestId: request.requestId, actionApplied: true, actionRevisionId: 'rev-2', narrationStatus: 'pending' })), retrySpecialActionNarration: vi.fn() });
+    button(host, '直接执行').click();
+    await flush();
+    expect(document.activeElement).toBe(host.querySelector('[data-special-action-status]'));
+    expect(button(host, '关闭')).toBeTruthy();
+    button(host, '关闭').click();
+    expect(host.onClose).toHaveBeenCalledOnce();
   });
 });

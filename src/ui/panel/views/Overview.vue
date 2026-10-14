@@ -35,6 +35,8 @@ const activeNegotiation = computed(() => store.negotiation?.status === 'active' 
 const negotiationActiveFor = (kind: string) => activeNegotiation.value?.kind === kind;
 const specialAction = ref<{ action: Action; title: string; subject?: string; hint: string } | null>(null);
 const specialActionBlocked = computed(() => store.busy || !!store.status?.generating || !!specialAction.value);
+const overviewRoot = ref<HTMLElement | null>(null);
+const fiaStanceLabel: Record<string, string> = { support: '支持议题', oppose: '反对议题', compromise: '提出折中' };
 
 function openSpecialAction(action: Action, title: string, hint: string, subject?: string): void {
   specialAction.value = { action, title, hint, subject };
@@ -51,7 +53,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
 </script>
 
 <template>
-  <div class="stack">
+  <div ref="overviewRoot" class="stack" tabindex="-1">
     <div class="grid g4">
       <Kpi label="车队积分榜" :value="`P${p.rank}`" :sub="`${p.points} 分 · 榜首 ${p.leaderPoints} 分`" />
       <Kpi label="资金" :value="money(team.funds)" :sub="`年薪支出 ${money(p.annualSalaries)}`" :tone="team.funds < 5 ? 'bad' : ''" />
@@ -192,7 +194,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       </div>
       <div v-if="fia.current.forcedStance" class="notice warn small">{{ p.team.id === 'alpine' ? '布里亚托利已经决定支持提案。' : '车队已经公开支持提案。' }}你必须以支持立场参加正常领队谈判。</div>
       <Bar label="政治资本" :value="fia.politicalCapital" color="#355c8a" hint="董事会信心、媒体声望和政治资本共同决定说服检定" />
-      <div class="row"><button class="primary" :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'support')" @click="openSpecialAction({ type: 'FIA_DEBATE', stance: 'support' }, '支持 FIA 议题', '必须遵守当前会议的强制立场；领队谈判仍按既有流程进行。', fiaIssue[fia.current.issue])">支持议题</button><button :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'oppose')" @click="openSpecialAction({ type: 'FIA_DEBATE', stance: 'oppose' }, '反对 FIA 议题', '必须遵守当前会议的强制立场；领队谈判仍按既有流程进行。', fiaIssue[fia.current.issue])">反对议题</button><button :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'compromise')" @click="openSpecialAction({ type: 'FIA_DEBATE', stance: 'compromise' }, '提出 FIA 折中', '必须遵守当前会议的强制立场；领队谈判仍按既有流程进行。', fiaIssue[fia.current.issue])">提出折中</button></div>
+      <div class="row"><button class="primary" :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'support')" @click="openSpecialAction({ type: 'FIA_DEBATE', stance: 'support' }, '支持 FIA 议题', `必须遵守当前会议的强制立场${fia.current.forcedStance ? `：${fiaStanceLabel[fia.current.forcedStance]}。` : '；当前没有强制立场。'}领队谈判仍按既有流程进行。`, fiaIssue[fia.current.issue])">支持议题</button><button :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'oppose')" @click="openSpecialAction({ type: 'FIA_DEBATE', stance: 'oppose' }, '反对 FIA 议题', `必须遵守当前会议的强制立场${fia.current.forcedStance ? `：${fiaStanceLabel[fia.current.forcedStance]}。` : '；当前没有强制立场。'}领队谈判仍按既有流程进行。`, fiaIssue[fia.current.issue])">反对议题</button><button :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'compromise')" @click="openSpecialAction({ type: 'FIA_DEBATE', stance: 'compromise' }, '提出 FIA 折中', `必须遵守当前会议的强制立场${fia.current.forcedStance ? `：${fiaStanceLabel[fia.current.forcedStance]}。` : '；当前没有强制立场。'}领队谈判仍按既有流程进行。`, fiaIssue[fia.current.issue])">提出折中</button></div>
       <NegotiationPanel kind="fia_roundtable" />
     </div>
 
@@ -273,6 +275,7 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       :subject="specialAction.subject"
       :hint="specialAction.hint"
       :expected-revision-id="store.status?.revisionId"
+      :fallback-focus="overviewRoot"
       @close="specialAction = null"
     />
   </div>

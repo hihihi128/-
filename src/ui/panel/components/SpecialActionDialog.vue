@@ -26,6 +26,7 @@ const props = defineProps<{
   subject?: string;
   hint: string;
   expectedRevisionId?: string | null;
+  fallbackFocus?: HTMLElement | null;
 }>();
 
 const emit = defineEmits<{ close: [] }>();
@@ -34,17 +35,18 @@ const dialog = ref<HTMLElement | null>(null);
 const contextText = ref('');
 const state = ref<DialogState>('idle');
 const message = ref('');
-const requestId = ref('');
+const requestId = ref(makeRequestId());
 const actionRevisionId = ref<string | undefined>();
 const actionSubmitted = ref(false);
 const opener = ref<HTMLElement | null>(null);
 const initialRevision = props.expectedRevisionId ?? undefined;
 
 const trimmedContext = computed(() => contextText.value.trim());
-const characterCount = computed(() => contextText.value.length);
+const characterCount = computed(() => trimmedContext.value.length);
 const isSubmitting = computed(() => state.value === 'submitting');
 const canClose = computed(() => !isSubmitting.value);
 const isOverLimit = computed(() => characterCount.value > 1000);
+const executionBlocked = computed(() => isSubmitting.value || isOverLimit.value || store.busy || !!store.status?.generating);
 const primaryLabel = computed(() => trimmedContext.value ? '执行并叙述' : '直接执行');
 const statusText = computed(() => {
   if (state.value === 'submitting') return '正在执行既定动作，请勿关闭或重复提交。';
@@ -84,8 +86,22 @@ function applyResult(result: SpecialActionResult): void {
   }
 }
 
+function focusState(): void {
+  void nextTick(() => {
+    if (state.value === 'narration_error') dialog.value?.querySelector<HTMLElement>('[data-special-action-retry]')?.focus();
+    else if (state.value === 'submitting' || state.value === 'narrating' || state.value === 'stale' || state.value === 'action_error' || state.value === 'applied') dialog.value?.querySelector<HTMLElement>('[data-special-action-status]')?.focus();
+  });
+}
+
 async function execute(): Promise<void> {
-  if (isSubmitting.value || actionSubmitted.value) return;
+  if (executionBlocked.value || actionSubmitted.value) {
+    if (!isSubmitting.value && !actionSubmitted.value) {
+      state.value = 'action_error';
+      message.value = store.busy || store.status?.generating ? '当前已有生成或存档操作，请稍后再试。' : '补充内容不能超过 1000 个非空白字符。';
+      focusState();
+    }
+    return;
+  }
   if (isOverLimit.value) {
     state.value = 'action_error';
     message.value = '补充内容不能超过 1000 字符。';
@@ -100,20 +116,27 @@ async function execute(): Promise<void> {
 
   state.value = 'submitting';
   message.value = '';
-  requestId.value = makeRequestId();
+  focusState();
   try {
     const result = clone(await backend.executeSpecialAction({
       requestId: requestId.value,
       action: props.action,
       contextText: trimmedContext.value,
-      expectedRevisionId: props.expectedRevisionId ?? undefined,
+      expectedRevisionId: initialRevision,
     }));
     applyResult(result);
   } catch (error) {
-    state.value = 'action_error';
-    message.value = error instanceof Error ? error.message : String(error);
+    refresh();
+    await nextTick();
+    const receipt = store.status?.specialAction;
+    if (receipt?.requestId === requestId.value) applyResult(receipt as SpecialActionResult);
+    else {
+      state.value = 'stale';
+      message.value = '无法确认动作是否已执行。为避免重复结算，请关闭后重新打开。';
+    }
   } finally {
     refresh();
+    focusState();
   }
 }
 
@@ -133,6 +156,7 @@ async function retryNarration(): Promise<void> {
     message.value = error instanceof Error ? error.message : String(error);
   } finally {
     refresh();
+    focusState();
   }
 }
 
@@ -162,9 +186,10 @@ function trapFocus(event: KeyboardEvent): void {
 }
 
 watch(() => store.status?.revisionId, revision => {
-  if (!actionSubmitted.value && state.value === 'idle' && revision && initialRevision && revision !== initialRevision) {
+  if (!actionSubmitted.value && (state.value === 'idle' || state.value === 'action_error') && revision && initialRevision && revision !== initialRevision) {
     state.value = 'stale';
     message.value = '当前状态已变化，请关闭后重新选择动作。';
+    focusState();
   }
 });
 
@@ -176,13 +201,17 @@ watch(() => store.status?.specialAction, specialAction => {
   else if (specialAction.narrationStatus === 'completed' || specialAction.narrationStatus === 'not_requested') state.value = 'applied';
   else if (specialAction.narrationStatus === 'failed') state.value = 'narration_error';
   else if (specialAction.narrationStatus === 'stale') state.value = 'stale';
+  focusState();
 });
 
 onMounted(() => {
   opener.value = document.activeElement instanceof HTMLElement ? document.activeElement : null;
   void nextTick(() => dialog.value?.querySelector<HTMLTextAreaElement>('textarea')?.focus());
 });
-onUnmounted(() => opener.value?.isConnected && opener.value.focus());
+onUnmounted(() => {
+  if (opener.value?.isConnected && !opener.value.matches(':disabled')) opener.value.focus();
+  else props.fallbackFocus?.focus();
+});
 </script>
 
 <template>
@@ -207,12 +236,13 @@ onUnmounted(() => opener.value?.isConnected && opener.value.focus());
         <template v-if="state === 'idle' || state === 'action_error'">
           <label class="special-action-field">
             <span>同时想做/说什么（可选）</span>
-            <textarea v-model="contextText" :disabled="isSubmitting" rows="5" placeholder="例如：说明你希望如何表达这次决定；不会改变数值结算。" />
+            <textarea v-model="contextText" :disabled="isSubmitting" rows="5" aria-describedby="special-action-description special-action-count special-action-input-error" placeholder="例如：说明你希望如何表达这次决定；不会改变数值结算。" />
           </label>
-          <div class="special-action-count" :class="{ over: isOverLimit }">{{ characterCount }}/1000</div>
+          <div id="special-action-count" class="special-action-count" :class="{ over: isOverLimit }">去除首尾空白后 {{ characterCount }}/1000</div>
+          <div v-if="isOverLimit" id="special-action-input-error" class="small bad" role="alert">补充内容去除首尾空白后不能超过 1000 个字符。</div>
         </template>
 
-        <section v-if="state !== 'idle'" class="notice special-action-status" :class="{ ok: state === 'applied', warn: state === 'narrating', bad: state === 'stale' || state === 'action_error' || state === 'narration_error' }" :aria-live="state === 'submitting' || state === 'narrating' ? 'polite' : 'assertive'">
+        <section v-if="state !== 'idle'" data-special-action-status class="notice special-action-status" :class="{ ok: state === 'applied', warn: state === 'narrating', bad: state === 'stale' || state === 'action_error' || state === 'narration_error' }" :aria-live="state === 'submitting' || state === 'narrating' ? 'polite' : 'assertive'" tabindex="-1">
           <b>{{ statusText }}</b>
           <div v-if="state === 'narration_error'" class="small">动作已执行，无法重新执行；你只能重试叙述或关闭。</div>
           <div v-else-if="state === 'action_error'" class="small">动作没有执行，已保留你的补充内容。</div>
@@ -223,10 +253,13 @@ onUnmounted(() => opener.value?.isConnected && opener.value.focus());
         <span class="tiny muted">{{ isSubmitting ? '提交中，所有关闭路径已锁定' : state === 'narration_error' ? '动作结果不会因叙述失败而回滚' : '关闭、取消或按 Escape 都不会提交未执行的动作' }}</span>
         <template v-if="state === 'idle' || state === 'action_error'">
           <button :disabled="isSubmitting" @click="close">取消</button>
-          <button class="primary" :disabled="isSubmitting || isOverLimit" @click="execute">{{ primaryLabel }}</button>
+          <button class="primary" :disabled="executionBlocked" @click="execute">{{ primaryLabel }}</button>
         </template>
-        <button v-else-if="state === 'narration_error'" class="primary" @click="retryNarration">仅重试叙述</button>
-        <button v-else-if="state !== 'submitting' && state !== 'narrating'" @click="close">关闭</button>
+        <template v-else-if="state === 'narration_error'">
+          <button data-special-action-retry class="primary" @click="retryNarration">仅重试叙述</button>
+          <button @click="close">关闭</button>
+        </template>
+        <button v-else-if="state !== 'submitting'" @click="close">关闭</button>
       </footer>
     </section>
   </div>
@@ -258,6 +291,6 @@ onUnmounted(() => opener.value?.isConnected && opener.value.focus());
   .special-action-close, .special-action-foot button { min-height: 44px; }
   .special-action-foot { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
   .special-action-foot > span { grid-column: 1 / -1; margin: 0; }
-  .special-action-foot > button:only-child { grid-column: 1 / -1; }
+  .special-action-foot > button:first-of-type:last-of-type { grid-column: 1 / -1; }
 }
 </style>
