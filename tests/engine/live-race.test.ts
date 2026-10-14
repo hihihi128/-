@@ -3,16 +3,28 @@ import { act, advanceUntil, newTestGame, tryAct } from '../helpers';
 import { buildView } from '../../src/engine/view';
 import { buildStatePrompt } from '../../src/engine/prompt';
 import { Rng } from '../../src/engine/rng';
+import type { LiveRaceState } from '../../src/engine/types';
 import { createForecast, createWeatherTrajectory } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
 import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
-import { advanceRaceSession, aiWeatherReactionDelay, engineerDecisionRoll, redFlagProbability } from '../../src/engine/race';
+import { advanceRaceSession, aiWeatherReactionDelay, engineerDecisionRoll, redFlagProbability, requiresWetGridTyreChoice } from '../../src/engine/race';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
     let state = newTestGame(seed);
     state = advanceUntil(state, s => s.season.phase === 'race');
     return state;
+  }
+
+  function automaticChoices(state: ReturnType<typeof newTestGame>, live: LiveRaceState) {
+    const wetGrid = requiresWetGridTyreChoice(live);
+    return live.pendingDecision!.eligibleDriverIds
+      .filter(driverId => live.cars[driverId]?.status === 'running')
+      .map(driverId => ({
+        driverId,
+        pit: 'auto' as const,
+        ...(wetGrid ? { startCompound: state.rules.wetCompound } : {}),
+      }));
   }
 
   it('scales red-flag risk with incident severity, weather, and involved cars', () => {
@@ -334,7 +346,7 @@ describe('resumable live race', () => {
       grid.weatherTrajectory.fill(.8);
       state = act(state, {
         type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id,
-        drivers: Object.values(grid.cars).filter(car => car.player).map(car => ({ driverId: car.driverId, pit: 'auto' as const })),
+        drivers: automaticChoices(state, grid),
       });
       for (let step = 0; step < 40 && state.weekend?.liveRace; step++) {
         const live = state.weekend.liveRace;
@@ -384,16 +396,78 @@ describe('resumable live race', () => {
   it('rejects stale windows atomically and accepts a two-car grid decision', () => {
     const started = act(raceReady(), { type: 'START_RACE', kind: 'race' });
     const live = started.weekend!.liveRace!;
-    const playerIds = Object.values(live.cars).filter(c => c.player).map(c => c.driverId);
     const stale = tryAct(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision + 1, windowId: live.pendingDecision!.id, drivers: [] });
     expect(stale.ok).toBe(false);
     expect(stale.state).toBe(started);
     const resolved = act(started, {
       type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
-      drivers: playerIds.map(driverId => ({ driverId, pit: 'auto' })),
+      drivers: automaticChoices(started, live),
     });
     expect(resolved.weekend!.liveRace?.pendingDecision).toBeNull();
     expect(resolved.weekend!.liveRace?.revision).toBeGreaterThan(live.revision);
+  });
+
+  it('requires independent wet-grid fits for every player car without a pit record', () => {
+    const ready = raceReady(1001);
+    ready.weekend!.weather.race = 'wet';
+    const playerIds = Object.values(ready.drivers).filter(driver => driver.teamId === ready.meta.playerTeamId).map(driver => driver.id);
+    ready.weekend!.plans[playerIds[0]].strategySource = 'engineer';
+    ready.weekend!.plans[playerIds[1]].strategySource = 'perfect';
+    const started = act(ready, { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    expect(live.pendingDecision?.eligibleDriverIds).toEqual(expect.arrayContaining(playerIds));
+    expect(buildView(started).weekend!.liveRace!.pendingDecision?.startTyreOptions).toEqual([started.rules.wetCompound, started.rules.fullWetCompound]);
+    const before = JSON.stringify(live.cars);
+    const missing = tryAct(started, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
+      drivers: [{ driverId: playerIds[0], pit: 'auto', startCompound: started.rules.wetCompound }],
+    });
+    expect(missing.ok).toBe(false);
+    expect(JSON.stringify(started.weekend!.liveRace!.cars)).toBe(before);
+
+    const resolved = act(started, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
+      drivers: [
+        { driverId: playerIds[0], pit: 'auto', startCompound: started.rules.wetCompound },
+        { driverId: playerIds[1], pit: 'auto', startCompound: started.rules.fullWetCompound },
+      ],
+    });
+    const resumed = resolved.weekend!.liveRace!;
+    expect(resumed.stage).toBe('ready');
+    expect(resumed.completedLaps).toBe(0);
+    expect(resumed.cars[playerIds[0]]).toMatchObject({ tyre: resolved.rules.wetCompound, pits: 0, pitStops: [], usedCompounds: [resolved.rules.wetCompound], plannedCompounds: [resolved.rules.wetCompound] });
+    expect(resumed.cars[playerIds[1]]).toMatchObject({ tyre: resolved.rules.fullWetCompound, pits: 0, pitStops: [], usedCompounds: [resolved.rules.fullWetCompound], plannedCompounds: [resolved.rules.fullWetCompound] });
+  });
+
+  it('rejects malformed wet-grid submissions atomically and rejects start tyres later', () => {
+    const ready = raceReady(1002);
+    ready.weekend!.weather.race = 'wet';
+    const started = act(ready, { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    const [first, second] = live.pendingDecision!.eligibleDriverIds;
+    const before = JSON.stringify({ cars: live.cars, orders: live.teamOrders, rng: live.rngState });
+    for (const drivers of [
+      [{ driverId: first, pit: 'auto' as const, startCompound: started.rules.wetCompound }, { driverId: first, pit: 'auto' as const, startCompound: started.rules.fullWetCompound }],
+      [{ driverId: first, pit: 'box' as const, startCompound: started.rules.wetCompound }, { driverId: second, pit: 'auto' as const, startCompound: started.rules.fullWetCompound }],
+      [{ driverId: first, pit: 'auto' as const, startCompound: started.rules.dryCompounds[0] }, { driverId: second, pit: 'auto' as const, startCompound: started.rules.fullWetCompound }],
+    ]) {
+      expect(tryAct(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers }).ok).toBe(false);
+      expect(JSON.stringify({ cars: live.cars, orders: live.teamOrders, rng: live.rngState })).toBe(before);
+    }
+    const resolved = act(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers: automaticChoices(started, live) });
+    const resumed = resolved.weekend!.liveRace!;
+    resumed.stage = 'before_pit';
+    resumed.pendingDecision = { ...live.pendingDecision!, id: `${resumed.id}:later`, stage: 'before_pit', lap: 1 };
+    expect(tryAct(resolved, { type: 'RESOLVE_RACE_DECISION', sessionId: resumed.id, expectedRevision: resumed.revision, windowId: resumed.pendingDecision.id, drivers: [{ driverId: first, pit: 'auto', startCompound: resolved.rules.wetCompound }] }).ok).toBe(false);
+  });
+
+  it('automatically completes a wet sprint with wetness-based grid tyres', () => {
+    let state = newTestGame(1003);
+    state = advanceUntil(state, s => s.season.phase === 'sprint');
+    state.weekend!.weather.sprint = 'wet';
+    const completed = act(state, { type: 'RUN_SPRINT' });
+    expect(completed.weekend!.sprint).not.toBeNull();
+    expect(completed.weekend!.liveRace).toBeNull();
   });
 
   it('does not treat an unchanged grid confirmation as a strategy instruction', () => {
@@ -401,12 +475,11 @@ describe('resumable live race', () => {
     for (const driver of Object.values(ready.drivers).filter(d => d.teamId === ready.meta.playerTeamId)) driver.trust = 0;
     const started = act(ready, { type: 'START_RACE', kind: 'race' });
     const live = started.weekend!.liveRace!;
-    const drivers = Object.values(live.cars).filter(c => c.player).map(car => ({
-      driverId: car.driverId,
-      pit: 'auto' as const,
-      paceMode: car.plan.paceMode,
-      energyMode: car.energyMode,
-      pitTiming: car.plan.pitTiming,
+    const drivers = automaticChoices(started, live).map(choice => ({
+      ...choice,
+      paceMode: live.cars[choice.driverId].plan.paceMode,
+      energyMode: live.cars[choice.driverId].energyMode,
+      pitTiming: live.cars[choice.driverId].plan.pitTiming,
     }));
     const resolved = act(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers });
     expect(resolved.weekend!.liveRace!.events.some(event => event.text.includes('拒绝临场策略指令'))).toBe(false);
@@ -430,7 +503,7 @@ describe('resumable live race', () => {
     ready.drivers.c1.trust = 0;
     const launched = act(ready, { type: 'START_RACE', kind: 'race' });
     const grid = launched.weekend!.liveRace!;
-    const started = act(launched, { type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id, drivers: Object.values(grid.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, pit: 'auto' })) });
+    const started = act(launched, { type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id, drivers: automaticChoices(launched, grid) });
     const live = started.weekend!.liveRace!;
     const relationship = teammateRelationship(started, started.meta.playerTeamId);
     while (!willDisobeyStrategy(started.drivers.c1, relationship, `${live.id}:tactics:lap-${live.lap}:c1`)) live.lap++;
@@ -449,7 +522,7 @@ describe('resumable live race', () => {
       if (live.pendingDecision) {
         interactive = act(interactive, {
           type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision.id,
-          drivers: Object.values(live.cars).filter(c => c.player && c.status === 'running').map(c => ({ driverId: c.driverId, pit: 'auto' })),
+          drivers: automaticChoices(interactive, live),
         });
       } else {
         interactive = act(interactive, { type: 'ADVANCE_RACE', sessionId: live.id, expectedRevision: live.revision, until: 'next_decision' });
@@ -464,8 +537,7 @@ describe('resumable live race', () => {
     const live = started.weekend!.liveRace!;
     const retired = Object.values(live.cars).find(c => c.player)!;
     retired.status = 'dnf'; retired.reason = 'test';
-    const running = Object.values(live.cars).find(c => c.player && c.status === 'running')!;
-    const result = act(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers: [{ driverId: running.driverId, pit: 'auto' }] });
+    const result = act(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers: automaticChoices(started, live) });
     expect(result.weekend!.liveRace?.pendingDecision).toBeNull();
     expect(result.weekend!.liveRace?.cars[retired.driverId].status).toBe('dnf');
   });
@@ -473,7 +545,7 @@ describe('resumable live race', () => {
   it('allows tactical updates after a teammate retires by submitting running cars only', () => {
     const launched = act(raceReady(), { type: 'START_RACE', kind: 'race' });
     const grid = launched.weekend!.liveRace!;
-    const started = act(launched, { type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id, drivers: Object.values(grid.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, pit: 'auto' })) });
+    const started = act(launched, { type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id, drivers: automaticChoices(launched, grid) });
     const live = started.weekend!.liveRace!;
     const retired = Object.values(live.cars).find(c => c.player)!;
     retired.status = 'dnf';

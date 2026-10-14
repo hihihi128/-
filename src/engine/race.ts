@@ -43,7 +43,7 @@ import type {
   LiveRaceCar,
   LiveRaceState,
   RaceDecisionWindow,
-  EnergyMode,
+  RaceDriverDecision,
   PowerUnitPartType,
 } from './types';
 import { clamp, gapText, round3 } from './util';
@@ -654,6 +654,11 @@ function playerControlledCars(session: LiveRaceState): LiveRaceCar[] {
   return playerCars(session).filter(c => c.plan.strategySource !== 'engineer' && c.plan.strategySource !== 'perfect');
 }
 
+/** A wet grid is the only point where starting-tyre choices are required. */
+export function requiresWetGridTyreChoice(session: Pick<LiveRaceState, 'stage' | 'completedLaps' | 'wetness'>): boolean {
+  return session.stage === 'grid' && session.completedLaps === 0 && session.wetness >= .22;
+}
+
 function expectedLivePositions(state: GameState): Record<string, number> {
   const track = currentTrack(state);
   const out: Record<string, number> = {};
@@ -688,6 +693,7 @@ export function createRaceSession(
     if (!grid.includes(entry.driver.id)) grid.push(entry.driver.id);
   }
   const startsWet = (kind === 'race' ? w.weather.race : w.weather.sprint) === 'wet';
+  const initialWetness = startsWet ? .55 : 0;
   const rainProbability = w.supernaturalRainBias ? clamp(track.rainChance + w.supernaturalRainBias, 0.05, 0.95) : track.rainChance;
   const trajectory = createWeatherTrajectory(totalLaps, startsWet, rainProbability, weatherRng);
   const sessionId = `race-${state.season.number}-${state.season.roundIndex}-${kind}-${state.seq++}`;
@@ -733,9 +739,9 @@ export function createRaceSession(
       disobedient.push(id);
     }
     const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, thermalKnowledge: 30, trackKnowledge: 30, qualiBonus: 0 });
-    const wet = trajectory[0] > 0.18;
+    const wet = initialWetness >= .22;
     const compounds = wet
-      ? [wetCompoundFor(rules, .55)]
+      ? [wetCompoundFor(rules, initialWetness)]
       : kind === 'sprint'
         ? [plan.sprintTyre !== 'auto' && rules.tyres[plan.sprintTyre] ? plan.sprintTyre : rules.dryCompounds[1] ?? rules.dryCompounds[0]]
         : plan.tyrePlan !== 'auto' && !validatePlan(rules, plan.tyrePlan, false)
@@ -776,7 +782,7 @@ export function createRaceSession(
     version: 1, physicsVersion: 2, id: sessionId, kind, roundIndex: state.season.roundIndex,
     totalLaps, completedLaps: 0, lap: 1, stage: 'grid', revision: 1, rngState: execution.state, weatherRngState: weatherRng.state,
     forecastRngState: forecastRng.state, strategistSkill: staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), expectedPositions, cars, order: grid, weatherTrajectory: trajectory, weatherHistory: [],
-    rain: trajectory[0] ?? 0, wetness: startsWet ? 0.55 : 0, surface: startsWet ? 'wet' : 'dry',
+    rain: trajectory[0] ?? 0, wetness: initialWetness, surface: startsWet ? 'wet' : 'dry',
     forecast: createForecast(trajectory, 0, staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), forecastRng),
     scLeft: 0, vscLeft: 0, safetyCars: 0, redFlags: 0, redFlag: null, fastestLap: null, events: [], lapChart, orderOutcomes: [], orderCooldown: {},
     teamOrders: { ...w.teamOrders }, pendingDecision: null, damageLedger: [], specialIncidents: [], norrisTeammateRollDone: false,
@@ -798,8 +804,8 @@ export function createRaceSession(
   for (const driverId of disobedient) liveEvent(session, 0, 'order', `${driverId} 拒绝执行赛前策略，决定按自己的节奏比赛`, [driverId], true);
   session.weatherRngState = weatherRng.state;
   session.forecastRngState = forecastRng.state;
-  const controlled = playerControlledCars(session);
-  session.pendingDecision = controlled.length ? { id: `${session.id}:w1`, lap: 0, stage: 'grid', reasons: ['grid'], affectedDriverIds: controlled.map(c => c.driverId), eligibleDriverIds: controlled.map(c => c.driverId), observedEventIds: [] } : null;
+  const gridCars = requiresWetGridTyreChoice(session) ? playerCars(session) : playerControlledCars(session);
+  session.pendingDecision = gridCars.length ? { id: `${session.id}:w1`, lap: 0, stage: 'grid', reasons: ['grid'], affectedDriverIds: gridCars.map(c => c.driverId), eligibleDriverIds: gridCars.map(c => c.driverId), observedEventIds: [] } : null;
   return session;
 }
 
@@ -817,6 +823,28 @@ function createWindow(session: LiveRaceState, reasons: RaceDecisionWindow['reaso
 
 export function wetCompoundFor(rules: GameState['rules'], wetness: number): Compound {
   return wetness >= .82 ? rules.fullWetCompound : rules.wetCompound;
+}
+
+/** Fits grid equipment without recording a pit stop or consuming race time. */
+function fitInitialTyres(state: GameState, session: LiveRaceState, car: LiveRaceCar, compound: Compound): boolean {
+  const team = state.teams[car.teamId];
+  const set = team && takeTyreSet(team, car.driverId, compound, weekendTyreKey(state));
+  if (!set) return false;
+  const tyre = state.rules.tyres[compound];
+  const track = currentTrack(state);
+  car.tyre = compound;
+  car.tyreSetId = set.id;
+  car.tyreAge = set.laps;
+  car.tyreWearAge = set.wearAge ?? set.laps;
+  car.tyreTemperature = (tyre?.temperatureWindow?.[0] ?? 80) - 18;
+  car.usedCompounds = [compound];
+  car.plannedCompounds = [compound];
+  car.stints = optimizeStints(state.rules, track, [compound], session.totalLaps, car.tyreFactor, { context: car.performanceContext, paceMode: car.plan.paceMode });
+  car.stintIndex = 0;
+  car.pendingPit = null;
+  car.pendingCompound = null;
+  car.stayOutUntilLap = 0;
+  return true;
 }
 
 export function tyreWeatherPenalty(rules: GameState['rules'], compound: Compound, wetness: number): number {
@@ -1248,15 +1276,42 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
 }
 
 /** Applies a validated window decision. Driver-behavior rolls use a separate deterministic stream. */
-export function applyRaceDecision(state: GameState, session: LiveRaceState, windowId: string, drivers: Array<{ driverId: string; pit: 'auto' | 'stay_out' | 'box'; compound?: Compound; repairWing?: boolean; paceMode?: EnergyMode | 'conserve' | 'balanced' | 'push'; energyMode?: EnergyMode; pitTiming?: 'early' | 'standard' | 'late' }>, orders?: import('./types').TeamOrders): boolean {
+export function applyRaceDecision(state: GameState, session: LiveRaceState, windowId: string, drivers: RaceDriverDecision[], orders?: import('./types').TeamOrders): boolean {
   const window = session.pendingDecision;
   if (!window || window.id !== windowId) return false;
   const playerIds = playerCars(session).map(c => c.driverId);
+  const wetGrid = requiresWetGridTyreChoice(session) && window.stage === 'grid';
+  if (wetGrid) {
+    const required = playerCars(session);
+    const requiredIds = new Set(required.map(car => car.driverId));
+    const seen = new Set<string>();
+    if (drivers.length !== required.length || !validOrders(orders, playerIds)) return false;
+    for (const choice of drivers) {
+      if (!requiredIds.has(choice.driverId) || seen.has(choice.driverId) || choice.pit !== 'auto' || choice.compound !== undefined || choice.repairWing || choice.startCompound === undefined || ![state.rules.wetCompound, state.rules.fullWetCompound].includes(choice.startCompound) || !validRaceChoice(choice, state.rules.tyres)) return false;
+      const car = session.cars[choice.driverId];
+      const team = car && state.teams[car.teamId];
+      if (!car || !team || !takeTyreSet(team, car.driverId, choice.startCompound, weekendTyreKey(state))) return false;
+      seen.add(choice.driverId);
+    }
+    for (const choice of drivers) {
+      const car = session.cars[choice.driverId];
+      // The selected tyre is equipment, not a discretionary tactical instruction.
+      if (!fitInitialTyres(state, session, car, choice.startCompound!)) return false;
+      if (choice.paceMode) car.plan.paceMode = choice.paceMode;
+      if (choice.energyMode) car.energyMode = choice.energyMode;
+      if (choice.pitTiming) car.plan.pitTiming = choice.pitTiming;
+    }
+    if (orders) session.teamOrders = { ...orders };
+    session.pendingDecision = null;
+    session.stage = 'ready';
+    session.revision++;
+    return true;
+  }
   const eligible = new Set(window.eligibleDriverIds);
   const seen = new Set<string>();
   for (const choice of drivers) {
     const car = session.cars[choice.driverId];
-    if (!car || !car.player || car.status !== 'running' || !eligible.has(choice.driverId) || seen.has(choice.driverId) || !validRaceChoice(choice, state.rules.tyres)) return false;
+    if (!car || !car.player || car.status !== 'running' || !eligible.has(choice.driverId) || seen.has(choice.driverId) || choice.startCompound !== undefined || !validRaceChoice(choice, state.rules.tyres)) return false;
     // A tyre is meaningful only for a valid box instruction; avoid cosmetic
     // immediate compound swaps from UI drafts or malformed controller calls.
     if ((choice.pit === 'box') !== (choice.compound !== undefined)) return false;
@@ -1349,7 +1404,12 @@ export function simulateRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'
   const session = createRaceSession(state, rng, kind);
   while (session.stage !== 'finished') {
     if (session.pendingDecision) {
-      applyRaceDecision(state, session, session.pendingDecision.id, session.pendingDecision.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto' as const })));
+      const choices = session.pendingDecision.eligibleDriverIds.map(driverId => ({
+        driverId,
+        pit: 'auto' as const,
+        ...(requiresWetGridTyreChoice(session) ? { startCompound: wetCompoundFor(state.rules, session.wetness) } : {}),
+      }));
+      if (!applyRaceDecision(state, session, session.pendingDecision.id, choices)) throw new Error('自动策略无法处理当前决策窗口');
     } else advanceRaceSession(state, session, 'next_decision');
   }
   return finishRaceSession(state, session)!;

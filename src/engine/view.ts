@@ -29,6 +29,7 @@ import { fanCamps, fanGap } from './ferrari';
 import { dismissalReason } from './teamSpecials';
 import { effectiveSetup, SUPERNATURAL_LIMITS } from './supernatural';
 import { teammateRelationship } from './driverBehavior';
+import { requiresWetGridTyreChoice } from './race';
 import { describeLog } from './protocol';
 import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
 import { nextActionFor, sortedDrivers, sortedTeams, type NextAction } from './season';
@@ -239,7 +240,7 @@ export interface LiveRaceView {
   timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; tyreTemperature?: number; tyreState?: 'cold' | 'optimal' | 'hot' | 'legacy'; pits: number }>;
   playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreTemperature?: number; tyreThermalState?: 'cold' | 'optimal' | 'hot' | 'legacy'; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; iceHealth: number; electricalHealth: number; weakestPuHealth: number; weakestPuName: string; puTemperature: number; puStatus: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
   events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; driverNames: string[]; key: boolean }>;
-  pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number } | null;
+  pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number; startTyreOptions?: import('./types').Compound[] } | null;
   teamOrders: import('./types').TeamOrders;
 }
 
@@ -836,7 +837,16 @@ function buildWeekendView(state: GameState): WeekendView | null {
             return { ...event, text, drivers: event.drivers, driverNames: names };
           }),
           teamOrders: { ...live.teamOrders },
-          pendingDecision: live.pendingDecision ? { id: live.pendingDecision.id, lap: live.pendingDecision.lap, reasons: live.pendingDecision.reasons, eligibleDriverIds: live.pendingDecision.eligibleDriverIds, expectedPitLoss: (track?.pitLoss ?? 0) * (live.scLeft > 0 ? .5 : live.vscLeft > 0 ? .7 : 1) } : null,
+          pendingDecision: live.pendingDecision ? {
+            id: live.pendingDecision.id,
+            lap: live.pendingDecision.lap,
+            reasons: live.pendingDecision.reasons,
+            eligibleDriverIds: live.pendingDecision.eligibleDriverIds,
+            expectedPitLoss: (track?.pitLoss ?? 0) * (live.scLeft > 0 ? .5 : live.vscLeft > 0 ? .7 : 1),
+            ...(requiresWetGridTyreChoice(live)
+              ? { startTyreOptions: [state.rules.wetCompound, state.rules.fullWetCompound] }
+              : {}),
+          } : null,
         };
       })();
   return {

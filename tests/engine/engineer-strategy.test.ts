@@ -75,7 +75,17 @@ describe('engineer strategy execution', () => {
     const driverIds = Object.values(state.drivers).filter(driver => driver.teamId === state.meta.playerTeamId).map(driver => driver.id);
     for (const driverId of driverIds) state = act(state, { type: 'SET_PLAN', driverId, plan: { strategySource: 'perfect' } });
     state = act(state, { type: 'START_RACE', kind: 'race' });
-    const live = state.weekend!.liveRace!;
+    let live = state.weekend!.liveRace!;
+    if (live.pendingDecision) {
+      state = act(state, {
+        type: 'RESOLVE_RACE_DECISION',
+        sessionId: live.id,
+        expectedRevision: live.revision,
+        windowId: live.pendingDecision.id,
+        drivers: live.pendingDecision.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto', startCompound: state.rules.wetCompound })),
+      });
+      live = state.weekend!.liveRace!;
+    }
     live.wetness = .29;
     live.surface = 'damp';
     live.weatherTrajectory[0] = 1;

@@ -1034,6 +1034,19 @@ export interface RaceDecisionWindow {
   observedEventIds: string[];
 }
 
+/** A player's response to a live-race strategy window. */
+export interface RaceDriverDecision {
+  driverId: string;
+  pit: 'auto' | 'stay_out' | 'box';
+  /** Only used for a wet grid start; `compound` remains a pit-stop choice. */
+  startCompound?: Compound;
+  compound?: Compound;
+  repairWing?: boolean;
+  paceMode?: PaceMode;
+  energyMode?: EnergyMode;
+  pitTiming?: PitTiming;
+}
+
 /** Fully serializable in-progress race state. Private trajectory and RNG stay out of views. */
 export interface LiveRaceState {
   version: 1;
@@ -1533,7 +1546,7 @@ export type Action =
   | { type: 'START_RACE'; kind: 'race' | 'sprint'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'ADVANCE_RACE'; sessionId: string; expectedRevision: number; until: 'next_lap' | 'next_decision' }
   | { type: 'SET_RACE_TACTICS'; sessionId: string; expectedRevision: number; drivers: Array<{ driverId: string; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }
-  | { type: 'RESOLVE_RACE_DECISION'; sessionId: string; expectedRevision: number; windowId: string; drivers: Array<{ driverId: string; pit: 'auto' | 'stay_out' | 'box'; compound?: Compound; repairWing?: boolean; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }
+  | { type: 'RESOLVE_RACE_DECISION'; sessionId: string; expectedRevision: number; windowId: string; drivers: RaceDriverDecision[]; orders?: TeamOrders }
   | { type: 'FINISH_ROUND' }
   | { type: 'START_NEXT_SEASON' }
   | { type: 'OFFER_DRIVER_CONTRACT'; windowId: string; marketRevision: number; driverId: string; annualSalary: number; years: number; role: 'race' | 'reserve'; slot?: number; replaceDriverId?: string }

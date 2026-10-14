@@ -25,6 +25,25 @@ describe('旧存档升级', () => {
     expect(car.tyreTemperature).toBe((tyre.temperatureWindow?.[0] ?? (tyre.wet ? 58 : 80)) - 18);
   });
 
+  it('为旧的未确认湿地发车恢复所有仍在比赛的玩家选择，不重开已就绪比赛', () => {
+    let state = advanceUntil(newTestGame(95), value => value.season.phase === 'race');
+    state.weekend!.weather.race = 'wet';
+    const playerIds = Object.values(state.drivers).filter(driver => driver.teamId === state.meta.playerTeamId).map(driver => driver.id);
+    state.weekend!.plans[playerIds[0]].strategySource = 'engineer';
+    state.weekend!.plans[playerIds[1]].strategySource = 'perfect';
+    state = act(state, { type: 'START_RACE', kind: 'race' });
+    const legacy = JSON.parse(JSON.stringify(state)) as GameState;
+    legacy.weekend!.liveRace!.pendingDecision = null;
+    const restored = migrateState(legacy).weekend!.liveRace!;
+    expect(restored.pendingDecision?.eligibleDriverIds).toEqual(expect.arrayContaining(playerIds));
+    const tyres = JSON.stringify(restored.cars);
+    restored.stage = 'ready';
+    restored.pendingDecision = null;
+    migrateState(legacy);
+    expect(restored.pendingDecision).toBeNull();
+    expect(JSON.stringify(restored.cars)).toBe(tyres);
+  });
+
   it('把默认车队旧存档中的员工占位名替换为正式显示名', () => {
     const state = newTestGame();
     const team = state.teams.team_c;

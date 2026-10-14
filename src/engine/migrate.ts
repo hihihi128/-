@@ -13,6 +13,7 @@ import { DEFAULT_RULES } from './defaults';
 import { PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES, resetPuUsage } from './powerunit';
 import { ensureMarket, openMarket } from './market';
 import { migrateTyreInventory } from './tyres';
+import { requiresWetGridTyreChoice } from './race';
 import type { GameState, StaffRole } from './types';
 import { deepClone } from './util';
 
@@ -364,6 +365,20 @@ export function migrateState(state: GameState): GameState {
       live.redFlag ??= null;
       live.specialIncidents ??= [];
       live.norrisTeammateRollDone ??= false;
+      // Old wet grids could omit delegated player cars (or the window entirely).
+      // Reopen only an unresolved grid; ready/running saves keep their fitted tyres.
+      if (requiresWetGridTyreChoice(live)) {
+        const eligible = Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => car.driverId);
+        live.pendingDecision = eligible.length ? {
+          id: live.pendingDecision?.id ?? `${live.id}:w1`,
+          lap: 0,
+          stage: 'grid',
+          reasons: ['grid'],
+          affectedDriverIds: eligible,
+          eligibleDriverIds: eligible,
+          observedEventIds: live.pendingDecision?.observedEventIds ?? [],
+        } : null;
+      }
       for (const car of Object.values(live.cars)) {
         const driver = state.drivers[car.driverId];
         car.trust ??= driver?.trust ?? 50;

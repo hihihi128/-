@@ -4,8 +4,9 @@ import Bar from '../components/Bar.vue';
 import LapChart from '../components/LapChart.vue';
 import Tyre from '../components/Tyre.vue';
 import LiveRaceDesk from '../components/LiveRaceDesk.vue';
+import WeekendWeatherForecast from '../components/WeekendWeatherForecast.vue';
 import StrategyReviewDialog from '../components/StrategyReviewDialog.vue';
-import { act, call, lapTime, pct, store } from '../bridge';
+import { act, call, lapTime, store } from '../bridge';
 import type { DriverPlan, PaceMode, PitTiming, PracticeProgram, QualiApproach, RaceResult, QualiResult } from '../../../engine/types';
 import type { WeekendDriverView } from '../../../engine/view';
 import type { EngineerStrategyResult } from '../../../tavern/controller';
@@ -259,7 +260,6 @@ const chartSeries = computed(() => {
   const palette = ['var(--team)', '#ffffff', '#ffd400'];
   return Object.entries(r.lapChart).map(([id, data], i) => ({ name: name(id), color: palette[i % palette.length], data }));
 });
-const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels.weather[x as 'dry' | 'wet'] : forecast !== undefined ? `预报降雨 ${pct(forecast)}` : '未知');
 </script>
 
 <template>
@@ -301,13 +301,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
       </div>
       <div class="spread" style="margin-top: 10px">
         <div class="small muted">
-          <template v-if="current && w">
-            天气：练习 {{ weatherText(w.weather.practice) }} ·
-            练习进度 {{ practiceSessions.length }}/{{ practiceSessionTotal }} ·
-            <template v-if="isSprint">冲刺排位 {{ weatherText(w.weather.sprintQualifying, w.forecast.qualifying) }} · 冲刺赛 {{ weatherText(w.weather.sprint, w.forecast.race) }} · </template>
-            排位 {{ weatherText(w.weather.qualifying, w.forecast.qualifying) }} · 正赛 {{ weatherText(w.weather.race, w.forecast.race) }}
-            <span v-if="w.forecast.raceRainWindow"> · 预计第 {{ w.forecast.raceRainWindow[0] }}–{{ w.forecast.raceRainWindow[1] }} 圈可能降雨</span>
-          </template>
+          <template v-if="current && w">练习进度 {{ practiceSessions.length }}/{{ practiceSessionTotal }}</template>
           <template v-else-if="phase === 'pre_race' || phase === 'preseason'">还没进入本站比赛周末。工厂周可以先安排研发、装件和训练。</template>
           <template v-else-if="phase === 'season_end'">赛季已结束。</template>
         </div>
@@ -319,6 +313,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
     </div>
 
     <template v-if="current && w">
+      <WeekendWeatherForecast :weekend="w" :sprint="isSprint" :race-laps="v.round?.track.laps ?? 1" />
       <div class="card stack-s">
         <h3>车队指令</h3>
         <div class="small" :class="w.teammateRelationship < 50 ? 'neg' : 'muted'">队友关系 {{ w.teammateRelationship.toFixed(0) }}/100<span v-if="w.teammateRelationship < 50"> · 已进入抗命风险区</span></div>
