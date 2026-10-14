@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import Bar from '../components/Bar.vue';
+import AduoCard from '../components/AduoCard.vue';
 import { act, peek, store } from '../bridge';
 import type { CarView, PartView, StockView } from '../../../engine/view';
 
@@ -59,8 +60,11 @@ function orderPreview(s: StockView) {
     <div class="notice small">
       每台车独立装件。新研发的零件只有 1~2 件时，由你决定先给哪位车手——两台车差距达到 0.4 分以上时，吃亏的车手会在正赛前表达不满（自尊心越强越明显，若你已指定优先车手则影响减轻）。
       动力单元分成 ICE、涡轮、MGU-K、电池、控制电子和排气六类部件。每类部件都有独立性能、可靠性、磨损、库存、研发和配额；具体配额显示在部件旁，换回用过的旧件不会重复计数。
+      动力单元可以先研发和生产。未认证规格不能装车；获得 ADUO 机会后，首次装车会用 1 次机会认证当前整批待认证规格。
       <span v-if="p.allocationGap >= 0.4" class="badge warn">当前两车差距 {{ p.allocationGap }} 分</span>
     </div>
+
+    <AduoCard :aduo="v.aduo" />
 
     <div class="grid g2">
       <div v-for="car in p.cars" :key="car.slot" class="card stack-s">
@@ -96,7 +100,7 @@ function orderPreview(s: StockView) {
                 <td>
                   <select :value="pt.specId" :disabled="!!locked || store.busy || options(car, pt.type).length < 2" @change="fit(car, pt.type, ($event.target as HTMLSelectElement).value)">
                     <option v-for="o in options(car, pt.type)" :key="o.specId" :value="o.specId">
-                      v{{ o.version }} {{ o.verified ? o.perf.toFixed(1) : '预估' + (o.expected ? o.expected.join('~') : '') }}{{ o.count ? `（库存 ${o.count}）` : '' }}
+                      v{{ o.version }} {{ o.verified ? o.perf.toFixed(1) : '预估' + (o.expected ? o.expected.join('~') : '') }}{{ o.homologated ? '' : '（待 ADUO 认证）' }}{{ o.count ? `（库存 ${o.count}）` : '' }}
                     </option>
                   </select>
                 </td>
@@ -121,7 +125,7 @@ function orderPreview(s: StockView) {
                 <td class="mono">v{{ s.version }}</td>
                 <td class="mono">{{ s.verified ? s.perf.toFixed(1) : `预估 ${s.expected?.join('~') ?? '?'}` }}</td>
                 <td class="mono">{{ s.rel.toFixed(0) }}</td>
-                <td class="mono">{{ s.count }}</td>
+                <td class="mono">{{ s.count }} <span v-if="!s.homologated" class="badge warn">待认证</span></td>
                 <td>{{ s.fittedOn.length ? s.fittedOn.map(n => n + '号').join(' ') : '—' }}</td>
                 <td>
                   <div class="row">

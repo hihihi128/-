@@ -64,6 +64,7 @@ export interface PartView {
   rel: number;
   verified: boolean;
   expected: [number, number] | null;
+  homologated: boolean;
 }
 
 export interface CarView {
@@ -85,6 +86,7 @@ export interface StockView {
   rel: number;
   verified: boolean;
   expected: [number, number] | null;
+  homologated: boolean;
   fittedOn: number[];
 }
 
@@ -355,6 +357,7 @@ function partView(team: TeamState, type: string, specId: string, name: string): 
     rel: s?.rel ?? 0,
     verified: s?.verified ?? true,
     expected: s?.expected ?? null,
+    homologated: s?.homologated !== false,
   };
 }
 
@@ -539,6 +542,7 @@ export function buildView(state: GameState): GameView {
         rel: s.rel,
         verified: s.verified,
         expected: s.expected,
+        homologated: s.homologated !== false,
         fittedOn,
       });
     }

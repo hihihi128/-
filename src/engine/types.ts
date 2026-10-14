@@ -132,8 +132,9 @@ export interface AiLimits {
 /**
  * ADUO（Additional Development and Upgrade Opportunities，2026 动力单元追赶机制）。
  *
- * - 动力单元零件（parts）每赛季只能认证 baseUpgrades 次升级（开工即计数，取消返还）。
- * - 有厂商车队（worksTeam）的动力单元由厂商车队研发，客户车队不能自行研发，厂商的新件同时交付给客户车队。
+ * - 动力单元零件（parts）可自由研发和生产，但新规格必须消耗 ADUO 机会完成认证后才能装车。
+ * - 一次认证会批准厂商当前所有已交付、尚未认证的动力单元规格，作为同一升级批次。
+ * - 有厂商车队（worksTeam）的动力单元由厂商车队研发，客户车队不能自行研发，厂商认证后的新件才交付给客户车队。
  * - 在 evalRounds 列出的站次（正赛后）按厂商评估 measurePart 的真实性能：
  *   落后最好厂商的百分比 = 性能分差 × pctPerPoint。
  *   落后 ≥ tier1Deficit% → 一档；≥ tier2Deficit% → 二档。
@@ -145,7 +146,7 @@ export interface AduoRules {
   parts: PartType[];
   /** 评估用的零件类型（2026 规则只评估内燃机） */
   measurePart: PartType;
-  /** 每赛季基础认证升级次数 */
+  /** 每赛季基础认证升级次数（2026 默认为 0，只能通过 ADUO 评估获得） */
   baseUpgrades: number;
   /** 评估站次（第 N 站正赛后，1 起） */
   evalRounds: number[];
@@ -552,6 +553,8 @@ export interface PartSpec {
   verified: boolean;
   /** 交付前的预估区间 */
   expected: [number, number] | null;
+  /** 动力单元规格是否已获认证；非动力单元规格与旧存档默认视为已认证 */
+  homologated?: boolean;
   introduced: string;
 }
 

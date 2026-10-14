@@ -71,7 +71,7 @@ rules:
   #   enabled: true
   #   parts: [ice, turbocharger, mgu_k, energy_store, control_electronics, exhaust]
   #   measurePart: ice         # ADUO 评估基准
-  #   baseUpgrades: 1          # 每赛季基础认证升级次数（开工即计数，取消返还）
+  #   baseUpgrades: 0          # 赛季开始没有基础机会；研发和生产不受限，首次装车时消耗 ADUO 认证机会
   #   evalRounds: [6, 12, 18]  # 第几站正赛后评估（最后一站不评估：之后进入赛季结束，补偿重置）
   #   pctPerPoint: 0.5         # 1 点零件性能差距折合的百分比
   #   tier1Deficit: 2          # 落后 >= 2% 为一档

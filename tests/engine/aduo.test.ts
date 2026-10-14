@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { homologationsLeft, maybeEvaluateAduo, measureManufacturers, nextEvalRound } from '../../src/engine/aduo';
 import { normalizeDatabase } from '../../src/engine/data';
-import { advanceWeeks, cancelProject, previewProject, startProject } from '../../src/engine/development';
+import { advanceWeeks, fitPart, previewManufacture, previewProject, startProject } from '../../src/engine/development';
 import { costCapOf } from '../../src/engine/finance';
 import { migrateState } from '../../src/engine/migrate';
 import { createGame } from '../../src/engine/newgame';
@@ -24,28 +24,53 @@ describe('ADUO 与动力单元供应', () => {
     expect(previewProject(s, 'mclaren', 'floor', 'standard').blockers.join()).not.toContain('动力单元');
   });
 
-  it('每赛季 1 次认证升级；取消项目返还次数', () => {
+  it('开局没有基础认证机会，但仍可研发和生产；未认证规格不能装车', () => {
     const s = cardGame('mercedes');
     const rng = new Rng(1);
+    expect(homologationsLeft(s, s.teams.mercedes)).toBe(0);
     expect(startProject(s, 'mercedes', 'ice', 'standard', false, rng).ok).toBe(true);
-    const mgu_k = previewProject(s, 'mercedes', 'mgu_k', 'standard');
-    expect(mgu_k.ok).toBe(false);
-    expect(mgu_k.blockers.join()).toContain('认证升级次数已用完（1/1）');
-    const p = s.teams.mercedes.projects.find(x => x.partType === 'ice')!;
-    cancelProject(s, 'mercedes', p.id);
-    expect(homologationsLeft(s, s.teams.mercedes)).toBe(1);
+    expect(previewProject(s, 'mercedes', 'mgu_k', 'standard').ok).toBe(true);
+    advanceWeeks(s, 20, rng);
+    const latest = s.teams.mercedes.parts.ice.specs.at(-1)!;
+    expect(latest.homologated).toBe(false);
+    expect(previewManufacture(s, 'mercedes', 'ice', latest.id, 1).ok).toBe(true);
+    expect(fitPart(s, 'mercedes', 1, 'ice', latest.id)).toMatchObject({ ok: false });
+    expect(fitPart(s, 'mercedes', 1, 'ice', latest.id).message).toContain('没有可用 ADUO 认证机会（0/0）');
   });
 
-  it('厂商车队交付的新件同时交付给客户车队', () => {
+  it('一次 ADUO 机会在首次装车时认证当前整批升级，重复装车不再消耗', () => {
+    const s = cardGame('mercedes');
+    const rng = new Rng(8);
+    expect(startProject(s, 'mercedes', 'ice', 'standard', false, rng).ok).toBe(true);
+    expect(startProject(s, 'mercedes', 'mgu_k', 'standard', false, rng).ok).toBe(true);
+    advanceWeeks(s, 20, rng);
+    const ice = s.teams.mercedes.parts.ice.specs.at(-1)!;
+    const mgu = s.teams.mercedes.parts.mgu_k.specs.at(-1)!;
+    expect([ice.homologated, mgu.homologated]).toEqual([false, false]);
+    s.teams.mercedes.aduoUpgrades = 1;
+    expect(fitPart(s, 'mercedes', 1, 'ice', ice.id).ok).toBe(true);
+    expect([ice.homologated, mgu.homologated]).toEqual([true, true]);
+    expect(s.teams.mercedes.puHomologations).toBe(1);
+    expect(fitPart(s, 'mercedes', 1, 'mgu_k', mgu.id).ok).toBe(true);
+    expect(fitPart(s, 'mercedes', 2, 'ice', ice.id).ok).toBe(true);
+    expect(s.teams.mercedes.puHomologations).toBe(1);
+  });
+
+  it('厂商完成认证后才把新件交付给客户车队', () => {
     const s = cardGame('mercedes');
     const rng = new Rng(2);
     expect(startProject(s, 'mercedes', 'ice', 'standard', false, rng).ok).toBe(true);
     advanceWeeks(s, 20, rng);
     const latest = (id: string) => [...s.teams[id].parts.ice.specs].sort((a, b) => b.version - a.version)[0];
     expect(latest('mercedes').version).toBe(2);
+    for (const c of ['mclaren', 'williams', 'alpine']) expect(latest(c).version, c).toBe(1);
+    s.teams.mercedes.aduoUpgrades = 1;
+    expect(fitPart(s, 'mercedes', 1, 'ice', latest('mercedes').id).ok).toBe(true);
     for (const c of ['mclaren', 'williams', 'alpine']) {
+      expect(latest(c).version, c).toBe(2);
       expect(latest(c).perf, c).toBe(latest('mercedes').perf);
       expect(latest(c).verified, c).toBe(true);
+      expect(latest(c).homologated, c).toBe(true);
       // AI 客户车队自动装车
       expect(s.teams[c].cars.every(car => car.fitted.ice === latest(c).id), c).toBe(true);
     }
@@ -85,7 +110,7 @@ describe('ADUO 与动力单元供应', () => {
     expect(after.news.some(n => n.text.includes('获得 ADUO 二档'))).toBe(true);
     const v = buildView(after);
     expect(v.aduo.tier).toBe(2);
-    expect(v.aduo.upgradesTotal).toBe(1 + after.rules.aduo.tier2Upgrades);
+    expect(v.aduo.upgradesTotal).toBe(after.rules.aduo.tier2Upgrades);
     expect(v.aduo.last?.round).toBe(1);
   });
 
@@ -97,7 +122,7 @@ describe('ADUO 与动力单元供应', () => {
     expect(v.isCustomer).toBe(true);
     expect(v.supplier).toBe('法拉利车队');
     expect(v.tier).toBe(1);
-    expect(v.upgradesTotal).toBe(2);
+    expect(v.upgradesTotal).toBe(1);
   });
 
   it('没有厂商车队的数据：各车队自行研发，评估覆盖组内所有车队', () => {
@@ -166,6 +191,18 @@ describe('ADUO 与动力单元供应', () => {
     expect(row.tier).toBe(0);
   });
 
+  it('FIA 评估忽略尚未认证、不能装车的动力单元规格', () => {
+    const s = cardGame('mercedes');
+    const initial = measureManufacturers(s).find(r => r.engine === '梅赛德斯')!.perf;
+    s.teams.mercedes.parts.ice.specs.push({
+      id: 'ice-unapproved', type: 'ice', version: 99, perf: 100, rel: 99,
+      verified: true, expected: null, homologated: false, introduced: 'test',
+    });
+    expect(measureManufacturers(s).find(r => r.engine === '梅赛德斯')!.perf).toBe(initial);
+    s.teams.mercedes.parts.ice.specs.at(-1)!.homologated = true;
+    expect(measureManufacturers(s).find(r => r.engine === '梅赛德斯')!.perf).toBe(100);
+  });
+
   it('评估站的正赛结束后，下一次评估仍是本站', () => {
     const s = cardGame('mercedes');
     s.rules.aduo.evalRounds = [1, 2];
@@ -177,14 +214,19 @@ describe('ADUO 与动力单元供应', () => {
     expect(nextEvalRound(s)).toBeNull();
   });
 
-  it('旧存档中进行中的动力单元项目占用认证次数', () => {
+  it('旧存档迁移会返还进行中项目误占的认证次数，并把现有规格视为已认证', () => {
     const s = cardGame('mercedes');
     expect(startProject(s, 'mercedes', 'ice', 'standard', false, new Rng(4)).ok).toBe(true);
     const raw = JSON.parse(JSON.stringify(s));
-    delete raw.rules.aduo;
-    for (const t of Object.values(raw.teams) as Array<Record<string, unknown>>) delete t.puHomologations;
+    raw.rules.aduo.baseUpgrades = 1;
+    raw.teams.mercedes.puHomologations = 1;
+    for (const t of Object.values(raw.teams) as Array<{ parts: Record<string, { specs: Array<Record<string, unknown>> }> }>) {
+      for (const parts of Object.values(t.parts)) for (const spec of parts.specs) delete spec.homologated;
+    }
     const m = migrateState(raw);
-    expect(m.teams.mercedes.puHomologations).toBe(1);
-    expect(previewProject(m, 'mercedes', 'mgu_k', 'standard').ok).toBe(false);
+    expect(m.rules.aduo.baseUpgrades).toBe(0);
+    expect(m.teams.mercedes.puHomologations).toBe(0);
+    expect(Object.values(m.teams.mercedes.parts).flatMap(parts => parts.specs).every(spec => spec.homologated)).toBe(true);
+    expect(previewProject(m, 'mercedes', 'mgu_k', 'standard').ok).toBe(true);
   });
 });

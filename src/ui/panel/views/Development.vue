@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { act, money, peek, store } from '../bridge';
-import AduoCard from '../components/AduoCard.vue';
 import CarTopdown from '../components/CarTopdown.vue';
 import type { Ambition, FacilityType, PitCrewFocus } from '../../../engine/types';
 import type { ProjectPreview } from '../../../engine/development';
@@ -158,8 +157,6 @@ const matrix = computed(() => {
         </div>
       </div>
     </div>
-
-    <AduoCard :aduo="v.aduo" />
 
     <div class="grid g2">
       <div class="card stack-s">

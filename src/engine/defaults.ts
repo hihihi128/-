@@ -240,7 +240,7 @@ export const DEFAULT_RULES: Rules = {
     enabled: true,
     parts: ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust'],
     measurePart: 'ice',
-    baseUpgrades: 1,
+    baseUpgrades: 0,
     evalRounds: [6, 12, 18],
     pctPerPoint: 0.5,
     tier1Deficit: 2,

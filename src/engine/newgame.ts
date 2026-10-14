@@ -92,7 +92,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
       const specId = `${pt}-1`;
       parts[pt] = {
         specs: [
-          { id: specId, type: pt, version: 1, perf: round1(p.perf), rel: round1(p.rel), verified: true, expected: null, introduced: '初始' },
+          { id: specId, type: pt, version: 1, perf: round1(p.perf), rel: round1(p.rel), verified: true, expected: null, homologated: true, introduced: '初始' },
         ],
         stock: { [specId]: pt === 'front_wing' ? 2 : 1 },
       };

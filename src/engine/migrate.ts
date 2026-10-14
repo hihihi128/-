@@ -341,6 +341,10 @@ export function migrateState(state: GameState): GameState {
   // ADUO（2026-10 新增）：旧存档没有厂商车队信息，按「各车队自行研发」处理
   if (state.rules.puAllocation && !state.rules.aduo) state.rules.aduo = deepClone(DEFAULT_RULES.aduo);
   state.aduo ??= { evaluations: [] };
+  const legacyAduoLifecycle = !!state.rules.aduo && Object.values(state.teams).some(team =>
+    state.rules.aduo.parts.some(partType => team.parts[partType]?.specs.some(spec => spec.homologated === undefined)),
+  );
+  if (legacyAduoLifecycle && state.rules.aduo.baseUpgrades === 1) state.rules.aduo.baseUpgrades = 0;
   for (const team of Object.values(state.teams)) {
     const crew = team.staff.pitCrew.skill;
     team.pitCrewTraining ??= { speed: crew, consistency: crew, error_control: crew };
@@ -353,10 +357,16 @@ export function migrateState(state: GameState): GameState {
       team.staff.raceEngineer2 = { ...deepClone(first), id: `${team.id}-raceEngineer2`, role: 'raceEngineer2', name: `${first.name || team.name}（二号车）`, salary: 0, preference: first.preference ? { ...first.preference } : undefined };
     }
     team.worksTeam ??= false;
-    // 进行中的动力单元设计项目已经占用认证次数（取消时会返还）
-    team.puHomologations ??= state.rules.aduo
-      ? team.projects.filter(p => p.kind === 'design' && p.partType && state.rules.aduo.parts.includes(p.partType)).length
-      : 0;
+    if (legacyAduoLifecycle && state.rules.aduo) {
+      // 旧版在研发开工时计数。进行中的项目尚未生成规格，因此返还其误占的次数。
+      const activePuDesigns = team.projects.filter(p => p.kind === 'design' && p.partType && state.rules.aduo.parts.includes(p.partType)).length;
+      team.puHomologations = Math.max(0, (team.puHomologations ?? activePuDesigns) - activePuDesigns);
+      // 已经交付的旧版规格视为获批，并把历史次数转成祖父条款机会，避免出现已用次数大于总次数。
+      team.aduoUpgrades = Math.max(team.aduoUpgrades ?? 0, team.puHomologations);
+    } else team.puHomologations ??= 0;
+    for (const parts of Object.values(team.parts)) {
+      for (const spec of parts.specs) spec.homologated ??= true;
+    }
     team.aduoUpgrades ??= 0;
     team.aduoCapBonus ??= 0;
     team.aduoTier ??= 0;
@@ -389,7 +399,7 @@ export function migrateState(state: GameState): GameState {
       if (!team.parts[pt]) {
         const id = `${pt}-S${state.season?.number ?? 1}m`;
         team.parts[pt] = {
-          specs: [{ id, type: pt, version: 1, perf: 70, rel: 80, verified: true, expected: null, introduced: '存档升级' }],
+          specs: [{ id, type: pt, version: 1, perf: 70, rel: 80, verified: true, expected: null, homologated: true, introduced: '存档升级' }],
           stock: { [id]: 1 },
         };
       }

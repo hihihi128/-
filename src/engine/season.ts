@@ -701,7 +701,7 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
       const perf = round1(clamp((best?.perf ?? 70) * rules.carryOver + 70 * (1 - rules.carryOver) + focusBonus + rng.normal(0, 0.8), 1, 100));
       const id = `${pt}-S${state.season.number}v1`;
       team.parts[pt] = {
-        specs: [{ id, type: pt, version: 1, perf, rel: round1(clamp((best?.rel ?? 80) + 2, 1, 99)), verified: true, expected: null, introduced: `S${state.season.number}` }],
+        specs: [{ id, type: pt, version: 1, perf, rel: round1(clamp((best?.rel ?? 80) + 2, 1, 99)), verified: true, expected: null, homologated: true, introduced: `S${state.season.number}` }],
         stock: { [id]: pt === 'front_wing' ? 2 : 1 },
       };
       for (const car of team.cars) {
