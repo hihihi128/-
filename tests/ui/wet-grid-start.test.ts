@@ -54,6 +54,7 @@ describe('wet-grid starting tyre choices', () => {
     expect(host.textContent).toContain('不会产生进站时间或进站次数');
     const confirm = host.querySelector<HTMLButtonElement>('.confirm')!;
     expect(confirm.disabled).toBe(true);
+    expect(confirm.classList.contains('sticky-ready')).toBe(false);
     expect(host.querySelectorAll<HTMLInputElement>('input[type="radio"]')).toHaveLength(groups.length * 2);
 
     const radios = host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
@@ -62,9 +63,11 @@ describe('wet-grid starting tyre choices', () => {
     radios[0].click();
     await nextTick();
     expect(confirm.disabled).toBe(true);
+    expect(confirm.classList.contains('sticky-ready')).toBe(false);
     radios[3].click();
     await nextTick();
     expect(confirm.disabled).toBe(false);
+    expect(confirm.classList.contains('sticky-ready')).toBe(true);
     confirm.click();
     await nextTick();
 
