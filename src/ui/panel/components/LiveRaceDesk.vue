@@ -138,7 +138,7 @@ async function narratePause() {
               </label>
             </fieldset>
             <p v-if="missingGridChoices.length" class="missing-choice">仍需选择：{{ missingGridChoices.join('、') }} 的起步轮胎。</p>
-            <button class="primary confirm" :class="{ 'sticky-ready': canConfirmGrid }" :disabled="!canConfirmGrid" @click="resolve">确认两车起步轮胎并准备发车</button>
+            <button class="primary confirm" :disabled="!canConfirmGrid" @click="resolve">确认两车起步轮胎并准备发车</button>
           </template>
           <template v-else>
           <div v-for="d in drivers" :key="d.id" class="decision-driver" :class="{ muted: !isEligible(d.id) }">

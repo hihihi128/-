@@ -67,7 +67,7 @@ describe('wet-grid starting tyre choices', () => {
     radios[3].click();
     await nextTick();
     expect(confirm.disabled).toBe(false);
-    expect(confirm.classList.contains('sticky-ready')).toBe(true);
+    expect(confirm.classList.contains('sticky-ready')).toBe(false);
     confirm.click();
     await nextTick();
 
