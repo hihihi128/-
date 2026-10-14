@@ -10,7 +10,7 @@
  * 函数是幂等的，原地修改并返回同一个对象。
  */
 import { DEFAULT_RULES } from './defaults';
-import { resetPuUsage } from './powerunit';
+import { PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES, resetPuUsage } from './powerunit';
 import { ensureMarket, openMarket } from './market';
 import { migrateTyreInventory } from './tyres';
 import type { GameState, StaffRole } from './types';
@@ -18,6 +18,66 @@ import { deepClone } from './util';
 
 /** 玩家可以自由增删条目的规则表：不能按默认值回填，否则会恢复被有意删除的零件 / 轮胎 */
 const OPEN_MAPS = new Set(['parts', 'tyres']);
+
+const LEGACY_PU_MAP = {
+  power_unit: PU_COMBUSTION_PARTS,
+  ers: PU_ELECTRICAL_PARTS,
+} as const;
+
+/** 把旧版两组动力单元无损拆成六类部件。 */
+function migrateSixPartPowerUnit(state: GameState): void {
+  const allocation = state.rules.puAllocation;
+  if (!allocation || (allocation.ice && !allocation.power_unit && !allocation.ers && !state.rules.parts.power_unit && !state.rules.parts.ers)) return;
+  for (const type of PU_PART_TYPES) state.rules.parts[type] ??= deepClone(DEFAULT_RULES.parts[type]);
+  for (const targets of Object.values(LEGACY_PU_MAP)) {
+    for (const type of targets) allocation[type] ??= DEFAULT_RULES.puAllocation[type];
+  }
+  delete allocation.power_unit;
+  delete allocation.ers;
+  delete state.rules.parts.power_unit;
+  delete state.rules.parts.ers;
+  if (state.rules.aduo) {
+    if (state.rules.aduo.parts.some(type => type === 'power_unit' || type === 'ers')) state.rules.aduo.parts = [...PU_PART_TYPES];
+    if (state.rules.aduo.measurePart === 'power_unit' || state.rules.aduo.measurePart === 'ers') state.rules.aduo.measurePart = 'ice';
+  }
+  for (const team of Object.values(state.teams)) {
+    for (const [legacy, targets] of Object.entries(LEGACY_PU_MAP)) {
+      const old = team.parts[legacy];
+      if (!old) continue;
+      for (const type of targets) team.parts[type] ??= {
+        specs: old.specs.map(spec => ({ ...deepClone(spec), type })),
+        stock: { ...old.stock },
+      };
+      for (const car of team.cars) {
+        const specId = car.fitted[legacy];
+        for (const type of targets) {
+          if (specId) car.fitted[type] ??= specId;
+          const oldWear = car.puWear?.[legacy as keyof typeof car.puWear];
+          const oldPool = car.puWearPool?.[legacy as keyof typeof car.puWearPool];
+          if (oldWear) (car.puWear ??= {})[type] ??= { ...oldWear };
+          if (oldPool) (car.puWearPool ??= {})[type] ??= { ...oldPool };
+        }
+        delete car.fitted[legacy];
+        if (car.puWear) delete (car.puWear as Record<string, unknown>)[legacy];
+        if (car.puWearPool) delete (car.puWearPool as Record<string, unknown>)[legacy];
+      }
+      delete team.parts[legacy];
+      for (const project of team.projects) if (project.partType === legacy) project.partType = targets[0];
+    }
+  }
+  for (const driver of Object.values(state.drivers ?? {})) {
+    for (const [legacy, targets] of Object.entries(LEGACY_PU_MAP)) {
+      const used = driver.puUsed?.[legacy];
+      const pool = driver.puPool?.[legacy];
+      for (const type of targets) {
+        if (used !== undefined) (driver.puUsed ??= {})[type] ??= used;
+        if (pool) (driver.puPool ??= {})[type] ??= [...pool];
+      }
+      if (driver.puUsed) delete driver.puUsed[legacy];
+      if (driver.puPool) delete driver.puPool[legacy];
+    }
+  }
+}
 
 export const DEFAULT_STAFF_NAMES: Record<string, Partial<Record<StaffRole, string>>> = {
   mercedes: { aeroChief: '贾罗德·墨菲', raceEngineer2: '彼得·博宁顿', pitCrew: '梅赛德斯维修组', strategist: '罗茜·韦特' },
@@ -212,6 +272,7 @@ export function migrateState(state: GameState): GameState {
       }
     } else delete state.weekend.supernaturalCarEffects;
   }
+  migrateSixPartPowerUnit(state);
   if (state.weekend?.liveRace) {
     const live = state.weekend.liveRace;
     // Do not attempt to resume malformed or incompatible private simulation data.
@@ -239,6 +300,14 @@ export function migrateState(state: GameState): GameState {
         car.ersPerformance ??= 1;
         car.iceReliability ??= car.reliability;
         car.electricalReliability ??= car.reliability;
+        car.puComponentHealth ??= Object.fromEntries([
+          ...PU_COMBUSTION_PARTS.map(type => [type, car.iceHealth]),
+          ...PU_ELECTRICAL_PARTS.map(type => [type, car.electricalHealth]),
+        ]);
+        car.puComponentReliability ??= Object.fromEntries([
+          ...PU_COMBUSTION_PARTS.map(type => [type, car.iceReliability]),
+          ...PU_ELECTRICAL_PARTS.map(type => [type, car.electricalReliability]),
+        ]);
       }
     }
   }
@@ -284,8 +353,8 @@ export function migrateState(state: GameState): GameState {
   // 已经是 2026 规则的存档（有 puAllocation）不再补规则：玩家可能在世界书里有意删掉了某些默认项
   if (state.rules.puAllocation) return state;
   fillMissing(state.rules as unknown as Record<string, unknown>, DEFAULT_RULES as unknown as Record<string, unknown>, true);
-  // 2026 新增的零件类型只有能量回收系统
-  state.rules.parts.ers ??= deepClone(DEFAULT_RULES.parts.ers);
+  migrateSixPartPowerUnit(state);
+  for (const type of PU_PART_TYPES) state.rules.parts[type] ??= deepClone(DEFAULT_RULES.parts[type]);
   for (const pt of Object.keys(state.rules.puAllocation)) if (!state.rules.parts[pt]) delete state.rules.puAllocation[pt];
 
   for (const team of Object.values(state.teams)) {

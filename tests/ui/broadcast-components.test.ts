@@ -28,21 +28,21 @@ describe('转播界面组件', () => {
       parts: [
         { type: 'front_wing', name: '前翼', specId: 'fw1', version: 1, perf: 82, rel: 90, verified: true, expected: null },
         { type: 'floor', name: '底板', specId: 'fl1', version: 2, perf: 78, rel: 88, verified: false, expected: [76, 80] },
-        { type: 'power_unit', name: '内燃机', specId: 'pu1', version: 1, perf: 91, rel: 86, verified: true, expected: null },
+        { type: 'ice', name: '内燃机', specId: 'pu1', version: 1, perf: 91, rel: 86, verified: true, expected: null },
       ],
       projects: [{ partType: 'floor' }],
       selected: 'front_wing',
-      lockedParts: ['power_unit'],
+      lockedParts: ['ice'],
       onSelect: (partType: string) => { selected = partType; },
     });
 
     expect(host.querySelector('#val-front_wing')?.textContent).toBe('82.0');
     expect(host.querySelector('#val-floor')?.textContent).toBe('76~80');
-    expect(host.querySelector('#val-power_unit')?.textContent).toBe('锁定');
+    expect(host.querySelector('#val-ice')?.textContent).toBe('锁定');
     expect(host.querySelector('#part-front_wing')?.classList.contains('is-selected')).toBe(true);
     expect(host.querySelector('#label-floor')?.classList.contains('is-rnd')).toBe(true);
-    expect(host.querySelector('#part-power_unit')?.getAttribute('tabindex')).toBe('-1');
-    expect(host.querySelector('#label-power_unit')?.classList.contains('perf-locked')).toBe(true);
+    expect(host.querySelector('#part-ice')?.getAttribute('tabindex')).toBe('-1');
+    expect(host.querySelector('#label-ice')?.classList.contains('perf-locked')).toBe(true);
 
     host.querySelector('#part-floor')?.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     await nextTick();

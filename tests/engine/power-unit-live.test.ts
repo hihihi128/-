@@ -24,6 +24,10 @@ describe('2026 live power unit model', () => {
     expect(live.cars[target.driverId].iceHealth).toBeLessThan(initialIce);
     expect(live.cars[target.driverId].electricalHealth).toBeLessThan(initialElectrical);
     expect(live.cars[target.driverId].electricalHealth).toBeLessThan(live.cars[target.driverId].iceHealth!);
+    const health = live.cars[target.driverId].puComponentHealth!;
+    expect(Object.keys(health).sort()).toEqual(['control_electronics', 'energy_store', 'exhaust', 'ice', 'mgu_k', 'turbocharger']);
+    expect(health.exhaust).toBeGreaterThan(health.ice!);
+    expect(health.control_electronics).toBeGreaterThan(health.mgu_k!);
   });
 
   it('enters protection mode when the electrical system overheats', () => {

@@ -60,7 +60,7 @@
     <rect class="s" x="261" y="296" width="38" height="34" rx="3"/>
     <path class="f" d="M282,300 L271,315 L279,315 L276,327 L289,310 L281,310 L284,300 Z"/>
     <path class="d" d="M266,330 L266,338 M294,330 L294,338"/></g>
-<g id="part-power_unit" class="part " data-part="power_unit" tabindex="0" role="button" aria-label="内燃机">
+<g id="part-ice" class="part " data-part="ice" tabindex="0" role="button" aria-label="内燃机">
     <path class="s" d="M258,338 L302,338 L300,446 L260,446 Z"/>
     <circle class="d" cx="269" cy="360" r="6"/><circle class="d" cx="269" cy="382" r="6"/><circle class="d" cx="269" cy="404" r="6"/>
     <circle class="d" cx="291" cy="360" r="6"/><circle class="d" cx="291" cy="382" r="6"/><circle class="d" cx="291" cy="404" r="6"/>
@@ -94,7 +94,7 @@
 <g id="label-rear_wing" class="callout " data-part="rear_wing"><path class="lead" d="M150,622 L166,622 L202,620"/><circle class="dot" cx="202" cy="620" r="3.5"/><rect class="pill" x="67.8" y="605.0" width="82" height="34" rx="3"/><rect class="tag" x="71.8" y="612" width="4" height="20"/><text class="nm" x="81.8" y="629">尾翼</text><text class="val" id="val-rear_wing" x="129.8" y="628">—</text></g>
 <g id="label-suspension" class="callout " data-part="suspension"><path class="lead" d="M400,136 L386,136 L350,134"/><circle class="dot" cx="350" cy="134" r="3.5"/><rect class="pill" x="400" y="119.0" width="82" height="34" rx="3"/><rect class="tag" x="404" y="126" width="4" height="20"/><text class="nm" x="414" y="143">悬挂</text><text class="val" id="val-suspension" x="462" y="142">—</text></g>
 <g id="label-ers" class="callout " data-part="ers"><path class="lead" d="M400,290 L386,290 L298,312"/><circle class="dot" cx="298" cy="312" r="3.5"/><rect class="pill" x="400" y="273.0" width="162" height="34" rx="3"/><rect class="tag" x="404" y="280" width="4" height="20"/><text class="nm" x="414" y="297">能量回收系统</text><text class="val" id="val-ers" x="542" y="296">—</text></g>
-<g id="label-power_unit" class="callout " data-part="power_unit"><path class="lead" d="M400,392 L386,392 L301,392"/><circle class="dot" cx="301" cy="392" r="3.5"/><rect class="pill" x="400" y="375.0" width="102" height="34" rx="3"/><rect class="tag" x="404" y="382" width="4" height="20"/><text class="nm" x="414" y="399">内燃机</text><text class="val" id="val-power_unit" x="482" y="398">—</text></g>
+<g id="label-ice" class="callout " data-part="ice"><path class="lead" d="M400,392 L386,392 L301,392"/><circle class="dot" cx="301" cy="392" r="3.5"/><rect class="pill" x="400" y="375.0" width="102" height="34" rx="3"/><rect class="tag" x="404" y="382" width="4" height="20"/><text class="nm" x="414" y="399">内燃机</text><text class="val" id="val-ice" x="482" y="398">—</text></g>
 <g id="label-gearbox" class="callout " data-part="gearbox"><path class="lead" d="M400,506 L386,506 L293,500"/><circle class="dot" cx="293" cy="500" r="3.5"/><rect class="pill" x="400" y="489.0" width="102" height="34" rx="3"/><rect class="tag" x="404" y="496" width="4" height="20"/><text class="nm" x="414" y="513">变速箱</text><text class="val" id="val-gearbox" x="482" y="512">—</text></g>
 </g>
 </svg>

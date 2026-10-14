@@ -107,10 +107,10 @@ describe('三支车队特殊机制', () => {
     const state = teamGame('mercedes');
     state.mercedes!.politicalPressure = state.rules.mercedes.banPoliticalPressure;
     state.mercedes!.totoSatisfaction = 0;
-    const before = state.teams.mercedes.parts.power_unit.specs[0].perf;
+    const before = state.teams.mercedes.parts.ice.specs[0].perf;
     afterSpecialRace(state);
     expect(state.mercedes).toMatchObject({ compressionRatio: '1:16' });
-    expect(state.teams.mercedes.parts.power_unit.specs[0].perf).toBe(before - 2);
+    expect(state.teams.mercedes.parts.ice.specs[0].perf).toBe(before - 2);
     expect(state.mercedes!.dismissed).toContain('Toto');
     expect(tryAct(state, { type: 'ADVANCE' }).ok).toBe(false);
   });

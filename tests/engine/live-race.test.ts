@@ -56,12 +56,18 @@ describe('resumable live race', () => {
     live.pendingDecision = null;
     live.stage = 'ready';
     live.scLeft = 2;
+    live.wetness = 0;
+    live.surface = 'dry';
+    live.weatherTrajectory.fill(0);
+    for (const candidate of Object.values(live.cars)) candidate.player = false;
     for (const id of aiIds.slice(0, 2)) {
       live.cars[id].tyre = dry[0];
       live.cars[id].plannedCompounds = [dry[0], dry[1]];
       live.cars[id].stints = [20, live.totalLaps - 20];
       live.cars[id].stintIndex = 0;
       live.cars[id].tyreAge = 10;
+      live.cars[id].pendingCompound = null;
+      live.cars[id].engineerTyreOverride = null;
     }
     advanceRaceSession(state, live, 'next_lap');
     expect(live.cars[aiIds[0]].pits).toBe(1);
@@ -120,11 +126,17 @@ describe('resumable live race', () => {
     live.pendingDecision = null;
     live.stage = 'ready';
     live.scLeft = 4;
+    live.wetness = 0;
+    live.surface = 'dry';
+    live.weatherTrajectory.fill(0);
+    for (const candidate of Object.values(live.cars)) candidate.player = false;
     car.tyre = dry[0];
     car.plannedCompounds = [dry[0], dry[1], dry[2] ?? dry[0]];
     car.stints = [20, 20, live.totalLaps - 40];
     car.stintIndex = 0;
     car.tyreAge = 3;
+    car.pendingCompound = null;
+    car.engineerTyreOverride = null;
     advanceRaceSession(state, live, 'next_lap');
     expect(car.pits).toBe(0);
     car.tyreAge = 10;
@@ -150,6 +162,9 @@ describe('resumable live race', () => {
     const changed = playerCars[0];
     const engineerControlled = playerCars[1];
     engineerControlled.plan.strategySource = 'engineer';
+    engineerControlled.plannedCompounds = [state.rules.dryCompounds[0], state.rules.dryCompounds[1], state.rules.dryCompounds[2] ?? state.rules.dryCompounds[0]];
+    engineerControlled.stints = [20, 20, live.totalLaps - 40];
+    engineerControlled.stintIndex = 0;
     engineerControlled.tyreAge = 9;
     const engineerStint = engineerControlled.stintIndex;
     const freeCompound = state.rules.dryCompounds.at(-1)!;

@@ -111,7 +111,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   if (state.redBull) {
     const r = state.redBull;
     const maxPos = sortedDrivers(state).indexOf('verstappen') + 1;
-    L.push(`【红牛·人手危机】RB23 准备不足使车手更容易失误。GP 留任意愿 ${r.gpRetention.toFixed(0)}${r.gpTransferred ? '，已经转投迈凯伦' : ''}。夏休检查${r.summerChecked ? '已完成' : '尚未进行'}；维斯塔潘当前车手榜 P${maxPos}${r.verstappenExit ? '，解约条款已经触发并已转投梅赛德斯' : '，夏休时必须位列前三'}。`);
+    L.push(`【红牛·人手危机】RB22 准备不足使车手更容易失误。GP 留任意愿 ${r.gpRetention.toFixed(0)}${r.gpTransferred ? '，已经转投迈凯伦' : ''}。夏休检查${r.summerChecked ? '已完成' : '尚未进行'}；维斯塔潘当前车手榜 P${maxPos}${r.verstappenExit ? '，解约条款已经触发并已转投梅赛德斯' : '，夏休时必须位列前三'}。`);
   }
   if (state.astonMartin) {
     const a = state.astonMartin;

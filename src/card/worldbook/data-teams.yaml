@@ -13,7 +13,7 @@
 #     所以车手较强的车队，赛车数值会相应低一些。
 #   - 动力单元：梅赛德斯（梅赛德斯 / 迈凯伦 / 威廉姆斯 / 阿尔派）、红牛-福特（红牛 / 小红牛）、
 #     法拉利（法拉利 / 哈斯 / 凯迪拉克）、本田（阿斯顿·马丁）、奥迪（奥迪）。
-#     同一供应商的客户车队拿到同一规格的动力单元，所以 power_unit / ers 数值相同。
+#     同一供应商的客户车队拿到同一规格的动力单元，所以 六类动力单元部件数值相同。
 #   - 动力单元排序：梅赛德斯 > 法拉利 > 红牛-福特 > 奥迪 > 本田（本田可靠性最差）。
 #     本卡设定中法拉利放弃了钢制气缸盖方案，退回成熟方案：功率接近梅赛德斯，可靠性略逊。
 #
@@ -29,7 +29,7 @@
 #                   需要维持媒体支持率并平衡两位车手的粉丝意见，否则会被撤职
 #   engine / base   动力单元供应商 / 车队基地
 #   worksTeam       动力单元厂商车队（true / 省略）。同一 engine 的其他车队是客户车队：
-#                   不能自行研发 power_unit / ers，厂商车队的新件会同时交付给客户车队。
+#                   不能自行研发六类动力单元部件，厂商车队的新件会同时交付给客户车队。
 #                   ADUO 评估也按厂商（engine）进行，只有厂商车队获得补偿
 #   funds           初始资金（百万美元 M$）
 #   sponsorIncome   每站赞助收入（M$）
@@ -46,7 +46,8 @@
 #                   首席策略师可写 abilities: {strategy, weather, reaction, risk}。旧数据缺失时回退到 skill。
 #   carBase         未单独填写的零件默认 {perf 性能, rel 可靠性}
 #   parts           各零件初始 {perf, rel}，键为零件类型：
-#                   power_unit 内燃机 / ers 能量回收系统（2026：MGU-K 350kW，取消 MGU-H）/
+#                   ice 内燃机 / turbocharger 涡轮 / mgu_k 动能回收电机 / energy_store 储能系统 /
+#                   control_electronics 控制电子 / exhaust 排气（2026：MGU-K 350kW，取消 MGU-H）/
 #                   gearbox 变速箱 / chassis 底盘 / front_wing 前翼（主动空力）/
 #                   rear_wing 尾翼（主动空力）/ floor 底板 / sidepods 侧箱 / suspension 悬挂
 #   description     车队简介（会显示在面板上）
@@ -76,8 +77,12 @@ teams:
       strategist: { name: 罗茜·韦特, skill: 87, abilities: { strategy: 89, weather: 87, reaction: 86, risk: 67 }, salary: 1.1 }
     carBase: { perf: 87, rel: 88 }
     parts:
-      power_unit: { perf: 91, rel: 87 }
-      ers: { perf: 86, rel: 85 }
+      ice: { perf: 91, rel: 87 }
+      turbocharger: { perf: 91, rel: 87 }
+      exhaust: { perf: 91, rel: 87 }
+      mgu_k: { perf: 86, rel: 85 }
+      energy_store: { perf: 86, rel: 85 }
+      control_electronics: { perf: 86, rel: 85 }
       gearbox: { perf: 87, rel: 89 }
       chassis: { perf: 88, rel: 88 }
       front_wing: { perf: 87, rel: 89 }
@@ -111,8 +116,12 @@ teams:
       strategist: { name: 兰迪普·辛格, skill: 86, abilities: { strategy: 88, weather: 85, reaction: 87, risk: 71 }, salary: 1.1 }
     carBase: { perf: 78, rel: 87 }
     parts:
-      power_unit: { perf: 91, rel: 87 }
-      ers: { perf: 86, rel: 85 }
+      ice: { perf: 91, rel: 87 }
+      turbocharger: { perf: 91, rel: 87 }
+      exhaust: { perf: 91, rel: 87 }
+      mgu_k: { perf: 86, rel: 85 }
+      energy_store: { perf: 86, rel: 85 }
+      control_electronics: { perf: 86, rel: 85 }
       gearbox: { perf: 76.5, rel: 88 }
       chassis: { perf: 78.5, rel: 88 }
       front_wing: { perf: 77.5, rel: 87 }
@@ -147,8 +156,12 @@ teams:
       strategist: { name: 汉娜·施密茨, skill: 87, abilities: { strategy: 91, weather: 89, reaction: 90, risk: 76 }, salary: 1.2 }
     carBase: { perf: 76, rel: 83 }
     parts:
-      power_unit: { perf: 87, rel: 78 }
-      ers: { perf: 88, rel: 78 }
+      ice: { perf: 87, rel: 78 }
+      turbocharger: { perf: 87, rel: 78 }
+      exhaust: { perf: 87, rel: 78 }
+      mgu_k: { perf: 88, rel: 78 }
+      energy_store: { perf: 88, rel: 78 }
+      control_electronics: { perf: 88, rel: 78 }
       gearbox: { perf: 75.9, rel: 82 }
       chassis: { perf: 75.9, rel: 85 }
       front_wing: { perf: 75.9, rel: 86 }
@@ -156,7 +169,7 @@ teams:
       floor: { perf: 76.9, rel: 85 }
       sidepods: { perf: 74.9, rel: 86 }
       suspension: { perf: 74.9, rel: 85 }
-    description: RB23 · 红牛-福特动力单元（车队首台自研动力）。2025 年车队积分榜第 3（451 分），但全力争冠拖累了新车准备，季前还暴露出液压问题。马尔科被解雇，大批人才流失。你将辅助领队洛朗·梅基斯管理人手不足的团队：留住正与迈凯伦谈判的工程师 GP，并让维斯塔潘夏休时留在车手榜前三，否则他会转投梅赛德斯。
+    description: RB22 · 红牛-福特动力单元（车队首台自研动力）。2025 年车队积分榜第 3（451 分），但全力争冠拖累了新车准备，季前还暴露出液压问题。马尔科被解雇，大批人才流失。你将辅助领队洛朗·梅基斯管理人手不足的团队：留住正与迈凯伦谈判的工程师 GP，并让维斯塔潘夏休时留在车手榜前三，否则他会转投梅赛德斯。
 
   # ── 法拉利：真实车队（2026 赛季），带「过渡领队」特殊机制 ──
   # 选择法拉利开局时：玩家是埃尔坎从外部请来的过渡领队，需要稳住媒体支持率，
@@ -187,8 +200,12 @@ teams:
     carBase: { perf: 81, rel: 83 }
     parts:
       # 钢制气缸盖方案被放弃，退回成熟方案：功率接近梅赛德斯，可靠性略逊
-      power_unit: { perf: 89, rel: 84 }
-      ers: { perf: 85, rel: 83 }
+      ice: { perf: 89, rel: 84 }
+      turbocharger: { perf: 89, rel: 84 }
+      exhaust: { perf: 89, rel: 84 }
+      mgu_k: { perf: 85, rel: 83 }
+      energy_store: { perf: 85, rel: 83 }
+      control_electronics: { perf: 85, rel: 83 }
       gearbox: { perf: 79.1, rel: 84 }
       chassis: { perf: 81.1, rel: 85 }
       front_wing: { perf: 82.1, rel: 85 }
@@ -222,8 +239,12 @@ teams:
       strategist: { name: 夏尔-安托万·弗洛朗坦, skill: 80, abilities: { strategy: 82, weather: 80, reaction: 79, risk: 69 }, salary: 0.9 }
     carBase: { perf: 49, rel: 82 }
     parts:
-      power_unit: { perf: 91, rel: 87 }
-      ers: { perf: 86, rel: 85 }
+      ice: { perf: 91, rel: 87 }
+      turbocharger: { perf: 91, rel: 87 }
+      exhaust: { perf: 91, rel: 87 }
+      mgu_k: { perf: 86, rel: 85 }
+      energy_store: { perf: 86, rel: 85 }
+      control_electronics: { perf: 86, rel: 85 }
       gearbox: { perf: 50.9, rel: 84 }
       chassis: { perf: 46.9, rel: 82 }
       front_wing: { perf: 48.9, rel: 83 }
@@ -257,8 +278,12 @@ teams:
       strategist: { name: 马蒂厄·迪布瓦-卢卡, skill: 76, abilities: { strategy: 77, weather: 75, reaction: 76, risk: 77 }, salary: 0.8 }
     carBase: { perf: 62, rel: 82 }
     parts:
-      power_unit: { perf: 87, rel: 78 }
-      ers: { perf: 88, rel: 78 }
+      ice: { perf: 87, rel: 78 }
+      turbocharger: { perf: 87, rel: 78 }
+      exhaust: { perf: 87, rel: 78 }
+      mgu_k: { perf: 88, rel: 78 }
+      energy_store: { perf: 88, rel: 78 }
+      control_electronics: { perf: 88, rel: 78 }
       gearbox: { perf: 64.1, rel: 82 }
       chassis: { perf: 62.1, rel: 83 }
       front_wing: { perf: 62.1, rel: 83 }
@@ -294,8 +319,12 @@ teams:
     carBase: { perf: 35, rel: 74 }
     parts:
       # 电池故障、备件不足：动力单元是全场最弱的一环
-      power_unit: { perf: 72, rel: 60 }
-      ers: { perf: 68, rel: 58 }
+      ice: { perf: 72, rel: 60 }
+      turbocharger: { perf: 72, rel: 60 }
+      exhaust: { perf: 72, rel: 60 }
+      mgu_k: { perf: 68, rel: 58 }
+      energy_store: { perf: 68, rel: 58 }
+      control_electronics: { perf: 68, rel: 58 }
       gearbox: { perf: 34.8, rel: 72 }
       chassis: { perf: 35.8, rel: 74 }
       front_wing: { perf: 34.8, rel: 76 }
@@ -329,8 +358,12 @@ teams:
       strategist: { name: 卡琳·克里德利希, skill: 78, abilities: { strategy: 79, weather: 76, reaction: 78, risk: 72 }, salary: 0.8 }
     carBase: { perf: 55, rel: 81 }
     parts:
-      power_unit: { perf: 89, rel: 84 }
-      ers: { perf: 85, rel: 83 }
+      ice: { perf: 89, rel: 84 }
+      turbocharger: { perf: 89, rel: 84 }
+      exhaust: { perf: 89, rel: 84 }
+      mgu_k: { perf: 85, rel: 83 }
+      energy_store: { perf: 85, rel: 83 }
+      control_electronics: { perf: 85, rel: 83 }
       gearbox: { perf: 56.8, rel: 82 }
       chassis: { perf: 54.8, rel: 82 }
       front_wing: { perf: 54.8, rel: 82 }
@@ -365,8 +398,12 @@ teams:
       strategist: { name: 里特维克·达南贾亚·雷迪, skill: 78, abilities: { strategy: 79, weather: 78, reaction: 77, risk: 70 }, salary: 0.9 }
     carBase: { perf: 62, rel: 79 }
     parts:
-      power_unit: { perf: 81, rel: 75 }
-      ers: { perf: 80, rel: 76 }
+      ice: { perf: 81, rel: 75 }
+      turbocharger: { perf: 81, rel: 75 }
+      exhaust: { perf: 81, rel: 75 }
+      mgu_k: { perf: 80, rel: 76 }
+      energy_store: { perf: 80, rel: 76 }
+      control_electronics: { perf: 80, rel: 76 }
       gearbox: { perf: 61.3, rel: 78 }
       chassis: { perf: 62.3, rel: 81 }
       front_wing: { perf: 62.3, rel: 82 }
@@ -400,8 +437,12 @@ teams:
       strategist: { name: 奥里奥尔·伊塞恩, skill: 76, abilities: { strategy: 76, weather: 75, reaction: 74, risk: 78 }, salary: 0.8 }
     carBase: { perf: 65, rel: 82 }
     parts:
-      power_unit: { perf: 91, rel: 87 }
-      ers: { perf: 86, rel: 85 }
+      ice: { perf: 91, rel: 87 }
+      turbocharger: { perf: 91, rel: 87 }
+      exhaust: { perf: 91, rel: 87 }
+      mgu_k: { perf: 86, rel: 85 }
+      energy_store: { perf: 86, rel: 85 }
+      control_electronics: { perf: 86, rel: 85 }
       gearbox: { perf: 66.5, rel: 83 }
       chassis: { perf: 64.5, rel: 82 }
       front_wing: { perf: 64.5, rel: 83 }
@@ -434,8 +475,12 @@ teams:
       strategist: { name: 亚历克斯·古迪纳夫, skill: 74, abilities: { strategy: 74, weather: 72, reaction: 73, risk: 80 }, salary: 0.8 }
     carBase: { perf: 32, rel: 81 }
     parts:
-      power_unit: { perf: 89, rel: 84 }
-      ers: { perf: 85, rel: 83 }
+      ice: { perf: 89, rel: 84 }
+      turbocharger: { perf: 89, rel: 84 }
+      exhaust: { perf: 89, rel: 84 }
+      mgu_k: { perf: 85, rel: 83 }
+      energy_store: { perf: 85, rel: 83 }
+      control_electronics: { perf: 85, rel: 83 }
       gearbox: { perf: 36, rel: 80 }
       chassis: { perf: 32, rel: 82 }
       front_wing: { perf: 31, rel: 82 }

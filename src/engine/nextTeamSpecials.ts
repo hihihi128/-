@@ -1,5 +1,6 @@
 import { addNarration, addNews, playerTeam } from './log';
 import { recordPuFit, resetPuUsage } from './powerunit';
+import { PU_PART_TYPES } from './powerunit';
 import { Rng } from './rng';
 import { ensureDriverWeekendTyres } from './tyres';
 import type { FiaMeetingIssue, GameState, LiveRaceState, TeamState } from './types';
@@ -32,7 +33,7 @@ function completeAstonAduo(state: GameState): void {
   const a = state.astonMartin;
   if (!a || a.aduoEngineArrived || a.aduoProgress < 100) return;
   a.aduoEngineArrived = true;
-  buffCurrentParts(state.teams.aston_martin, ['power_unit'], state.rules.astonMartin.aduoPuBuff);
+  buffCurrentParts(state.teams.aston_martin, PU_PART_TYPES, state.rules.astonMartin.aduoPuBuff);
   addNews(state, '研发', '本田首批 ADUO 动力单元提前到货。振动达到危险阈值时的强制退赛风险已经消失。');
   addNarration(state, 'aston_aduo', '本田 ADUO 动力单元到货', '在车手安全舆论与 FIA 压力下，本田交付了首批改进动力单元。车队终于可以停止每十圈一次的振动风险检查。');
 }
@@ -151,7 +152,7 @@ function completeAudiTurbo(state: GameState): void {
   const a = state.audi;
   if (!a || a.turboFixed || a.aduoProgress < 100) return;
   a.turboFixed = true;
-  buffCurrentParts(state.teams.audi, ['power_unit'], 5);
+  buffCurrentParts(state.teams.audi, ['turbocharger'], 5);
   addNews(state, '研发', '奥迪获准使用 ADUO 解决涡轮问题，起步随机掉位风险已经消失。');
 }
 

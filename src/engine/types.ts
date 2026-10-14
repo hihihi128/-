@@ -12,6 +12,7 @@
 
 /** 零件类型，键来自 rules.parts（默认 8 种，可在规则数据里增删） */
 export type PartType = string;
+export type PowerUnitPartType = 'ice' | 'turbocharger' | 'mgu_k' | 'energy_store' | 'control_electronics' | 'exhaust';
 /** 轮胎配方，键来自 rules.tyres */
 export type Compound = string;
 
@@ -567,9 +568,9 @@ export interface CarState {
   /** 当前装车：零件类型 → specId */
   fitted: Record<PartType, string>;
   /** 动力单元实体磨损；更换为不同规格时从新件开始。旧存档没有该字段。 */
-  puWear?: Partial<Record<'power_unit' | 'ers', { specId: string; wear: number }>>;
+  puWear?: Partial<Record<PowerUnitPartType, { specId: string; wear: number }>>;
   /** 按规格保存可再次装回的动力单元磨损。 */
-  puWearPool?: Partial<Record<'power_unit' | 'ers', Record<string, number>>>;
+  puWearPool?: Partial<Record<PowerUnitPartType, Record<string, number>>>;
 }
 
 export type ProjectKind = 'design' | 'manufacture' | 'facility' | 'pit_training' | 'driver_training';
@@ -923,6 +924,9 @@ export interface LiveRaceCar {
   /** 2026 动力单元实时状态。健康度与温度均为简化管理指标。 */
   iceHealth?: number;
   electricalHealth?: number;
+  /** 六类动力单元部件的独立健康度。 */
+  puComponentHealth?: Partial<Record<PowerUnitPartType, number>>;
+  puComponentReliability?: Partial<Record<PowerUnitPartType, number>>;
   puTemperature?: number;
   puStatus?: 'normal' | 'hot' | 'protect' | 'critical';
   ersPerformance?: number;

@@ -45,11 +45,12 @@ rules:
   #     aeroHours: 24            # 风洞时长消耗
   #     unitCost: 0.8            # 额外生产一件的成本
   #     crashDamage: 0.3         # 撞车退赛时损毁概率
-  #   power_unit:
-  #     name: 内燃机             # 2026：取消 MGU-H，内燃机与电能约 50:50
-  #     developable: false       # 例：禁止研发内燃机
-  #   ers:
-  #     name: 能量回收系统       # 2026：MGU-K 提升到 350kW；影响动力和超车模式的收益
+  #   ice: { name: 内燃机（ICE）, weights: { power: 0.24 } }
+  #   turbocharger: { name: 涡轮增压器（TC）, weights: { power: 0.16 } }
+  #   mgu_k: { name: 动能回收电机（MGU-K）, weights: { power: 0.22, efficiency: 0.03 } }
+  #   energy_store: { name: 储能系统（ES）, weights: { power: 0.12, efficiency: 0.01 } }
+  #   control_electronics: { name: 控制电子（CE）, weights: { power: 0.06, efficiency: 0.01 } }
+  #   exhaust: { name: 排气系统（EXH）, weights: { power: 0.1 } }
 
   # ── 2026 赛事规则 ──
   # qualiFinalists: 10        # Q3 保留几台车；其余平均分到 Q1/Q2 淘汰（22 台车 → 6/6/10）
@@ -58,14 +59,18 @@ rules:
   # boostAttack: 0.12         # 「进攻」驾驶模式（Boost 按钮）进攻时的额外优势
   # boostDefence: 0.1         # 前车同样处于「进攻」模式时可抵消的优势
   # puAllocation:             # 每位车手每赛季可用的动力单元元件数（超出罚退）
-  #   power_unit: 4           #   内燃机（含涡轮、排气）
-  #   ers: 3                  #   能量回收系统（MGU-K、电池、控制电子）
+  #   ice: 3                  # 内燃机
+  #   turbocharger: 3         # 涡轮增压器
+  #   mgu_k: 2                # 动能回收电机
+  #   energy_store: 2         # 储能系统
+  #   control_electronics: 2  # 控制电子
+  #   exhaust: 3              # 排气系统总成
   # puPenaltyFirst: 10        # 第一次超出配额罚退位数
   # puPenaltyNext: 5          # 之后每次超出罚退位数
   # aduo:                     # ADUO 动力单元追赶机制（车队数据中 worksTeam 标记厂商车队）
   #   enabled: true
-  #   parts: [power_unit, ers] # 计入认证升级次数、由厂商供应给客户车队的零件
-  #   measurePart: power_unit  # 评估用的零件（2026 规则只评估内燃机）
+  #   parts: [ice, turbocharger, mgu_k, energy_store, control_electronics, exhaust]
+  #   measurePart: ice         # ADUO 评估基准
   #   baseUpgrades: 1          # 每赛季基础认证升级次数（开工即计数，取消返还）
   #   evalRounds: [6, 12, 18]  # 第几站正赛后评估（最后一站不评估：之后进入赛季结束，补偿重置）
   #   pctPerPoint: 0.5         # 1 点零件性能差距折合的百分比
@@ -137,7 +142,7 @@ rules:
   #   pressurePerRace: 8
   #   aduoProgressPerLobby: 34
   # redBull:
-  #   mistakeMultiplier: 1.65  # RB23 准备不足造成的车手失误概率倍率
+  #   mistakeMultiplier: 1.65  # RB22 准备不足造成的车手失误概率倍率
   #   startGpRetention: 58
   #   gpLossPerRace: 12
   #   gpNegotiationGain: 25

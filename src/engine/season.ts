@@ -13,7 +13,7 @@ import { afterSpecialRace } from './teamSpecials';
 import { afterNextTeamRace, maybeTriggerRacingBullsRecall } from './nextTeamSpecials';
 import { afterManagementRace, completeAlpineDriverExit, completeWilliamsHandover } from './managementSpecials';
 import { closeUnansweredRandomEvent } from './randomEvents';
-import { resetPuUsage, recordPuFit } from './powerunit';
+import { isPowerUnitPart, PU_PART_TYPES, resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
@@ -239,17 +239,12 @@ function finalizeLiveRace(state: GameState, rng: Rng): Outcome {
     if (!car) continue;
     car.puWear ??= {};
     car.puWearPool ??= {};
-    const iceSpecId = car.fitted.power_unit;
-    const ersSpecId = car.fitted.ers;
-    if (iceSpecId) {
-      const wear = Math.max(0, 100 - (liveCar.iceHealth ?? 100));
-      car.puWear.power_unit = { specId: iceSpecId, wear };
-      (car.puWearPool.power_unit ??= {})[iceSpecId] = wear;
-    }
-    if (ersSpecId) {
-      const wear = Math.max(0, 100 - (liveCar.electricalHealth ?? 100));
-      car.puWear.ers = { specId: ersSpecId, wear };
-      (car.puWearPool.ers ??= {})[ersSpecId] = wear;
+    for (const type of PU_PART_TYPES) {
+      const specId = car.fitted[type];
+      if (!specId) continue;
+      const wear = Math.max(0, 100 - (liveCar.puComponentHealth?.[type] ?? 100));
+      car.puWear[type] = { specId, wear };
+      (car.puWearPool[type] ??= {})[specId] = wear;
     }
   }
   const { result, extras } = completed;
@@ -711,7 +706,7 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
       };
       for (const car of team.cars) {
         car.fitted[pt] = id;
-        if (pt === 'power_unit' || pt === 'ers') {
+        if (isPowerUnitPart(pt)) {
           car.puWear = {};
           car.puWearPool = {};
         }

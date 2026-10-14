@@ -46,7 +46,9 @@ teams:
       strategist: { name: 策略师A, skill: 76, salary: 1 }
     carBase: { perf: 83, rel: 84 }
     parts:
-      power_unit: { perf: 88, rel: 83 }
+      ice: { perf: 88, rel: 83 }
+      turbocharger: { perf: 88, rel: 83 }
+      exhaust: { perf: 88, rel: 83 }
       floor: { perf: 84, rel: 85 }
     description: 占位数据：动力强劲的老牌强队，直道速度出众。
 
@@ -72,7 +74,9 @@ teams:
     parts:
       floor: { perf: 86, rel: 88 }
       front_wing: { perf: 85, rel: 90 }
-      power_unit: { perf: 80, rel: 90 }
+      ice: { perf: 80, rel: 90 }
+      turbocharger: { perf: 80, rel: 90 }
+      exhaust: { perf: 80, rel: 90 }
     description: 占位数据：下压力出色、可靠性极高的稳健车队。
 
   - id: team_c
@@ -169,8 +173,12 @@ teams:
     carBase: { perf: 81, rel: 82 }
     parts:
       # 钢制气缸盖方案失败，只能退回保守方案：内燃机功率与可靠性都吃亏
-      power_unit: { perf: 77, rel: 76 }
-      ers: { perf: 80, rel: 80 }
+      ice: { perf: 77, rel: 76 }
+      turbocharger: { perf: 77, rel: 76 }
+      exhaust: { perf: 77, rel: 76 }
+      mgu_k: { perf: 80, rel: 80 }
+      energy_store: { perf: 80, rel: 80 }
+      control_electronics: { perf: 80, rel: 80 }
       chassis: { perf: 82, rel: 84 }
       front_wing: { perf: 83, rel: 85 }
       rear_wing: { perf: 82, rel: 85 }
@@ -272,7 +280,9 @@ teams:
       strategist: { name: 策略师J, skill: 68, salary: 0.6 }
     carBase: { perf: 74, rel: 77 }
     parts:
-      power_unit: { perf: 86, rel: 80 }
+      ice: { perf: 86, rel: 80 }
+      turbocharger: { perf: 86, rel: 80 }
+      exhaust: { perf: 86, rel: 80 }
     description: 占位数据：依靠客户引擎的小车队。
 
   - id: team_k

@@ -127,6 +127,11 @@ describe('physical tyre sets and pit crew timing', () => {
     const team = state.teams[state.meta.playerTeamId];
     const driverId = team.cars[0].driverId!;
     const compound = state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0];
+    state.weekend!.weather.race = 'dry';
+    state.weekend!.forecast.race = 0;
+    state.weekend!.forecast.raceRainWindow = null;
+    state.weekend!.raceWeatherSeed = 1;
+    state.tracks[state.calendar[state.season.roundIndex].trackId].rainChance = 0;
     const key = weekendTyreKey(state);
     const target = team.tyreInventory![driverId].find(set => set.compound === compound)!;
     for (const set of team.tyreInventory![driverId]) if (set.compound === compound && set.id !== target.id) set.returned = true;

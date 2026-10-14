@@ -162,7 +162,7 @@ describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backen
     expect(drivers.every(entry => entry.keys.length >= 4)).toBe(true);
     expect(teams.find(entry => entry.comment.includes('迈凯伦车队'))?.content).toContain('玩家执掌本队时，由 CEO 扎克·布朗任命为临时领队');
     expect(teams.find(entry => entry.comment.includes('梅赛德斯车队'))?.content).toContain('玩家执掌本队时以副领队身份加入');
-    expect(teams.find(entry => entry.comment.includes('红牛车队'))?.content).toContain('RB23');
+    expect(teams.find(entry => entry.comment.includes('红牛车队'))?.content).toContain('RB22');
     expect(drivers.find(entry => entry.comment.includes('乔治·拉塞尔'))?.content).toContain('管理触发点');
     expect(drivers.find(entry => entry.comment.includes('塞尔吉奥·佩雷斯'))?.content).toContain('无线电与叙述指引');
   });

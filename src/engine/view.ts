@@ -13,6 +13,7 @@ import {
   worksTeamFor,
 } from './aduo';
 import { AMBITIONS, FACILITIES, LABELS, STAFF_ROLES } from './defaults';
+import { isPowerUnitPart } from './powerunit';
 import {
   allocationGap,
   previewFacility,
@@ -398,7 +399,7 @@ function driverView(state: GameState, d: DriverState, positions: Map<string, num
       name: state.rules.parts[type]?.name ?? type,
       used: d.puUsed?.[type] ?? 1,
       limit,
-      health: type === 'power_unit' || type === 'ers'
+      health: isPowerUnitPart(type)
         ? Math.max(0, 100 - (car && car.puWear?.[type]?.specId === car.fitted[type] ? car.puWear[type]!.wear : 0))
         : 100,
     })),

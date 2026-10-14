@@ -123,7 +123,7 @@ const teamLore = [
   { id: 7, slug: 'ferrari', name: '法拉利车队（2026）', keys: ['法拉利', 'Ferrari', '马拉内罗', '埃尔坎', '瓦塞尔', '瓜尔蒂耶里', 'SF-26', '过渡领队'] },
   { id: 10, slug: 'mclaren', name: '迈凯伦车队（2026）', keys: ['迈凯伦', 'McLaren', '斯特拉', '扎克·布朗', 'MCL40'] },
   { id: 11, slug: 'mercedes', name: '梅赛德斯车队（2026）', keys: ['梅赛德斯', 'Mercedes', '梅奔', 'Toto Wolff', '托托', 'W17', '压缩比'] },
-  { id: 12, slug: 'redbull', name: '红牛车队（2026）', keys: ['红牛车队', 'Red Bull Racing', '梅基斯', 'RB23'] },
+  { id: 12, slug: 'redbull', name: '红牛车队（2026）', keys: ['红牛车队', 'Red Bull Racing', '梅基斯', 'RB22'] },
   { id: 13, slug: 'aston-martin', name: '阿斯顿·马丁车队（2026）', keys: ['阿斯顿·马丁', 'Aston Martin', 'AMR26', '劳伦斯·斯特罗尔'] },
   { id: 14, slug: 'racing-bulls', name: '小红牛车队（2026）', keys: ['小红牛', 'Racing Bulls', 'VCARB', '佩尔曼'] },
   { id: 15, slug: 'audi', name: '奥迪车队（2026）', keys: ['奥迪', 'Audi', '比诺托'] },

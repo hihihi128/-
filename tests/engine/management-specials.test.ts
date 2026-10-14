@@ -26,7 +26,7 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
   it('按车队初始化特殊状态并公开到视图', () => {
     const alpine = game('alpine');
     expect(alpine.alpine).toMatchObject({ puIntegration: 20, integrationPenaltyActive: true, gaslyLeaving: false });
-    expect(Object.keys(alpine.alpine!.penalizedPowerSpecs)).toHaveLength(2);
+    expect(Object.keys(alpine.alpine!.penalizedPowerSpecs)).toHaveLength(6);
     expect(buildView(alpine).alpine?.rndDirection).toEqual(['chassis', 'sidepods']);
 
     const haas = game('haas');
@@ -69,32 +69,32 @@ describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
   it('阿尔派动力匹配惩罚覆盖供应商新件，完成匹配后只恢复到梅赛德斯水平', () => {
     let state = game('alpine');
     const works = state.teams.mercedes;
-    state.alpine!.penalizedPowerSpecs['power_unit:power_unit-2'] = { partType: 'power_unit', specId: 'power_unit-2', perfAfter: 88, relAfter: 82 };
-    supplyCustomers(state, works, 'power_unit', { id: 'works-test', type: 'power_unit', version: 99, perf: 94, rel: 90, verified: true, expected: null, introduced: 'test' });
-    const delivered = state.teams.alpine.parts.power_unit.specs.at(-1)!;
+    state.alpine!.penalizedPowerSpecs['ice:ice-2'] = { partType: 'ice', specId: 'ice-2', perfAfter: 88, relAfter: 82 };
+    supplyCustomers(state, works, 'ice', { id: 'works-test', type: 'ice', version: 99, perf: 94, rel: 90, verified: true, expected: null, introduced: 'test' });
+    const delivered = state.teams.alpine.parts.ice.specs.at(-1)!;
     expect(delivered).toMatchObject({ perf: 90, rel: 85 });
     state.alpine!.puIntegration = 80;
     state = run(state, { type: 'ALPINE_MANAGEMENT', strategy: 'integrate_power_unit' }).state;
     expect(state.alpine!.integrationPenaltyActive).toBe(false);
-    expect(state.teams.alpine.parts.power_unit.specs.at(-1)).toMatchObject({ perf: 94, rel: 90 });
-    expect(state.teams.alpine.parts.power_unit.specs[0].perf).toBe(state.teams.mercedes.parts.power_unit.specs[0].perf);
+    expect(state.teams.alpine.parts.ice.specs.at(-1)).toMatchObject({ perf: 94, rel: 90 });
+    expect(state.teams.alpine.parts.ice.specs[0].perf).toBe(state.teams.mercedes.parts.ice.specs[0].perf);
   });
 
   it('阿尔派重新处理同一动力单元规格时会对更新后的供应商数值重新施加惩罚', () => {
     const state = game('alpine');
-    const spec = state.teams.alpine.parts.power_unit.specs.at(-1)!;
-    const key = `power_unit:${spec.id}`;
+    const spec = state.teams.alpine.parts.ice.specs.at(-1)!;
+    const key = `ice:${spec.id}`;
     expect(state.alpine!.penalizedPowerSpecs[key]).toBeDefined();
 
     // 模拟供应商对同一规格编号重发校准后的基准数值。
     spec.perf = 97;
     spec.rel = 93;
-    applyAlpinePuPenalty(state, state.teams.alpine, 'power_unit', spec);
+    applyAlpinePuPenalty(state, state.teams.alpine, 'ice', spec);
     expect(spec).toMatchObject({ perf: 93, rel: 88 });
     expect(state.alpine!.penalizedPowerSpecs[key]).toMatchObject({ perfAfter: 93, relAfter: 88 });
 
     // 相同的已惩罚值不会被重复扣减。
-    applyAlpinePuPenalty(state, state.teams.alpine, 'power_unit', spec);
+    applyAlpinePuPenalty(state, state.teams.alpine, 'ice', spec);
     expect(spec).toMatchObject({ perf: 93, rel: 88 });
   });
 

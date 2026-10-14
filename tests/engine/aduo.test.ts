@@ -18,7 +18,7 @@ function cardGame(playerTeamId = 'mercedes', seed = 3): GameState {
 describe('ADUO 与动力单元供应', () => {
   it('客户车队不能研发动力单元零件，其他零件不受影响', () => {
     const s = cardGame('mclaren');
-    const pu = previewProject(s, 'mclaren', 'power_unit', 'standard');
+    const pu = previewProject(s, 'mclaren', 'ice', 'standard');
     expect(pu.ok).toBe(false);
     expect(pu.blockers.join()).toContain('梅赛德斯车队');
     expect(previewProject(s, 'mclaren', 'floor', 'standard').blockers.join()).not.toContain('动力单元');
@@ -27,11 +27,11 @@ describe('ADUO 与动力单元供应', () => {
   it('每赛季 1 次认证升级；取消项目返还次数', () => {
     const s = cardGame('mercedes');
     const rng = new Rng(1);
-    expect(startProject(s, 'mercedes', 'power_unit', 'standard', false, rng).ok).toBe(true);
-    const ers = previewProject(s, 'mercedes', 'ers', 'standard');
-    expect(ers.ok).toBe(false);
-    expect(ers.blockers.join()).toContain('认证升级次数已用完（1/1）');
-    const p = s.teams.mercedes.projects.find(x => x.partType === 'power_unit')!;
+    expect(startProject(s, 'mercedes', 'ice', 'standard', false, rng).ok).toBe(true);
+    const mgu_k = previewProject(s, 'mercedes', 'mgu_k', 'standard');
+    expect(mgu_k.ok).toBe(false);
+    expect(mgu_k.blockers.join()).toContain('认证升级次数已用完（1/1）');
+    const p = s.teams.mercedes.projects.find(x => x.partType === 'ice')!;
     cancelProject(s, 'mercedes', p.id);
     expect(homologationsLeft(s, s.teams.mercedes)).toBe(1);
   });
@@ -39,15 +39,15 @@ describe('ADUO 与动力单元供应', () => {
   it('厂商车队交付的新件同时交付给客户车队', () => {
     const s = cardGame('mercedes');
     const rng = new Rng(2);
-    expect(startProject(s, 'mercedes', 'power_unit', 'standard', false, rng).ok).toBe(true);
+    expect(startProject(s, 'mercedes', 'ice', 'standard', false, rng).ok).toBe(true);
     advanceWeeks(s, 20, rng);
-    const latest = (id: string) => [...s.teams[id].parts.power_unit.specs].sort((a, b) => b.version - a.version)[0];
+    const latest = (id: string) => [...s.teams[id].parts.ice.specs].sort((a, b) => b.version - a.version)[0];
     expect(latest('mercedes').version).toBe(2);
     for (const c of ['mclaren', 'williams', 'alpine']) {
       expect(latest(c).perf, c).toBe(latest('mercedes').perf);
       expect(latest(c).verified, c).toBe(true);
       // AI 客户车队自动装车
-      expect(s.teams[c].cars.every(car => car.fitted.power_unit === latest(c).id), c).toBe(true);
+      expect(s.teams[c].cars.every(car => car.fitted.ice === latest(c).id), c).toBe(true);
     }
   });
 
@@ -75,9 +75,9 @@ describe('ADUO 与动力单元供应', () => {
     expect(am.aduoUpgrades).toBe(after.rules.aduo.tier2Upgrades);
     expect(costCapOf(am, after.rules)).toBe(cap + after.rules.aduo.tier2CapBonus);
     // 研发周期缩短
-    const fast = previewProject(after, 'aston_martin', 'power_unit', 'standard').weeks;
+    const fast = previewProject(after, 'aston_martin', 'ice', 'standard').weeks;
     am.aduoTier = 0;
-    expect(previewProject(after, 'aston_martin', 'power_unit', 'standard').weeks).toBeGreaterThan(fast);
+    expect(previewProject(after, 'aston_martin', 'ice', 'standard').weeks).toBeGreaterThan(fast);
     am.aduoTier = 2;
     // 梅赛德斯是最好的厂商；客户车队哈斯 / 凯迪拉克没有补偿
     expect(ev.results.find(r => r.engine === '梅赛德斯')!.tier).toBe(0);
@@ -103,7 +103,7 @@ describe('ADUO 与动力单元供应', () => {
   it('没有厂商车队的数据：各车队自行研发，评估覆盖组内所有车队', () => {
     const s = newTestGame();
     const team = s.teams[s.meta.playerTeamId];
-    expect(previewProject(s, team.id, 'power_unit', 'standard').ok).toBe(true);
+    expect(previewProject(s, team.id, 'ice', 'standard').ok).toBe(true);
     const ev = maybeEvaluateAduo(s, s.rules.aduo.evalRounds[0]);
     expect(ev).not.toBeNull();
     for (const row of ev!.results.filter(r => r.tier > 0)) {
@@ -121,7 +121,7 @@ describe('ADUO 与动力单元供应', () => {
     expect(Object.values(s.teams).every(t => t.puHomologations === 0 && t.aduoUpgrades === 0 && t.aduoCapBonus === 0)).toBe(true);
     expect(s.aduo!.evaluations.map(e => e.round)).toEqual([0]);
     for (const c of ['mclaren', 'williams', 'alpine']) {
-      expect(s.teams[c].parts.power_unit.specs[0].perf, c).toBe(s.teams.mercedes.parts.power_unit.specs[0].perf);
+      expect(s.teams[c].parts.ice.specs[0].perf, c).toBe(s.teams.mercedes.parts.ice.specs[0].perf);
     }
   });
 
@@ -142,7 +142,7 @@ describe('ADUO 与动力单元供应', () => {
     expect(m.aduo).toEqual({ evaluations: [] });
     expect(m.teams.mclaren.worksTeam).toBe(false);
     // 旧存档没有厂商信息：客户车队可以自行研发
-    expect(previewProject(m, 'mercedes', 'power_unit', 'standard').ok).toBe(true);
+    expect(previewProject(m, 'mercedes', 'ice', 'standard').ok).toBe(true);
     expect(buildView(m).aduo.last).toBeNull();
   });
 
@@ -159,8 +159,8 @@ describe('ADUO 与动力单元供应', () => {
   it('档位按未取整的差距判断', () => {
     const s = cardGame('mercedes');
     s.rules.aduo.pctPerPoint = 1;
-    const best = Math.max(...s.teams.mercedes.parts.power_unit.specs.map(x => x.perf));
-    for (const spec of s.teams.ferrari.parts.power_unit.specs) spec.perf = best - 1.96;
+    const best = Math.max(...s.teams.mercedes.parts.ice.specs.map(x => x.perf));
+    for (const spec of s.teams.ferrari.parts.ice.specs) spec.perf = best - 1.96;
     const row = measureManufacturers(s).find(r => r.engine === '法拉利')!;
     expect(row.deficitPct).toBe(2);
     expect(row.tier).toBe(0);
@@ -179,12 +179,12 @@ describe('ADUO 与动力单元供应', () => {
 
   it('旧存档中进行中的动力单元项目占用认证次数', () => {
     const s = cardGame('mercedes');
-    expect(startProject(s, 'mercedes', 'power_unit', 'standard', false, new Rng(4)).ok).toBe(true);
+    expect(startProject(s, 'mercedes', 'ice', 'standard', false, new Rng(4)).ok).toBe(true);
     const raw = JSON.parse(JSON.stringify(s));
     delete raw.rules.aduo;
     for (const t of Object.values(raw.teams) as Array<Record<string, unknown>>) delete t.puHomologations;
     const m = migrateState(raw);
     expect(m.teams.mercedes.puHomologations).toBe(1);
-    expect(previewProject(m, 'mercedes', 'ers', 'standard').ok).toBe(false);
+    expect(previewProject(m, 'mercedes', 'mgu_k', 'standard').ok).toBe(false);
   });
 });

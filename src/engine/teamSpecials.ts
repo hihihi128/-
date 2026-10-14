@@ -187,7 +187,7 @@ export function afterSpecialRace(state: GameState): void {
       const team = state.teams.mercedes;
       const penalized = new Set<string>();
       for (const car of team?.cars ?? []) {
-        const spec = team.parts.power_unit?.specs.find(s => s.id === car.fitted.power_unit);
+        const spec = team.parts.ice?.specs.find(s => s.id === car.fitted.ice);
         if (spec && !penalized.has(spec.id)) {
           spec.perf = round1(Math.max(1, spec.perf - 2));
           penalized.add(spec.id);

@@ -1,4 +1,5 @@
 import { addNarration, addNews, playerTeam } from './log';
+import { PU_PART_TYPES } from './powerunit';
 import type { Action, GameState, PartSpec, PartType, TeamState } from './types';
 import { clamp, pushCapped, round1, round2, stamp } from './util';
 
@@ -53,7 +54,7 @@ export function initManagementSpecials(state: GameState, team: TeamState): void 
     dismissed: null,
     log: [],
   } : null;
-  if (state.alpine) for (const partType of ['power_unit', 'ers'] as PartType[]) {
+  if (state.alpine) for (const partType of PU_PART_TYPES) {
     for (const spec of team.parts[partType]?.specs ?? []) applyAlpinePuPenalty(state, team, partType, spec);
   }
   state.haas = team.special === 'haas' ? {

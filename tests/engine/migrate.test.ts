@@ -77,18 +77,59 @@ describe('旧存档升级', () => {
     const raw = legacy();
     expect(raw.rules.puAllocation).toBeUndefined();
     const s = migrateState(raw);
-    expect(s.rules.puAllocation).toEqual({ power_unit: 4, ers: 3 });
+    expect(s.rules.puAllocation).toEqual({ ice: 3, turbocharger: 3, mgu_k: 2, energy_store: 2, control_electronics: 2, exhaust: 3 });
     expect(s.rules.qualiFinalists).toBe(10);
     expect(s.rules.ferrari.minMedia).toBe(20);
     expect(s.ferrari).toBeNull();
     for (const t of Object.values(s.teams)) {
-      expect(t.parts.ers.specs).toHaveLength(1);
-      for (const c of t.cars) expect(c.fitted.ers).toBe(t.parts.ers.specs[0].id);
+      for (const type of ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust']) {
+        expect(t.parts[type].specs).toHaveLength(1);
+        for (const c of t.cars) expect(c.fitted[type]).toBe(t.parts[type].specs[0].id);
+      }
     }
-    expect(s.drivers.c1.puUsed).toEqual({ power_unit: 1, ers: 1 });
+    expect(s.drivers.c1.puUsed).toEqual({ ice: 1, turbocharger: 1, mgu_k: 1, energy_store: 1, control_electronics: 1, exhaust: 1 });
     expect(() => buildView(s)).not.toThrow();
     const after = advanceUntil(s, x => x.season.phase === 'post_race' && x.season.roundIndex === 1);
     expect(after.history).toHaveLength(2);
+  });
+
+  it('把两组动力单元旧存档拆成六类，并保留配额、库存与磨损', () => {
+    const state = newTestGame(9);
+    const targets = ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust'];
+    state.rules.parts.power_unit = state.rules.parts.ice;
+    state.rules.parts.ers = state.rules.parts.mgu_k;
+    state.rules.puAllocation = { power_unit: 4, ers: 3 };
+    state.rules.aduo.parts = ['power_unit', 'ers'];
+    state.rules.aduo.measurePart = 'power_unit';
+    for (const team of Object.values(state.teams)) {
+      team.parts.power_unit = team.parts.ice;
+      team.parts.ers = team.parts.mgu_k;
+      for (const car of team.cars) {
+        car.fitted.power_unit = car.fitted.ice;
+        car.fitted.ers = car.fitted.mgu_k;
+        for (const type of targets) delete car.fitted[type];
+      }
+      for (const type of targets) delete team.parts[type];
+    }
+    const car = state.teams.team_c.cars[0];
+    Object.assign(car, {
+      puWear: { power_unit: { specId: car.fitted.power_unit, wear: 21 } },
+      puWearPool: { power_unit: { [car.fitted.power_unit]: 21 } },
+    });
+    state.drivers.c1.puUsed = { power_unit: 3, ers: 2 };
+    state.drivers.c1.puPool = { power_unit: ['a', 'b', 'c'], ers: ['d', 'e'] };
+
+    migrateState(state);
+    expect(state.rules.puAllocation).toEqual({ ice: 3, turbocharger: 3, exhaust: 3, mgu_k: 2, energy_store: 2, control_electronics: 2 });
+    expect(state.rules.parts.power_unit).toBeUndefined();
+    expect(state.teams.team_c.parts.power_unit).toBeUndefined();
+    expect(state.drivers.c1.puUsed).toMatchObject({ ice: 3, turbocharger: 3, exhaust: 3, mgu_k: 2, energy_store: 2, control_electronics: 2 });
+    expect(car.puWear?.ice?.wear).toBe(21);
+    expect(car.puWear?.turbocharger?.wear).toBe(21);
+    expect(() => buildView(state)).not.toThrow();
+    const once = JSON.stringify(state);
+    migrateState(state);
+    expect(JSON.stringify(state)).toBe(once);
   });
 
   it('不恢复玩家有意删除的零件和轮胎', () => {
@@ -103,7 +144,7 @@ describe('旧存档升级', () => {
     expect(s.rules.parts.floor).toBeUndefined();
     expect(s.rules.tyres.hard).toBeUndefined();
     expect(s.teams.team_c.cars[0].fitted.floor).toBeUndefined();
-    expect(s.rules.parts.ers).toBeTruthy();
+    expect(s.rules.parts.mgu_k).toBeTruthy();
   });
 
   it('幂等：对新存档不做改动', () => {
@@ -140,21 +181,21 @@ describe('动力单元配额：边界情况', () => {
     const s = newTestGame();
     const team = s.teams.team_c;
     // 给 2 号车装一台 1 号车车手没用过的内燃机
-    team.cars[1].fitted.power_unit = 'pu-new';
-    s.drivers.c2.puPool!.power_unit = ['pu-new'];
+    team.cars[1].fitted.ice = 'pu-new';
+    s.drivers.c2.puPool!.ice = ['pu-new'];
     const next = act(s, { type: 'SWAP_DRIVER', slot: 2, driverId: 'c1' });
     expect(next.teams.team_c.cars[1].driverId).toBe('c1');
     expect(next.teams.team_c.cars[0].driverId).toBe('c2');
-    expect(next.drivers.c1.puUsed!.power_unit).toBe(2);
-    // c2 换到 1 号车，那台内燃机（power_unit-1）是新的
-    expect(next.drivers.c2.puUsed!.power_unit).toBe(2);
+    expect(next.drivers.c1.puUsed!.ice).toBe(2);
+    // c2 换到 1 号车，那台内燃机是新的
+    expect(next.drivers.c2.puUsed!.ice).toBe(2);
   });
 
   it('最后一站正赛后超出配额不罚退（新赛季配额重置）', () => {
     const s = advanceUntil(newTestGame(12), x => x.season.roundIndex === x.calendar.length - 1 && x.season.phase === 'post_race');
-    s.drivers.c1.puUsed!.power_unit = 4;
-    expect(recordPuFit(s, 'c1', 'power_unit', 'late')).toBe('');
-    expect(s.drivers.c1.puUsed!.power_unit).toBe(5);
+    s.drivers.c1.puUsed!.ice = 4;
+    expect(recordPuFit(s, 'c1', 'ice', 'late')).toBe('');
+    expect(s.drivers.c1.puUsed!.ice).toBe(5);
     expect(s.flags.pendingPenalties).toBeUndefined();
   });
 });

@@ -234,7 +234,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
   } else if (state.redBull) {
     newsText = `红牛任命 ${name} 辅助洛朗·梅基斯管理 2026 赛季。`;
     title = '人手危机：协助梅基斯';
-    detail = ['红牛在 2025 年失去大量人才，赫尔穆特·马尔科也被解雇。由于管理与技术人手不足，车队招来玩家辅助梅基斯。', reasonLine, 'RB23 的准备因 2025 年全力争冠而严重不足。车手更容易失误，GP 正与迈凯伦谈判；夏休时若维斯塔潘不在积分榜前三，他将触发解约条款。', tail];
+    detail = ['红牛在 2025 年失去大量人才，赫尔穆特·马尔科也被解雇。由于管理与技术人手不足，车队招来玩家辅助梅基斯。', reasonLine, 'RB22 的准备因 2025 年全力争冠而严重不足。车手更容易失误，GP 正与迈凯伦谈判；夏休时若维斯塔潘不在积分榜前三，他将触发解约条款。', tail];
   } else if (state.astonMartin) {
     newsText = `劳伦斯·斯特罗尔撤掉 Jonathan Wheatley，并让 ${name} 接手预计垫底的阿斯顿·马丁。`;
     title = '替罪羊危机：阿斯顿·马丁领队';

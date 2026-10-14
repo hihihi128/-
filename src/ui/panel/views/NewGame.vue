@@ -168,8 +168,8 @@ onMounted(load);
     </div>
     <div v-else-if="special === 'red_bull'" class="card notice special-team small stack-s">
       <b>红牛 · 人手危机</b>
-      <div>玩家协助梅基斯处理人才流失与 RB23 准备不足的问题。</div>
-      <ul class="tiny"><li>RB23 准备不足会显著提高车手失误概率。</li><li>GP 正与迈凯伦谈判，需要持续争取留任。</li><li>夏休时维斯塔潘必须位列车手榜前三，否则会触发解约条款。</li></ul>
+      <div>玩家协助梅基斯处理人才流失与 RB22 准备不足的问题。</div>
+      <ul class="tiny"><li>RB22 准备不足会显著提高车手失误概率。</li><li>GP 正与迈凯伦谈判，需要持续争取留任。</li><li>夏休时维斯塔潘必须位列车手榜前三，否则会触发解约条款。</li></ul>
     </div>
     <div v-else-if="special === 'aston_martin'" class="card notice special-team small stack-s">
       <b>阿斯顿·马丁 · 本田振动危机</b>

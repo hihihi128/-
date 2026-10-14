@@ -72,8 +72,8 @@ describe('角色卡数据：2026 真实阵容', () => {
     const team = (id: string) => db.teams.find(t => t.id === id)!;
     for (const [works, customers] of Object.entries(PU_SUPPLIERS)) {
       for (const c of customers) {
-        expect(team(c).parts.power_unit, `${c} 内燃机`).toEqual(team(works).parts.power_unit);
-        expect(team(c).parts.ers, `${c} 能量回收系统`).toEqual(team(works).parts.ers);
+        expect(team(c).parts.ice, `${c} 内燃机`).toEqual(team(works).parts.ice);
+        expect(team(c).parts.mgu_k, `${c} 能量回收系统`).toEqual(team(works).parts.mgu_k);
       }
     }
   });
@@ -93,7 +93,7 @@ describe('角色卡数据：2026 真实阵容', () => {
       expect(loss(id) - loss('mercedes'), id).toBeCloseTo(gap, 1);
     }
     // 动力单元排序：梅赛德斯 > 法拉利 > 红牛-福特 > 奥迪 > 本田
-    const pu = (id: string) => state.teams[id].parts.power_unit.specs[0].perf;
+    const pu = (id: string) => state.teams[id].parts.ice.specs[0].perf;
     const order = ['mercedes', 'ferrari', 'red_bull', 'audi', 'aston_martin'].map(pu);
     expect([...order].sort((x, y) => y - x)).toEqual(order);
     expect(r('ferrari').downforce).toBeGreaterThan(r('williams').downforce);
