@@ -13,11 +13,36 @@ import { DEFAULT_RULES } from './defaults';
 import { resetPuUsage } from './powerunit';
 import { ensureMarket, openMarket } from './market';
 import { migrateTyreInventory } from './tyres';
-import type { GameState } from './types';
+import type { GameState, StaffRole } from './types';
 import { deepClone } from './util';
 
 /** 玩家可以自由增删条目的规则表：不能按默认值回填，否则会恢复被有意删除的零件 / 轮胎 */
 const OPEN_MAPS = new Set(['parts', 'tyres']);
+
+const DEFAULT_STAFF_NAMES: Record<string, Partial<Record<StaffRole, string>>> = {
+  mercedes: { aeroChief: '贾罗德·墨菲', pitCrew: '梅赛德斯维修组' },
+  mclaren: { pitCrew: '迈凯伦维修组' },
+  red_bull: { aeroChief: '恩里科·巴尔博', pitCrew: '红牛维修组' },
+  ferrari: { pitCrew: '法拉利维修组' },
+  williams: { aeroChief: '亚当·肯扬', pitCrew: '威廉姆斯维修组' },
+  racing_bulls: { aeroChief: '古鲁·乔尔', pitCrew: '小红牛维修组' },
+  aston_martin: { aeroChief: '焦阿基诺·维诺', pitCrew: '阿斯顿·马丁维修组' },
+  haas: { aeroChief: '戴维德·帕加内利', pitCrew: '哈斯维修组' },
+  audi: { aeroChief: '亚历山德罗·奇内利', pitCrew: '奥迪维修组' },
+  alpine: { aeroChief: '迈克尔·布罗德赫斯特', pitCrew: '阿尔派维修组' },
+  cadillac: { aeroChief: '乔恩·汤姆林森', pitCrew: '凯迪拉克维修组' },
+};
+
+function replaceLegacyStaffPlaceholders(state: GameState): void {
+  for (const [teamId, names] of Object.entries(DEFAULT_STAFF_NAMES)) {
+    const team = state.teams[teamId];
+    if (!team) continue;
+    for (const [role, name] of Object.entries(names) as Array<[StaffRole, string]>) {
+      const staff = team.staff[role];
+      if (staff?.name === `${team.name} ${role}`) staff.name = name;
+    }
+  }
+}
 
 function fillMissing(target: Record<string, unknown>, defaults: Record<string, unknown>, top = false): void {
   for (const [k, v] of Object.entries(defaults)) {
@@ -154,6 +179,7 @@ export function migrateState(state: GameState): GameState {
   // It derives stable IDs/preferences without changing funds, results, or RNG.
   const hadMarket = !!state.market;
   ensureMarket(state);
+  replaceLegacyStaffPlaceholders(state);
   if (!hadMarket && state.season?.phase === 'season_end') openMarket(state, state.season.year + 1);
   // Live race is additive and must be initialized before the legacy early return.
   // Never synthesize a session or consume RNG while loading an older save.

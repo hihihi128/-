@@ -13,6 +13,21 @@ import { legacyWeeklyEventState } from '../fixtures/weekly-random-events';
 const legacy = (): GameState => JSON.parse(readFileSync(resolve(__dirname, '../fixtures/legacy-save-2025.json'), 'utf8'));
 
 describe('旧存档升级', () => {
+  it('把默认车队旧存档中的员工占位名替换为正式显示名', () => {
+    const state = newTestGame();
+    const team = state.teams.team_c;
+    state.teams.mercedes = team;
+    team.id = 'mercedes';
+    team.name = '梅赛德斯车队';
+    team.staff.aeroChief.name = '梅赛德斯车队 aeroChief';
+    team.staff.pitCrew.name = '梅赛德斯车队 pitCrew';
+
+    migrateState(state);
+
+    expect(state.teams.mercedes.staff.aeroChief.name).toBe('贾罗德·墨菲');
+    expect(state.teams.mercedes.staff.pitCrew.name).toBe('梅赛德斯维修组');
+  });
+
   it('补齐旧随机事件的周配额、对话和个人好感度字段', () => {
     const state = migrateState(legacyWeeklyEventState());
     expect(state.rules.randomEvents).toMatchObject({ minPerWeek: 3, maxPerWeek: 4, routineWeight: 192, minDialogueTurns: 2, maxDialogueTurns: 3 });
