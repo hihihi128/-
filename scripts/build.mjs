@@ -279,7 +279,19 @@ const script = {
   export_with: { data: true, button: true },
 };
 
-const now = new Date();
+function stableCardTimestamp() {
+  const existingCard = path.join(dist, `${FILE_BASE}.json`);
+  try {
+    const existing = JSON.parse(fs.readFileSync(existingCard, 'utf8'));
+    const timestamp = existing?.data?.creation_date;
+    if (Number.isInteger(timestamp) && timestamp >= 0) return timestamp;
+  } catch {
+    // A source-only build uses a fixed epoch so identical inputs stay reproducible.
+  }
+  return Math.floor(Date.UTC(2026, 0, 1) / 1000);
+}
+const cardTimestamp = stableCardTimestamp();
+const cardDate = new Date(cardTimestamp * 1000);
 const data = {
   name: CARD_NAME,
   description: readCard('description.md'),
@@ -296,8 +308,8 @@ const data = {
   creator: '',
   character_version: VERSION,
   group_only_greetings: [],
-  creation_date: Math.floor(now.getTime() / 1000),
-  modification_date: Math.floor(now.getTime() / 1000),
+  creation_date: cardTimestamp,
+  modification_date: cardTimestamp,
   extensions: {
     talkativeness: '0.5',
     fav: false,
@@ -320,7 +332,7 @@ const v1 = {
   talkativeness: '0.5',
   fav: false,
   tags: data.tags,
-  create_date: now.toISOString(),
+  create_date: cardDate.toISOString(),
 };
 const cardV3 = { spec: 'chara_card_v3', spec_version: '3.0', ...v1, data };
 const cardV2 = { spec: 'chara_card_v2', spec_version: '2.0', ...v1, data };
