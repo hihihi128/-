@@ -2,10 +2,7 @@
 import { computed } from 'vue';
 import { boundedPercent, intensitySegments, validRange } from '../weatherPresentation';
 
-type Props = { mode: 'observed'; value: number } | { mode: 'forecast'; range: [number, number]; horizonLaps: number; issuedLap: number };
-// Vue's runtime prop validator cannot discriminate a union, so optional runtime
-// fields retain the explicit public union above without false missing-prop warnings.
-const props = defineProps<{ mode: Props['mode']; value?: number; range?: [number, number]; horizonLaps?: number; issuedLap?: number }>();
+const props = defineProps<{ mode: 'observed' | 'forecast'; value?: number; range?: [number, number]; horizonLaps?: number; issuedLap?: number }>();
 const observed = computed(() => props.mode === 'observed' ? intensitySegments(props.value ?? Number.NaN) : []);
 const range = computed(() => props.mode === 'forecast' && props.range ? validRange(props.range) : null);
 const observedValue = computed(() => props.mode === 'observed' ? boundedPercent(props.value ?? Number.NaN) : null);
@@ -14,14 +11,14 @@ const rangeText = computed(() => range.value ? `${range.value[0]}–${range.valu
 </script>
 
 <template>
-  <section v-if="mode === 'observed'" class="rain-gauge observed" role="meter" aria-labelledby="observed-intensity-title" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="observedValue ?? undefined" :aria-valuetext="`当前降雨强度实测：${observedText}`">
-    <div class="gauge-head"><div><div id="observed-intensity-title" class="tiny muted">当前降雨强度 · 实测</div><b class="gauge-value">{{ observedText }}</b></div><span class="gauge-kind">实况</span></div>
+  <div v-if="mode === 'observed'" class="rain-gauge observed" role="meter" aria-label="当前降雨强度实测" aria-valuemin="0" aria-valuemax="100" :aria-valuenow="observedValue ?? undefined" :aria-valuetext="`当前降雨强度实测：${observedText}`">
+    <div class="gauge-head"><div><div class="tiny muted">当前降雨强度 · 实测</div><b class="gauge-value">{{ observedText }}</b></div><span class="gauge-kind">实况</span></div>
     <div class="gauge-track" aria-hidden="true"><i v-for="(fill, index) in observed" :key="index" class="level-segment"><i :style="{ transform: `scaleX(${fill})` }" /></i></div>
     <div class="gauge-ticks" aria-hidden="true"><span>0 · 低</span><span>50</span><span>100 · 高</span></div>
-  </section>
+  </div>
   <figure v-else class="rain-gauge forecast" :aria-label="`预报降雨强度范围：${rangeText}，未来 ${horizonLaps ?? 0} 圈，第 ${issuedLap ?? 0} 圈发布；这是不确定的范围而非当前读数。`">
     <figcaption class="gauge-head"><div><div class="tiny muted">预报降雨强度范围 · 未来 {{ horizonLaps ?? 0 }} 圈</div><b class="gauge-value">{{ rangeText }}</b></div><span class="gauge-kind">范围预报</span></figcaption>
-    <div v-if="range" class="range-track" aria-hidden="true"><i class="range-band" :style="{ left: `${range[0]}%`, width: `${range[1] - range[0]}%` }" /><i class="endpoint low" :style="{ left: `${range[0]}%` }" /><i class="endpoint high" :style="{ left: `${range[1]}%` }" /></div>
+    <div v-if="range" class="range-track" aria-hidden="true"><i class="range-band" :style="{ left: `${range[0]}%`, width: `${range[1] - range[0]}%` }" /><i class="endpoint low" :style="{ left: `${range[0]}%`, transform: `translateX(${range[0] === 0 ? '0' : '-50%'})` }" /><i class="endpoint high" :style="{ left: `${range[1]}%`, transform: `translateX(${range[1] === 100 ? '-100%' : '-50%'})` }" /></div>
     <div v-else class="range-track unavailable" aria-hidden="true">暂无有效强度范围</div>
     <div class="gauge-ticks" aria-hidden="true"><span>0 · 低</span><span>50</span><span>100 · 高</span></div>
   </figure>

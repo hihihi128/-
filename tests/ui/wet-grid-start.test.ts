@@ -57,18 +57,20 @@ describe('wet-grid starting tyre choices', () => {
     expect(host.querySelectorAll<HTMLInputElement>('input[type="radio"]')).toHaveLength(groups.length * 2);
 
     const radios = host.querySelectorAll<HTMLInputElement>('input[type="radio"]');
+    const firstDriverId = radios[0].name.replace('grid-tyre-', '');
+    const secondDriverId = radios[3].name.replace('grid-tyre-', '');
     radios[0].click();
     await nextTick();
     expect(confirm.disabled).toBe(true);
-    radios[2].click();
+    radios[3].click();
     await nextTick();
     expect(confirm.disabled).toBe(false);
     confirm.click();
     await nextTick();
 
     expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({ type: 'RESOLVE_RACE_DECISION', drivers: expect.arrayContaining([
-      expect.objectContaining({ driverId: view.weekend!.liveRace!.playerCars[0].driverId, pit: 'auto', startCompound: view.rules.wetCompound }),
-      expect.objectContaining({ driverId: view.weekend!.liveRace!.playerCars[1].driverId, pit: 'auto', startCompound: view.rules.wetCompound }),
+      expect.objectContaining({ driverId: firstDriverId, pit: 'auto', startCompound: view.rules.wetCompound }),
+      expect.objectContaining({ driverId: secondDriverId, pit: 'auto', startCompound: view.rules.fullWetCompound, paceMode: 'balanced', energyMode: 'balanced', pitTiming: 'standard' }),
     ]) }));
   });
 

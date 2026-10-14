@@ -5,13 +5,21 @@ export function percent(value: number): string {
 }
 
 export function boundedPercent(value: number): number | null {
-  return Number.isFinite(value) ? Math.min(100, Math.max(0, value * 100)) : null;
+  return Number.isFinite(value) ? Math.round(Math.min(100, Math.max(0, value * 100))) : null;
 }
 
 export function validRange(range: IntensityRange): [number, number] | null {
   const low = boundedPercent(range[0]);
   const high = boundedPercent(range[1]);
-  return low === null || high === null || low > high ? null : [low, high];
+  return low === null || high === null || low > high ? null : [Math.round(low), Math.round(high)];
+}
+
+/** Positions a relative future-lap interval as complete cells on a clipped timeline. */
+export function lapWindowStyle(range: [number, number] | null, visibleLaps: number): Record<string, string> | null {
+  if (!range || !Number.isFinite(visibleLaps) || visibleLaps < 1 || !range.every(Number.isFinite) || range[0] > range[1] || range[1] < 1 || range[0] > visibleLaps) return null;
+  const low = Math.max(1, range[0]);
+  const high = Math.min(visibleLaps, range[1]);
+  return { left: `${((low - 1) / visibleLaps) * 100}%`, width: `${((high - low + 1) / visibleLaps) * 100}%` };
 }
 
 export function intensitySegments(value: number, count = 10): number[] {

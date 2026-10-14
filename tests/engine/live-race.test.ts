@@ -7,7 +7,7 @@ import type { LiveRaceState } from '../../src/engine/types';
 import { createForecast, createWeatherTrajectory } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
 import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
-import { advanceRaceSession, aiWeatherReactionDelay, engineerDecisionRoll, redFlagProbability, requiresWetGridTyreChoice } from '../../src/engine/race';
+import { advanceRaceSession, aiWeatherReactionDelay, applyRaceDecision, engineerDecisionRoll, redFlagProbability, requiresWetGridTyreChoice } from '../../src/engine/race';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -417,14 +417,13 @@ describe('resumable live race', () => {
     const live = started.weekend!.liveRace!;
     expect(live.pendingDecision?.eligibleDriverIds).toEqual(expect.arrayContaining(playerIds));
     expect(buildView(started).weekend!.liveRace!.pendingDecision?.startTyreOptions).toEqual([started.rules.wetCompound, started.rules.fullWetCompound]);
-    const before = JSON.stringify(live.cars);
-    const missing = tryAct(started, {
-      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
-      drivers: [{ driverId: playerIds[0], pit: 'auto', startCompound: started.rules.wetCompound }],
-    });
-    expect(missing.ok).toBe(false);
-    expect(JSON.stringify(started.weekend!.liveRace!.cars)).toBe(before);
+    const rejectedState = structuredClone(started);
+    const rejectedLive = rejectedState.weekend!.liveRace!;
+    const rejectedBefore = JSON.stringify({ live: rejectedLive, team: rejectedState.teams[rejectedState.meta.playerTeamId] });
+    expect(applyRaceDecision(rejectedState, rejectedLive, rejectedLive.pendingDecision!.id, [{ driverId: playerIds[0], pit: 'auto', startCompound: rejectedState.rules.wetCompound }])).toBe(false);
+    expect(JSON.stringify({ live: rejectedLive, team: rejectedState.teams[rejectedState.meta.playerTeamId] })).toBe(rejectedBefore);
 
+    const inventoryBefore = JSON.stringify(started.teams[started.meta.playerTeamId].tyreInventory);
     const resolved = act(started, {
       type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
       drivers: [
@@ -437,6 +436,15 @@ describe('resumable live race', () => {
     expect(resumed.completedLaps).toBe(0);
     expect(resumed.cars[playerIds[0]]).toMatchObject({ tyre: resolved.rules.wetCompound, pits: 0, pitStops: [], usedCompounds: [resolved.rules.wetCompound], plannedCompounds: [resolved.rules.wetCompound] });
     expect(resumed.cars[playerIds[1]]).toMatchObject({ tyre: resolved.rules.fullWetCompound, pits: 0, pitStops: [], usedCompounds: [resolved.rules.fullWetCompound], plannedCompounds: [resolved.rules.fullWetCompound] });
+    for (const driverId of playerIds) {
+      const car = resumed.cars[driverId];
+      const set = resolved.teams[resolved.meta.playerTeamId].tyreInventory![driverId].find(candidate => candidate.id === car.tyreSetId)!;
+      expect(set).toBeTruthy();
+      expect(car.tyreAge).toBe(set.laps);
+      expect(car.tyreWearAge).toBe(set.wearAge ?? set.laps);
+      expect(car.tyreTemperature).toBeLessThan(resolved.rules.tyres[car.tyre].temperatureWindow![0]);
+    }
+    expect(JSON.stringify(resolved.teams[resolved.meta.playerTeamId].tyreInventory)).toBe(inventoryBefore);
   });
 
   it('rejects malformed wet-grid submissions atomically and rejects start tyres later', () => {
@@ -445,14 +453,16 @@ describe('resumable live race', () => {
     const started = act(ready, { type: 'START_RACE', kind: 'race' });
     const live = started.weekend!.liveRace!;
     const [first, second] = live.pendingDecision!.eligibleDriverIds;
-    const before = JSON.stringify({ cars: live.cars, orders: live.teamOrders, rng: live.rngState });
     for (const drivers of [
       [{ driverId: first, pit: 'auto' as const, startCompound: started.rules.wetCompound }, { driverId: first, pit: 'auto' as const, startCompound: started.rules.fullWetCompound }],
       [{ driverId: first, pit: 'box' as const, startCompound: started.rules.wetCompound }, { driverId: second, pit: 'auto' as const, startCompound: started.rules.fullWetCompound }],
       [{ driverId: first, pit: 'auto' as const, startCompound: started.rules.dryCompounds[0] }, { driverId: second, pit: 'auto' as const, startCompound: started.rules.fullWetCompound }],
     ]) {
-      expect(tryAct(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers }).ok).toBe(false);
-      expect(JSON.stringify({ cars: live.cars, orders: live.teamOrders, rng: live.rngState })).toBe(before);
+      const candidate = structuredClone(started);
+      const candidateLive = candidate.weekend!.liveRace!;
+      const before = JSON.stringify({ live: candidateLive, team: candidate.teams[candidate.meta.playerTeamId] });
+      expect(applyRaceDecision(candidate, candidateLive, candidateLive.pendingDecision!.id, drivers)).toBe(false);
+      expect(JSON.stringify({ live: candidateLive, team: candidate.teams[candidate.meta.playerTeamId] })).toBe(before);
     }
     const resolved = act(started, { type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers: automaticChoices(started, live) });
     const resumed = resolved.weekend!.liveRace!;

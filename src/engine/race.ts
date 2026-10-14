@@ -1293,13 +1293,25 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
       if (!car || !team || !takeTyreSet(team, car.driverId, choice.startCompound, weekendTyreKey(state))) return false;
       seen.add(choice.driverId);
     }
+    const relationship = teammateRelationship(state, state.meta.playerTeamId);
+    const ignored = new Set<string>();
+    for (const choice of drivers) {
+      const driver = state.drivers[choice.driverId];
+      const car = session.cars[choice.driverId];
+      const changesTactics = (choice.paceMode !== undefined && choice.paceMode !== car.plan.paceMode)
+        || (choice.energyMode !== undefined && choice.energyMode !== car.energyMode)
+        || (choice.pitTiming !== undefined && choice.pitTiming !== car.plan.pitTiming);
+      if (driver && changesTactics && willDisobeyStrategy(driver, relationship, `${session.id}:${window.id}:${driver.id}`)) ignored.add(choice.driverId);
+    }
     for (const choice of drivers) {
       const car = session.cars[choice.driverId];
       // The selected tyre is equipment, not a discretionary tactical instruction.
+      if (!ignored.has(choice.driverId)) {
+        if (choice.paceMode) car.plan.paceMode = choice.paceMode;
+        if (choice.energyMode) car.energyMode = choice.energyMode;
+        if (choice.pitTiming) car.plan.pitTiming = choice.pitTiming;
+      } else liveEvent(session, session.lap, 'order', `${car.driverId} 拒绝临场策略指令，但仍按领队选择安装起步轮胎`, [car.driverId], true);
       if (!fitInitialTyres(state, session, car, choice.startCompound!)) return false;
-      if (choice.paceMode) car.plan.paceMode = choice.paceMode;
-      if (choice.energyMode) car.energyMode = choice.energyMode;
-      if (choice.pitTiming) car.plan.pitTiming = choice.pitTiming;
     }
     if (orders) session.teamOrders = { ...orders };
     session.pendingDecision = null;

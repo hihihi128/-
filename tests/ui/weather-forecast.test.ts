@@ -3,7 +3,8 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { createApp, nextTick, type App } from 'vue';
 import RaceWeatherForecast from '../../src/ui/panel/components/RaceWeatherForecast.vue';
 import RainIntensityGauge from '../../src/ui/panel/components/RainIntensityGauge.vue';
-import { intensitySegments, validRange } from '../../src/ui/panel/weatherPresentation';
+import WeekendWeatherForecast from '../../src/ui/panel/components/WeekendWeatherForecast.vue';
+import { intensitySegments, lapWindowStyle, validRange } from '../../src/ui/panel/weatherPresentation';
 
 const mounted: App[] = [];
 function mount(component: Parameters<typeof createApp>[0], props: Record<string, unknown>) {
@@ -36,6 +37,7 @@ describe('rain intensity presentation', () => {
 
   it('renders forecast intensity as a range, not a midpoint or observed meter', () => {
     expect(validRange([.4, .41])).toEqual([40, 41]);
+    expect(validRange([.07, .29])).toEqual([7, 29]);
     expect(validRange([1, 1])).toEqual([100, 100]);
     expect(validRange([.7, .2])).toBeNull();
 
@@ -44,6 +46,8 @@ describe('rain intensity presentation', () => {
     expect(host.textContent).toContain('40–41%');
     expect(host.querySelector('.range-band')).not.toBeNull();
     expect(host.querySelector('figure')?.getAttribute('aria-label')).toContain('不确定');
+    const full = mount(RainIntensityGauge, { mode: 'forecast', range: [1, 1], horizonLaps: 5, issuedLap: 0 });
+    expect((full.querySelector('.endpoint.high') as HTMLElement).style.transform).toBe('translateX(-100%)');
 
     const unavailable = mount(RainIntensityGauge, { mode: 'observed', value: Number.NaN });
     expect(unavailable.textContent).toContain('暂不可用');
@@ -63,6 +67,20 @@ describe('rain intensity presentation', () => {
     expect(host.textContent).toContain('降雨概率 80%');
     expect(host.textContent).toContain('预报置信度 55%');
     expect((host.querySelector('.arrival-band') as HTMLElement).style.width).not.toBe('0%');
+    expect((host.querySelector('.arrival-band') as HTMLElement).style.left).toBe(lapWindowStyle([1, 5], 2)?.left);
+    expect((host.querySelector('.arrival-band') as HTMLElement).style.width).toBe(lapWindowStyle([1, 5], 2)?.width);
+    expect(host.textContent).toContain('第 19–20 圈');
+    expect(host.querySelectorAll('.axis-ticks span')).toHaveLength(2);
     expect(host.textContent).not.toContain('每圈强度');
+  });
+
+  it('keeps the weekend rain window visible and accessible', () => {
+    const weekend = {
+      weather: { practice: null, qualifying: null, race: null, sprintQualifying: null, sprint: null },
+      forecast: { qualifying: .3, race: .7, raceRainWindow: [12, 18] },
+    } as any;
+    const host = mount(WeekendWeatherForecast, { weekend, sprint: false, raceLaps: 58 });
+    expect(host.textContent).toContain('预计第 12–18 圈可能降雨');
+    expect(host.querySelector('figure')?.getAttribute('aria-label')).toContain('第 12–18 圈');
   });
 });
