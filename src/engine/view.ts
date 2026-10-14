@@ -33,6 +33,7 @@ import { describeLog } from './protocol';
 import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
 import { nextActionFor, sortedDrivers, sortedTeams, type NextAction } from './season';
 import { degFactor, effectiveCliff, strategyOptions, type StrategyOption } from './strategy';
+import { buildPerformanceContext, practiceEffects } from './performance';
 import type {
   DriverState,
   GameState,
@@ -193,11 +194,19 @@ export interface WeekendDriverView {
   driverName: string;
   plan: DriverPlan;
   setup: SetupState;
+  performance?: { trackFit: number; practice: { quali: number; race: number; wearMultiplier: number } };
+  performanceSummary?: { qualiGain: number; raceGain: number; wearDelta: number; trackFit: number; trackKnowledge: number; tyres: Record<string, { temperatureWindow: [number, number]; warmupRate: number }> };
   supernaturalSetup?: { base: SetupState; offset: { confidence: number; tyreKnowledge: number }; expires: string };
   options: StrategyOption[];
   sprintOptions: StrategyOption[];
   tyreLife: Record<string, number>;
   tyreSets: Array<{ id: string; compound: string; state: 'new' | 'used'; laps: number; returned: boolean; returnEligible: boolean }>;
+}
+
+function tyreThermalState(state: GameState, car: import('./types').LiveRaceCar): 'cold' | 'optimal' | 'hot' {
+  const [low, high] = state.rules.tyres[car.tyre]?.temperatureWindow ?? [80, 105];
+  const temperature = car.tyreTemperature ?? low;
+  return temperature < low ? 'cold' : temperature > high ? 'hot' : 'optimal';
 }
 
 export type RevealedWeather = Record<keyof WeekendState['weather'], Weather | null>;
@@ -227,8 +236,8 @@ export interface LiveRaceView {
   raceControl: 'sc' | 'vsc' | 'red_flag' | null;
   restart: 'standing' | 'rolling' | null;
   weather: { rain: number; surface: 'dry' | 'damp' | 'wet'; forecast: import('./types').RaceForecast };
-  timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; pits: number }>;
-  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; iceHealth: number; electricalHealth: number; weakestPuHealth: number; weakestPuName: string; puTemperature: number; puStatus: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
+  timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; tyreTemperature?: number; tyreState?: 'cold' | 'optimal' | 'hot' | 'legacy'; pits: number }>;
+  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreTemperature?: number; tyreThermalState?: 'cold' | 'optimal' | 'hot' | 'legacy'; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; iceHealth: number; electricalHealth: number; weakestPuHealth: number; weakestPuName: string; puTemperature: number; puStatus: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
   events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; driverNames: string[]; key: boolean }>;
   pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number } | null;
   teamOrders: import('./types').TeamOrders;
@@ -349,6 +358,7 @@ export interface GameView {
     fullWetCompound: string;
     mandatoryCompounds: number;
     aiLimits: GameState['rules']['aiLimits'];
+    tyres: Record<string, { temperatureWindow: [number, number]; warmupRate: number }>;
   };
 }
 
@@ -747,6 +757,7 @@ export function buildView(state: GameState): GameView {
       fullWetCompound: rules.fullWetCompound,
       mandatoryCompounds: rules.mandatoryCompounds,
       aiLimits: rules.aiLimits,
+      tyres: Object.fromEntries(Object.entries(rules.tyres).map(([compound, tyre]) => [compound, { temperatureWindow: (tyre.temperatureWindow ?? (tyre.wet ? [58, 78] : [80, 105])) as [number, number], warmupRate: tyre.warmupRate ?? (tyre.wet ? .4 : .32) }])),
     },
   };
 }
@@ -768,7 +779,11 @@ function buildWeekendView(state: GameState): WeekendView | null {
       if (!plan || !naturalSetup) continue;
       const setup = effectiveSetup(state, d.id, naturalSetup);
       const ratings = carRatings(team, car, state.rules, 'disclosed');
-      const ctx = { driverTyre: d.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge };
+      const performanceContext = buildPerformanceContext({ driverTyre: d.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
+      const practice = practiceEffects(setup, state.rules, performanceContext.trackFit);
+      const baselineSetup = w.practiceBaseline?.[d.id];
+      const baselinePractice = baselineSetup ? practiceEffects(baselineSetup, state.rules, performanceContext.trackFit) : null;
+      const ctx = { driverTyre: d.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge, performanceContext };
       const sprintLaps = Math.max(3, Math.round(track.laps * state.rules.sprintLapsFactor));
       const factor = degFactor(track, ctx);
       drivers.push({
@@ -776,6 +791,15 @@ function buildWeekendView(state: GameState): WeekendView | null {
         driverName: d.name,
         plan,
         setup,
+        performance: { trackFit: performanceContext.trackFit, practice },
+        performanceSummary: baselinePractice ? {
+          qualiGain: round1(practice.quali - baselinePractice.quali),
+          raceGain: round1(practice.race - baselinePractice.race),
+          wearDelta: round1((practice.wearMultiplier - baselinePractice.wearMultiplier) * 100),
+          trackFit: performanceContext.trackFit,
+          trackKnowledge: setup.trackKnowledge ?? 0,
+          tyres: Object.fromEntries(Object.entries(state.rules.tyres).map(([compound, tyre]) => [compound, { temperatureWindow: (tyre.temperatureWindow ?? (tyre.wet ? [58, 78] : [80, 105])) as [number, number], warmupRate: tyre.warmupRate ?? (tyre.wet ? .4 : .32) }])),
+        } : undefined,
         supernaturalSetup: w.supernaturalCarEffects?.[d.id] ? { base: naturalSetup, offset: w.supernaturalCarEffects[d.id], expires: '本站周末结束后失效' } : undefined,
         // 玩家看到的是「干地」策略预测（雨战由引擎自动换雨胎）
         options: strategyOptions(state.rules, track, track.laps, ctx, { wet: false, sprint: false }).slice(0, 6),
@@ -794,7 +818,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
         const timing = [...running, ...Object.values(live.cars).filter(c => c.status === 'dnf').map(car => ({ id: car.driverId, index: -1, car }))].map(({ car, index }) => ({
           driverId: car.driverId, teamId: car.teamId, pos: car.status === 'running' ? index + 1 : null, status: car.status,
           gap: car.status === 'dnf' ? 'DNF' : index === 0 ? '领跑' : `+${Math.max(0, car.cumulativeTime - (leader?.cumulativeTime ?? car.cumulativeTime)).toFixed(1)}s`,
-          tyre: car.tyre, tyreAge: car.tyreAge, pits: car.pits,
+          tyre: car.tyre, tyreAge: car.tyreAge, tyreTemperature: live.physicsVersion === 2 ? car.tyreTemperature : undefined, tyreState: (live.physicsVersion === 2 ? tyreThermalState(state, car) : 'legacy') as 'cold' | 'optimal' | 'hot' | 'legacy', pits: car.pits,
         }));
         return {
           id: live.id, revision: live.revision, kind: live.kind, completedLaps: live.completedLaps, totalLaps: live.totalLaps, stage: live.stage,
@@ -803,7 +827,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
           weather: { rain: live.rain, surface: live.surface, forecast: live.forecast }, timing,
           playerCars: Object.values(live.cars).filter(c => c.player).map(c => {
             const weakest = Object.entries(c.puComponentHealth ?? {}).sort((a, b) => (a[1] ?? 100) - (b[1] ?? 100))[0];
-            return { driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, tyreState: state.teams[c.teamId]?.tyreInventory?.[c.driverId]?.find(set => set.id === c.tyreSetId)?.state ?? 'used', damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming, iceHealth: c.iceHealth ?? 100, electricalHealth: c.electricalHealth ?? 100, weakestPuHealth: weakest?.[1] ?? 100, weakestPuName: state.rules.parts[weakest?.[0] ?? '']?.name ?? '动力单元', puTemperature: c.puTemperature ?? 78, puStatus: c.puStatus ?? 'normal', predictedStationary: predictedStationaryTime(state.teams[c.teamId], c.repairPending), lastPit: c.pitStops?.at(-1) ?? null };
+            return { driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, tyreTemperature: live.physicsVersion === 2 ? c.tyreTemperature : undefined, tyreThermalState: live.physicsVersion === 2 ? tyreThermalState(state, c) : 'legacy', tyreState: state.teams[c.teamId]?.tyreInventory?.[c.driverId]?.find(set => set.id === c.tyreSetId)?.state ?? 'used', damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming, iceHealth: c.iceHealth ?? 100, electricalHealth: c.electricalHealth ?? 100, weakestPuHealth: weakest?.[1] ?? 100, weakestPuName: state.rules.parts[weakest?.[0] ?? '']?.name ?? '动力单元', puTemperature: c.puTemperature ?? 78, puStatus: c.puStatus ?? 'normal', predictedStationary: predictedStationaryTime(state.teams[c.teamId], c.repairPending), lastPit: c.pitStops?.at(-1) ?? null };
           }),
           events: live.events.slice(-20).map(event => {
             const names = event.drivers.map(id => state.drivers[id]?.short ?? state.drivers[id]?.name ?? id);

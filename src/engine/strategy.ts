@@ -2,7 +2,8 @@
  * 轮胎与进站策略：衰减模型、候选策略、自动选择。
  * 比赛模拟与策略预测共用同一套衰减公式，保证「预测」与「实际」口径一致。
  */
-import type { Compound, PaceMode, Rules, TrackDef, TyreDef } from './types';
+import { stepTyre } from './performance';
+import type { Compound, PaceMode, RacePerformanceContext, Rules, TrackDef, TyreDef } from './types';
 import { round1 } from './util';
 
 export interface DegContext {
@@ -11,6 +12,8 @@ export interface DegContext {
   paceMode: PaceMode;
   /** 练习赛积累的轮胎数据 0~100 */
   knowledge: number;
+  /** Frozen shared model input. Omit only for legacy callers. */
+  performanceContext?: RacePerformanceContext;
 }
 
 export const PACE_MODE_DEG: Record<PaceMode, number> = { conserve: 0.82, balanced: 1, push: 1.25 };
@@ -37,9 +40,16 @@ export function tyreLapDelta(tyre: TyreDef, age: number, factor: number): number
 }
 
 /** 一段 laps 圈的轮胎总损失 */
-export function stintLoss(tyre: TyreDef, laps: number, factor: number): number {
+export function stintLoss(tyre: TyreDef, laps: number, factor: number, model?: { context: RacePerformanceContext; rules: Rules; paceMode: PaceMode }): number {
   let s = 0;
-  for (let a = 1; a <= laps; a++) s += tyreLapDelta(tyre, a, factor);
+  let previous: { temperature?: number; wearAge?: number } = {};
+  for (let a = 1; a <= laps; a++) {
+    if (model) {
+      const step = stepTyre(model.context, tyre, previous, { paceMode: model.paceMode }, model.rules);
+      previous = step;
+      s += tyreLapDelta(tyre, step.wearAge, 1) + step.lapPenalty;
+    } else s += tyreLapDelta(tyre, a, factor);
+  }
   return s;
 }
 
@@ -53,12 +63,19 @@ export interface StrategyOption {
   cost: number;
   /** 相对最优策略的差距（秒） */
   delta: number;
+  summaries?: Array<{ startLap: number; endLap: number; endLoss: number; temperatureRange: [number, number]; outsideWindowLaps: number; cliffMargin: number }>;
+}
+
+interface StrategyModel {
+  context: RacePerformanceContext;
+  paceMode: PaceMode;
+  lossCache?: Map<string, number>;
 }
 
 const MIN_STINT = 3;
 
 /** 给定配方序列，求最优分段圈数（比例分配 + 局部搜索） */
-export function optimizeStints(rules: Rules, track: TrackDef, compounds: Compound[], totalLaps: number, factor: number): number[] {
+export function optimizeStints(rules: Rules, track: TrackDef, compounds: Compound[], totalLaps: number, factor: number, model?: StrategyModel): number[] {
   const n = compounds.length;
   if (n === 1) return [totalLaps];
   if (totalLaps < n * MIN_STINT) return compounds.map((_, i) => (i === 0 ? totalLaps - (n - 1) * 1 : 1));
@@ -79,7 +96,16 @@ export function optimizeStints(rules: Rules, track: TrackDef, compounds: Compoun
     }
     i++;
   }
-  const cost = (s: number[]) => s.reduce((acc, laps, idx) => acc + stintLoss(rules.tyres[compounds[idx]], laps, factor), 0);
+  const lossCache = model?.lossCache ?? new Map<string, number>();
+  const loss = (compound: Compound, laps: number) => {
+    const key = `${compound}:${laps}`;
+    const cached = lossCache.get(key);
+    if (cached !== undefined) return cached;
+    const value = stintLoss(rules.tyres[compound], laps, factor, model ? { context: model.context, paceMode: model.paceMode, rules } : undefined);
+    lossCache.set(key, value);
+    return value;
+  };
+  const cost = (s: number[]) => s.reduce((acc, laps, idx) => acc + loss(compounds[idx], laps), 0);
   let best = cost(stints);
   let improved = true;
   let guard = 0;
@@ -130,11 +156,19 @@ export function strategyOptions(
   opts: { wet: boolean; sprint: boolean },
 ): StrategyOption[] {
   const factor = degFactor(track, ctx);
+  const model: StrategyModel | undefined = ctx.performanceContext ? { context: ctx.performanceContext, paceMode: ctx.paceMode, lossCache: new Map() } : undefined;
   const pitCost = track.pitLoss + 2.6;
   const candidates: Array<{ compounds: Compound[]; stints: number[]; cost: number }> = [];
   const evaluate = (compounds: Compound[]) => {
-    const stints = optimizeStints(rules, track, compounds, laps, factor);
-    const loss = stints.reduce((acc, l, i) => acc + stintLoss(rules.tyres[compounds[i]], l, factor), 0);
+    const stints = optimizeStints(rules, track, compounds, laps, factor, model);
+    const loss = stints.reduce((acc, l, i) => {
+      const key = `${compounds[i]}:${l}`;
+      const cached = model?.lossCache?.get(key);
+      if (cached !== undefined) return acc + cached;
+      const value = stintLoss(rules.tyres[compounds[i]], l, factor, model ? { context: model.context, paceMode: model.paceMode, rules } : undefined);
+      model?.lossCache?.set(key, value);
+      return acc + value;
+    }, 0);
     candidates.push({ compounds, stints, cost: loss + (compounds.length - 1) * pitCost });
   };
   if (opts.wet) {
@@ -161,6 +195,23 @@ export function strategyOptions(
     const n = perStops.get(stops) ?? 0;
     if (n >= 2) continue;
     perStops.set(stops, n + 1);
+    let nextLap = 1;
+    const summaries = c.stints.map((stint, index) => {
+      const tyre = rules.tyres[c.compounds[index]];
+      let temperature = (tyre.temperatureWindow?.[0] ?? 80) - 18;
+      let wearAge = 0;
+      let min = temperature, max = temperature, outside = 0;
+      for (let lap = 0; lap < stint; lap++) {
+        if (model) {
+          const step = stepTyre(model.context, tyre, { temperature, wearAge }, { paceMode: model.paceMode }, rules);
+          temperature = step.temperature; wearAge = step.wearAge; if (step.state !== 'optimal') outside++;
+        } else wearAge++;
+        min = Math.min(min, temperature); max = Math.max(max, temperature);
+      }
+      const summary = { startLap: nextLap, endLap: nextLap + stint - 1, endLoss: round1(tyreLapDelta(tyre, wearAge || stint, model ? 1 : factor)), temperatureRange: [round1(min), round1(max)] as [number, number], outsideWindowLaps: outside, cliffMargin: round1(effectiveCliff(tyre, model ? 1 : factor) - wearAge) };
+      nextLap += stint;
+      return summary;
+    });
     out.push({
       id: c.compounds.join('-'),
       label: planLabel(rules, c.compounds),
@@ -169,6 +220,7 @@ export function strategyOptions(
       stops,
       cost: round1(c.cost),
       delta: round1(c.cost - bestCost),
+      summaries,
     });
   }
   return out.sort((a, b) => a.cost - b.cost);

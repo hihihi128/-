@@ -98,6 +98,32 @@ function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>)
     if (patch.sprintTyre !== 'auto' && (!rules.tyres[patch.sprintTyre] || rules.tyres[patch.sprintTyre].wet)) return fail('冲刺赛配方无效');
     plan.sprintTyre = patch.sprintTyre;
   }
+  const changesRaceStrategy = patch.strategySource !== undefined || patch.tyrePlan !== undefined || patch.paceMode !== undefined || patch.pitTiming !== undefined || patch.scReaction !== undefined;
+  if (patch.strategyReview !== undefined) {
+    const review = patch.strategyReview;
+    if (review.source !== 'secondary' || !Array.isArray(review.originalPlan.tyrePlan)
+      || !PACE.includes(review.originalPlan.paceMode) || !TIMING.includes(review.originalPlan.pitTiming)
+      || typeof review.originalPlan.scReaction !== 'boolean' || typeof review.summary !== 'string'
+      || typeof review.modelLabel !== 'string' || typeof review.roundKey !== 'string'
+      || !Array.isArray(review.issues)
+      || review.issues.some(issue => typeof issue.code !== 'string' || !['low', 'medium', 'high'].includes(issue.severity) || typeof issue.message !== 'string')) return fail('策略点评来源信息无效');
+    plan.strategyReview = {
+      source: 'secondary',
+      originalPlan: {
+        tyrePlan: [...review.originalPlan.tyrePlan],
+        paceMode: review.originalPlan.paceMode,
+        pitTiming: review.originalPlan.pitTiming,
+        scReaction: review.originalPlan.scReaction,
+      },
+      summary: review.summary,
+      issues: review.issues.map(issue => ({ code: issue.code, severity: issue.severity, message: issue.message })),
+      modelLabel: review.modelLabel,
+      roundKey: review.roundKey,
+    };
+  } else if (changesRaceStrategy) {
+    // A player/engineer/perfect replacement is newer than any prior review.
+    delete plan.strategyReview;
+  }
   state.weekend.plans[driverId] = plan;
   return ok(`已更新 ${driverName(state, driverId)} 的策略`);
 }

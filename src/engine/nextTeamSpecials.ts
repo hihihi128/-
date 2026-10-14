@@ -179,8 +179,10 @@ export function audiAlliance(state: GameState): { ok: boolean; message: string }
 }
 
 export function applyAudiStartDrop(state: GameState, session: LiveRaceState, rng: Rng): void {
-  if (!state.audi || state.audi.turboFixed || session.kind !== 'race') return;
-  for (const car of Object.values(session.cars).filter(value => value.teamId === 'audi')) {
+  if (session.kind !== 'race' || (state.meta.playerTeamId === 'audi' && state.audi?.turboFixed === true)) return;
+  const audiCars = Object.values(session.cars).filter(value => value.teamId === 'audi');
+  if (!audiCars.length) return;
+  for (const car of audiCars) {
     const from = session.order.indexOf(car.driverId);
     if (from < 0) continue;
     const loss = rng.int(state.rules.audi.startDropMin, state.rules.audi.startDropMax);

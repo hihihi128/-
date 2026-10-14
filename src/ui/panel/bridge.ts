@@ -11,6 +11,8 @@ import type { Action } from '../../engine/types';
 import type { NegotiationSessionView } from '../../tavern/negotiation';
 
 type Status = ReturnType<F1ManagerApi['status']>;
+export type StrategyReviewRequest = Parameters<F1ManagerApi['requestStrategyReview']>[0];
+export type StrategyReviewResult = Awaited<ReturnType<F1ManagerApi['requestStrategyReview']>>;
 
 export interface Toast {
   id: number;

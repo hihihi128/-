@@ -48,6 +48,7 @@ import type {
 import { clamp, gapText, round3 } from './util';
 import { currentTrack, planOf } from './weekend';
 import { effectiveSetup } from './supernatural';
+import { buildPerformanceContext, practiceEffects, stepTyre } from './performance';
 
 interface SimCar {
   driver: DriverState;
@@ -618,12 +619,16 @@ function freeRedFlagTyreChange(state: GameState, session: LiveRaceState, car: Li
     remainingCompounds.push(state.rules.dryCompounds.find(candidate => candidate !== compound) ?? compound);
   }
   car.plannedCompounds.splice(nextStint, car.plannedCompounds.length - nextStint, ...remainingCompounds);
+  // Replanning needs to stay constant-time enough for a live safety-car tick;
+  // tyre temperature remains in the actual per-lap physics below.
   car.stints.splice(nextStint, car.stints.length - nextStint, ...optimizeStints(state.rules, currentTrack(state), remainingCompounds, remainingLaps, car.tyreFactor));
   car.stintIndex = nextStint;
   car.tyre = compound;
   const replacement = takeTyreSet(state.teams[car.teamId], car.driverId, compound, weekendTyreKey(state), car.tyreSetId);
   car.tyreSetId = replacement?.id;
   car.tyreAge = replacement?.laps ?? 0;
+  car.tyreWearAge = replacement?.wearAge ?? replacement?.laps ?? 0;
+  car.tyreTemperature = (state.rules.tyres[compound]?.temperatureWindow?.[0] ?? 80) - 18;
   car.usedCompounds.push(compound);
   car.pendingPit = null;
   car.pendingCompound = null;
@@ -695,8 +700,9 @@ export function createRaceSession(
     if (entry.team.isPlayer) {
       plan = { ...planOf(state, id) };
     } else {
-      const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
-      const baseContext = { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: 'balanced' as const, knowledge: setup.tyreKnowledge };
+      const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, thermalKnowledge: 30, trackKnowledge: 30, qualiBonus: 0 });
+      const performanceContext = buildPerformanceContext({ driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
+      const baseContext = { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: 'balanced' as const, knowledge: setup.tyreKnowledge, performanceContext };
       const options = strategyOptions(rules, track, totalLaps, baseContext, { wet: false, sprint: kind === 'sprint' });
       const decision = strategyDecisionSkill(entry.team, entry.car.slot);
       const localIndex = decision >= 88 ? 0 : decision >= 74 ? Math.min(1, options.length - 1) : Math.min(2, options.length - 1);
@@ -724,7 +730,7 @@ export function createRaceSession(
       plan = { ...plan, paceMode: entry.driver.ego >= 50 ? 'push' : 'conserve', pitTiming: 'late', scReaction: false };
       disobedient.push(id);
     }
-    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
+    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, thermalKnowledge: 30, trackKnowledge: 30, qualiBonus: 0 });
     const wet = trajectory[0] > 0.18;
     const compounds = wet
       ? [wetCompoundFor(rules, .55)]
@@ -733,7 +739,8 @@ export function createRaceSession(
         : plan.tyrePlan !== 'auto' && !validatePlan(rules, plan.tyrePlan, false)
           ? [...plan.tyrePlan]
           : [rules.dryCompounds[1] ?? rules.dryCompounds[0], rules.dryCompounds[0]];
-    const factor = degFactor(track, { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge });
+    const performanceContext = buildPerformanceContext({ driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
+    const factor = degFactor(track, { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge, performanceContext });
     const puSpecs = Object.fromEntries(PU_PART_TYPES.map(type => [type, fittedSpec(entry.team, entry.car, type)])) as Partial<Record<PowerUnitPartType, ReturnType<typeof fittedSpec>>>;
     const componentHealth = Object.fromEntries(PU_PART_TYPES.map(type => {
       const spec = puSpecs[type];
@@ -746,10 +753,10 @@ export function createRaceSession(
       driverId: id, teamId: entry.team.id, slot: entry.car.slot, player: entry.team.isPlayer, grid: index + 1,
       score: trackScore(ratings, track), skill: raceSkill(entry.driver, wet), consistency: entry.driver.attrs.consistency,
       racecraft: entry.driver.attrs.racecraft, trust: entry.driver.trust, ego: entry.driver.ego, reliability: ratings.reliability, wetSkill: entry.driver.attrs.wet,
-      tyreFactor: factor, setupBonus: setup.confidence / 100 * 0.3,
+      tyreFactor: factor, setupBonus: practiceEffects(setup, rules, performanceContext.trackFit).race,
       raceEngineerReaction: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'reaction'),
       raceEngineerWeather: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'weather'),
-      plan, tyre: compounds[0], tyreAge: startingSet?.laps ?? 0, tyreSetId: startingSet?.id, usedCompounds: [compounds[0]], plannedCompounds: compounds,
+      plan, tyre: compounds[0], tyreAge: startingSet?.laps ?? 0, tyreTemperature: (rules.tyres[compounds[0]]?.temperatureWindow?.[0] ?? 80) - 18, tyreWearAge: startingSet?.wearAge ?? startingSet?.laps ?? 0, performanceContext, tyreSetId: startingSet?.id, usedCompounds: [compounds[0]], plannedCompounds: compounds,
       stints: optimizeStints(rules, track, compounds, totalLaps, factor), stintIndex: 0, pits: 0, pitStops: [], cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
       damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced',
       iceHealth: groupHealth(componentHealth, PU_COMBUSTION_PARTS), electricalHealth: groupHealth(componentHealth, PU_ELECTRICAL_PARTS),
@@ -764,7 +771,7 @@ export function createRaceSession(
     if (entry.team.isPlayer) lapChart[id] = [];
   }
   const session: LiveRaceState = {
-    version: 1, id: sessionId, kind, roundIndex: state.season.roundIndex,
+    version: 1, physicsVersion: 2, id: sessionId, kind, roundIndex: state.season.roundIndex,
     totalLaps, completedLaps: 0, lap: 1, stage: 'grid', revision: 1, rngState: execution.state, weatherRngState: weatherRng.state,
     forecastRngState: forecastRng.state, strategistSkill: staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), expectedPositions, cars, order: grid, weatherTrajectory: trajectory, weatherHistory: [],
     rain: trajectory[0] ?? 0, wetness: startsWet ? 0.55 : 0, surface: startsWet ? 'wet' : 'dry',
@@ -976,6 +983,8 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
     const replacement = takeTyreSet(state.teams[car.teamId], car.driverId, car.tyre, weekendTyreKey(state), car.tyreSetId);
     car.tyreSetId = replacement?.id;
     car.tyreAge = replacement?.laps ?? 0;
+    car.tyreWearAge = replacement?.wearAge ?? replacement?.laps ?? 0;
+    car.tyreTemperature = (state.rules.tyres[car.tyre]?.temperatureWindow?.[0] ?? 80) - 18;
   }
   car.usedCompounds.push(car.tyre); car.pits += 1; car.pitStops ??= []; car.pitStops.push({ lap: session.lap, predictedStationary: stop.predicted, actualStationary: stationary, slow: stop.slow, repair }); car.cumulativeTime += track.pitLoss * neutral + stationary;
   car.engineerWeatherTarget = null;
@@ -1045,18 +1054,23 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       } else if (car.puStatus === 'normal' && oldPuStatus !== 'normal') {
         liveEvent(session, lap, 'damage', `${car.driverId} 的动力单元温度恢复正常`, [car.driverId], car.player);
       }
+      const v2 = session.physicsVersion === 2 && !!car.performanceContext;
+      const tyreStep = v2
+        ? stepTyre(car.performanceContext!, rules.tyres[car.tyre], { temperature: car.tyreTemperature, wearAge: car.tyreWearAge }, { paceMode: car.plan.paceMode, wetness: session.wetness, neutral: scActive || vscActive }, rules)
+        : null;
       const paceWear = car.plan.paceMode === 'push' ? 1.15 : car.plan.paceMode === 'conserve' ? .88 : 1;
       // Fuel burn preserves the legacy early-race weight penalty; ERS deployment
       // remains useful for pace and overtaking but becomes weaker when depleted.
       const fuel = (session.totalLaps - lap) * .03;
-      let lapTime = base + fuel + tyreLapDelta(rules.tyres[car.tyre], car.tyreAge + 1, car.tyreFactor) * paceWear + tyreMismatch(rules, car, session.wetness) + PACE_MODE_TIME[car.plan.paceMode] + car.damage + car.partial + energyTime + rng.normal(0, (0.12 + (100 - car.consistency) * .004) * (1 + session.wetness * .5));
+      let lapTime = base + fuel + (tyreStep ? tyreLapDelta(rules.tyres[car.tyre], tyreStep.wearAge, 1) + tyreStep.lapPenalty : tyreLapDelta(rules.tyres[car.tyre], car.tyreAge + 1, car.tyreFactor) * paceWear) + tyreMismatch(rules, car, session.wetness) + PACE_MODE_TIME[car.plan.paceMode] + car.damage + car.partial + energyTime + rng.normal(0, (0.12 + (100 - car.consistency) * .004) * (1 + session.wetness * .5));
       if (lap === 1) lapTime += 2.5 + rng.normal(0, .35);
       else if (restartType === 'standing') lapTime += 2.1 + rng.normal(0, .3) - (car.racecraft - 75) * .006;
       if (scActive) lapTime = track.baseLap * 1.35 + rng.normal(0, .05);
       else if (vscActive) lapTime = base * 1.25 + rng.normal(0, .05);
       car.cumulativeTime += lapTime; car.completedLaps = lap; car.tyreAge += 1;
+      if (tyreStep) { car.tyreTemperature = tyreStep.temperature; car.tyreWearAge = tyreStep.wearAge; }
       const tyreSet = state.teams[car.teamId]?.tyreInventory?.[car.driverId]?.find(set => set.id === car.tyreSetId);
-      useTyreSet(tyreSet, 1);
+      useTyreSet(tyreSet, 1, tyreStep?.wearMultiplier ?? 1);
       if (!scActive && !vscActive && lap > 1 && car.bestLap === null || (!scActive && !vscActive && lap > 1 && lapTime < (car.bestLap ?? Infinity))) car.bestLap = lapTime;
       const astonVibrationRetirement = !scActive && !vscActive && !session.redFlag?.active
         && car.teamId === 'aston_martin' && astonVibrationActive(state)

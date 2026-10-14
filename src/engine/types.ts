@@ -90,6 +90,10 @@ export interface TyreDef {
   /** 是否为雨胎 */
   wet: boolean;
   color: string;
+  /** 最佳工作胎温窗口（°C）。 */
+  temperatureWindow?: [number, number];
+  /** 每圈向目标温度收敛的比例。 */
+  warmupRate?: number;
 }
 
 export interface AmbitionDef {
@@ -326,6 +330,8 @@ export interface Rules {
   secPerCarPoint: number;
   /** 车手能力每差 1 点的圈速差（秒） */
   secPerDriverPoint: number;
+  /** 统一比赛性能模型的有界平衡参数。 */
+  performance: PerformanceRules;
   parts: Record<PartType, PartDef>;
   tyres: Record<Compound, TyreDef>;
   /** 干地可用配方（按软→硬） */
@@ -391,6 +397,16 @@ export interface Rules {
   aduo: AduoRules;
 }
 
+export interface PerformanceRules {
+  qualiSetupMax: number;
+  raceSetupMax: number;
+  qualiBonusMax: number;
+  practiceWearKnowledgeMax: number;
+  temperatureLapMax: number;
+  overheatWearMax: number;
+  trackFitMax: number;
+}
+
 export interface MarketRules {
   minYears: number;
   maxYears: number;
@@ -421,6 +437,10 @@ export interface TrackDef {
   overtaking: number;
   /** 轮胎负荷 0~100 */
   tyreStress: number;
+  /** 模拟参考路温（°C），非现实测量数据。 */
+  surfaceTemperature?: number;
+  /** 轮胎生热需求 0~100。 */
+  thermalDemand?: number;
   /** 降雨概率 0~1 */
   rainChance: number;
   /** 事故后出动安全车（而非虚拟安全车）的概率 0~1 */
@@ -730,9 +750,20 @@ export interface Standings {
 
 export type EnergyMode = 'harvest' | 'balanced' | 'deploy';
 
+/** Persisted provenance for an explicitly applied secondary-API strategy review. */
+export interface StrategyReviewMetadata {
+  source: 'secondary';
+  originalPlan: Pick<DriverPlan, 'tyrePlan' | 'paceMode' | 'pitTiming' | 'scReaction'> & { tyrePlan: Compound[] };
+  summary: string;
+  issues: Array<{ code: string; severity: 'low' | 'medium' | 'high'; message: string }>;
+  modelLabel: string;
+  roundKey: string;
+}
+
 export interface DriverPlan {
   /** 策略来源；旧存档缺失时按玩家策略处理。 */
   strategySource?: 'player' | 'engineer' | 'perfect';
+  strategyReview?: StrategyReviewMetadata;
   practiceProgram: PracticeProgram;
   qualiApproach: QualiApproach;
   /** 轮胎策略：各段配方；'auto' 由策略组自动选择 */
@@ -759,6 +790,10 @@ export interface SetupState {
   tyreKnowledge: number;
   /** 排位模拟加成（秒） */
   qualiBonus: number;
+  /** 长距离温控知识 0~100。 */
+  thermalKnowledge?: number;
+  /** 赛道掌握度 0~100。 */
+  trackKnowledge?: number;
 }
 
 export interface PracticeEntry {
@@ -770,7 +805,7 @@ export interface PracticeEntry {
 
 export interface PracticeResult {
   timesheet: PracticeEntry[];
-  gains: Record<string, { setup: number; tyre: number; program: PracticeProgram; verified: string[] }>;
+  gains: Record<string, { setup: number; tyre: number; thermal?: number; track?: number; quali?: number; program: PracticeProgram; verified: string[] }>;
   events: RaceEvent[];
 }
 
@@ -780,6 +815,8 @@ export interface TyreSet {
   compound: Compound;
   state: 'new' | 'used';
   laps: number;
+  /** 等效磨损胎龄；实际使用圈数仍由 laps 表示。 */
+  wearAge?: number;
   returned: boolean;
   /** Season + calendar round key. Prevents same-index sets leaking into a new season. */
   weekendKey: string;
@@ -892,6 +929,17 @@ export interface RaceForecast {
   confidence: number;
 }
 
+/** Immutable inputs shared by race execution and strategy prediction. */
+export interface RacePerformanceContext {
+  driverTyre: number;
+  carTyre: number;
+  setup: SetupState;
+  trackFit: number;
+  trackScore: number;
+  surfaceTemperature: number;
+  thermalDemand: number;
+}
+
 export interface LiveRaceCar {
   driverId: string;
   teamId: string;
@@ -913,6 +961,9 @@ export interface LiveRaceCar {
   plan: DriverPlan;
   tyre: Compound;
   tyreAge: number;
+  tyreTemperature?: number;
+  tyreWearAge?: number;
+  performanceContext?: RacePerformanceContext;
   tyreSetId?: string;
   usedCompounds: Compound[];
   plannedCompounds: Compound[];
@@ -985,6 +1036,8 @@ export interface RaceDecisionWindow {
 /** Fully serializable in-progress race state. Private trajectory and RNG stay out of views. */
 export interface LiveRaceState {
   version: 1;
+  /** 独立于存档格式版本的比赛物理版本。 */
+  physicsVersion?: 1 | 2;
   id: string;
   kind: 'race' | 'sprint';
   roundIndex: number;
@@ -1046,6 +1099,8 @@ export interface WeekendState {
   /** 只作用于本周末尚未执行计算的玩家赛车调校。 */
   supernaturalCarEffects?: Record<string, { confidence: number; tyreKnowledge: number }>;
   setup: Record<string, SetupState>;
+  /** 新周末开始时冻结的练习基线，用于收益比较。 */
+  practiceBaseline?: Record<string, SetupState>;
   plans: Record<string, DriverPlan>;
   teamOrders: TeamOrders;
   /** 本站罚退（格） */

@@ -4,6 +4,16 @@
 rules:
   seasonYear: 2026          # 起始赛季年份
 
+  # 统一性能模型（仅为游戏平衡参考值，并非真实 F1 测量数据）
+  performance:
+    qualiSetupMax: 0.65
+    raceSetupMax: 0.50
+    qualiBonusMax: 0.20
+    practiceWearKnowledgeMax: 0.12
+    temperatureLapMax: 0.80
+    overheatWearMax: 0.28
+    trackFitMax: 0.12
+
   # ── 积分（2026 规则：与 2025 相同，最快圈不加分）──
   # pointsRace: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]   # 正赛积分
   # pointsSprint: [8, 7, 6, 5, 4, 3, 2, 1]            # 冲刺赛积分

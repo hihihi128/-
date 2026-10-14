@@ -22,6 +22,10 @@ function atRace(teamId: TeamId): GameState {
   return advanceUntil(game(teamId), state => state.season.phase === 'race');
 }
 
+function audiDriverIds(session: ReturnType<typeof createRaceSession>): string[] {
+  return Object.values(session.cars).filter(car => car.teamId === 'audi').map(car => car.driverId);
+}
+
 describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
   it('按车队初始化状态，凯迪拉克保持无特殊机制', () => {
     expect(game('aston_martin').astonMartin).toMatchObject({ aduoEngineArrived: false, aduoProgress: 0 });
@@ -120,21 +124,83 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     expect(state.weekend!.practiceSessions).toHaveLength(1);
   });
 
-  it('奥迪涡轮让起步随机掉位，联盟持续推进 ADUO', () => {
-    const state = atRace('audi');
-    state.rules.audi.startDropMin = 0; state.rules.audi.startDropMax = 0;
-    const session = createRaceSession(state, new Rng(5), 'race');
-    const original = [...session.order];
+  it('非奥迪玩家时，两台 AI 奥迪仍会在正赛起步随机掉位', () => {
+    const state = atRace('ferrari');
+    expect(state.audi).toBeNull();
     state.rules.audi.startDropMin = 3; state.rules.audi.startDropMax = 3;
-    session.order = [...original];
-    applyAudiStartDrop(state, session, new Rng(1));
-    for (const id of Object.values(session.cars).filter(car => car.teamId === 'audi').map(car => car.driverId)) {
-      expect(session.order.indexOf(id)).toBeGreaterThanOrEqual(original.indexOf(id));
-    }
+    const session = createRaceSession(state, new Rng(5), 'race');
+
+    const audiIds = audiDriverIds(session);
+    expect(audiIds).toHaveLength(2);
+    expect(session.events.filter(event => event.id.includes('start-audi'))).toHaveLength(2);
+    expect(audiIds.every(id => session.order.indexOf(id) >= session.cars[id].grid - 1)).toBe(true);
+  });
+
+  it('奥迪玩家修复涡轮前掉位，修复后免除起步掉位', () => {
+    const state = atRace('audi');
+    state.rules.audi.startDropMin = 3; state.rules.audi.startDropMax = 3;
+    const broken = createRaceSession(state, new Rng(5), 'race');
+    expect(broken.events.filter(event => event.id.includes('start-audi'))).toHaveLength(2);
+
+    state.audi!.turboFixed = true;
+    const fixed = createRaceSession(state, new Rng(5), 'race');
+    const original = [...fixed.order];
+    expect(fixed.order).toEqual(original);
+    expect(fixed.events.filter(event => event.id.includes('start-audi'))).toHaveLength(0);
+
     expect(audiAlliance(state).ok).toBe(true);
     state.rules.audi.progressPerRace = 100;
     afterNextTeamRace(state);
     expect(state.audi).toMatchObject({ turboFixed: true, alliance: true });
+  });
+
+  it('奥迪在车尾时只记录实际掉位，不会记录负数', () => {
+    const state = atRace('ferrari');
+    state.rules.audi.startDropMin = 0; state.rules.audi.startDropMax = 0;
+    const session = createRaceSession(state, new Rng(5), 'race');
+    const audiIds = audiDriverIds(session);
+    session.events = session.events.filter(event => !event.id.includes('start-audi'));
+    session.order = [...session.order.filter(id => !audiIds.includes(id)), ...audiIds];
+    state.rules.audi.startDropMin = 3; state.rules.audi.startDropMax = 3;
+    applyAudiStartDrop(state, session, new Rng(1));
+
+    const startEvents = session.events.filter(event => event.id.includes('start-audi'));
+    expect(startEvents).toHaveLength(2);
+    expect(startEvents.every(event => event.text.includes('丢掉 1 个位置'))).toBe(true);
+    expect(session.order.slice(-2).sort()).toEqual([...audiIds].sort());
+  });
+
+  it('没有奥迪赛车时不消耗随机数', () => {
+    const state = atRace('ferrari');
+    const session = createRaceSession(state, new Rng(5), 'race');
+    for (const id of audiDriverIds(session)) delete session.cars[id];
+    session.order = session.order.filter(id => session.cars[id]);
+    const events = [...session.events];
+    const rng = new Rng(1);
+    const rngState = rng.state;
+    applyAudiStartDrop(state, session, rng);
+    expect(rng.state).toBe(rngState);
+    expect(session.events).toEqual(events);
+  });
+
+  it('奥迪起步掉位使用相同种子时保持确定性', () => {
+    const first = atRace('ferrari');
+    const second = atRace('ferrari');
+    first.rules.audi.startDropMin = 0; first.rules.audi.startDropMax = 0;
+    second.rules.audi.startDropMin = 0; second.rules.audi.startDropMax = 0;
+    const firstSession = createRaceSession(first, new Rng(5), 'race');
+    const secondSession = createRaceSession(second, new Rng(5), 'race');
+    firstSession.events = firstSession.events.filter(event => !event.id.includes('start-audi'));
+    secondSession.events = secondSession.events.filter(event => !event.id.includes('start-audi'));
+    first.rules.audi.startDropMin = 2; first.rules.audi.startDropMax = 3;
+    second.rules.audi.startDropMin = 2; second.rules.audi.startDropMax = 3;
+    const firstRng = new Rng(91);
+    const secondRng = new Rng(91);
+    applyAudiStartDrop(first, firstSession, firstRng);
+    applyAudiStartDrop(second, secondSession, secondRng);
+    expect(firstSession.order).toEqual(secondSession.order);
+    expect(firstSession.events.filter(event => event.id.includes('start-audi'))).toEqual(secondSession.events.filter(event => event.id.includes('start-audi')));
+    expect(firstRng.state).toBe(secondRng.state);
   });
 
   it('法拉利小涡轮每场正赛起步提升 2–4 位，ADUO 装车后优势消失', () => {

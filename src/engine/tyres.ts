@@ -30,7 +30,7 @@ export function ensureDriverWeekendTyres(state: GameState, team: TeamState, driv
     const amount = setsPerCompound(state, compound);
     const existing = inventory.filter(set => set.compound === compound).length;
     for (let serial = existing + 1; serial <= amount; serial++) {
-      inventory.push({ id: setId(team.id, driverId, key, compound, serial), compound, state: 'new', laps: 0, returned: false, weekendKey: key });
+      inventory.push({ id: setId(team.id, driverId, key, compound, serial), compound, state: 'new', laps: 0, wearAge: 0, returned: false, weekendKey: key });
     }
   }
   return inventory;
@@ -96,8 +96,9 @@ export function takeTyreSet(team: TeamState, driverId: string, compound: Compoun
   return candidates[0] ?? null;
 }
 
-export function useTyreSet(set: TyreSet | null | undefined, laps: number): void {
+export function useTyreSet(set: TyreSet | null | undefined, laps: number, wearIncrement = laps): void {
   if (!set) return;
   set.state = 'used';
   set.laps += Math.max(0, laps);
+  set.wearAge = Math.max(0, (set.wearAge ?? Math.max(0, set.laps - laps)) + Math.max(0, wearIncrement));
 }

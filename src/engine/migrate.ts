@@ -163,6 +163,7 @@ export function migrateState(state: GameState): GameState {
   if (state.astonMartin === undefined) state.astonMartin = null;
   if (state.racingBulls === undefined) state.racingBulls = null;
   if (state.audi === undefined) state.audi = null;
+  if (state.meta?.playerTeamId !== 'audi') state.audi = null;
   if (state.alpine === undefined) state.alpine = null;
   if (state.alpine && state.alpine.penalizedPowerSpecs === undefined) state.alpine.penalizedPowerSpecs = {};
   if (state.haas === undefined) state.haas = null;
@@ -256,6 +257,8 @@ export function migrateState(state: GameState): GameState {
   state.rules.williams ??= deepClone(DEFAULT_RULES.williams);
   state.rules.randomEvents ??= deepClone(DEFAULT_RULES.randomEvents);
   state.rules.practiceReturnSets ??= DEFAULT_RULES.practiceReturnSets;
+  state.rules.performance ??= deepClone(DEFAULT_RULES.performance);
+  fillMissing(state.rules.performance as unknown as Record<string, unknown>, DEFAULT_RULES.performance as unknown as Record<string, unknown>);
   fillMissing(state.rules.ferrari as unknown as Record<string, unknown>, DEFAULT_RULES.ferrari as unknown as Record<string, unknown>);
   fillMissing(state.rules.astonMartin as unknown as Record<string, unknown>, DEFAULT_RULES.astonMartin as unknown as Record<string, unknown>);
   fillMissing(state.rules.racingBulls as unknown as Record<string, unknown>, DEFAULT_RULES.racingBulls as unknown as Record<string, unknown>);
@@ -311,6 +314,23 @@ export function migrateState(state: GameState): GameState {
         }
       }
     } else delete state.weekend.supernaturalCarEffects;
+    for (const setup of Object.values(state.weekend.setup ?? {})) {
+      setup.confidence = Number.isFinite(setup.confidence) ? Math.max(0, Math.min(100, setup.confidence)) : 0;
+      setup.tyreKnowledge = Number.isFinite(setup.tyreKnowledge) ? Math.max(0, Math.min(100, setup.tyreKnowledge)) : 0;
+      setup.thermalKnowledge = Number.isFinite(setup.thermalKnowledge) ? Math.max(0, Math.min(100, setup.thermalKnowledge!)) : Math.round(setup.tyreKnowledge * .75);
+      setup.trackKnowledge = Number.isFinite(setup.trackKnowledge) ? Math.max(0, Math.min(100, setup.trackKnowledge!)) : Math.round(setup.confidence * .75);
+      setup.qualiBonus = Number.isFinite(setup.qualiBonus) ? Math.max(0, Math.min(state.rules.performance.qualiBonusMax, setup.qualiBonus)) : 0;
+    }
+    if (state.weekend.practiceBaseline && typeof state.weekend.practiceBaseline !== 'object') delete state.weekend.practiceBaseline;
+  }
+  for (const track of Object.values(state.tracks ?? {})) {
+    track.surfaceTemperature = Number.isFinite(track.surfaceTemperature) ? Math.max(10, Math.min(65, track.surfaceTemperature!)) : 32;
+    track.thermalDemand = Number.isFinite(track.thermalDemand) ? Math.max(0, Math.min(100, track.thermalDemand!)) : track.tyreStress;
+  }
+  for (const tyre of Object.values(state.rules.tyres ?? {})) {
+    const fallback: [number, number] = tyre.wet ? [58, 78] : [80, 105];
+    if (!Array.isArray(tyre.temperatureWindow) || tyre.temperatureWindow.length !== 2 || !tyre.temperatureWindow.every(Number.isFinite) || tyre.temperatureWindow[0] < 20 || tyre.temperatureWindow[1] > 140 || tyre.temperatureWindow[0] >= tyre.temperatureWindow[1]) tyre.temperatureWindow = fallback;
+    if (!Number.isFinite(tyre.warmupRate) || tyre.warmupRate! < .05 || tyre.warmupRate! > 1) tyre.warmupRate = tyre.wet ? .4 : .32;
   }
   const aduoPartsBeforePuMigration = new Set([...(state.rules.aduo?.parts ?? []), 'power_unit', 'ers']);
   const activePuDesignsBeforeMigration = new Map(Object.values(state.teams).map(team => [
@@ -323,6 +343,9 @@ export function migrateState(state: GameState): GameState {
     // Do not attempt to resume malformed or incompatible private simulation data.
     if (live.version !== 1 || !live.id || !Array.isArray(live.weatherTrajectory) || !live.cars || !Number.isFinite(live.rngState) || live.completedLaps < 0 || live.completedLaps > live.totalLaps) state.weekend.liveRace = null;
     else {
+      // A missing marker means this session began before the unified model.
+      // Never mutate its frozen values or rerun a start sequence.
+      live.physicsVersion ??= 1;
       live.strategistSkill ??= state.teams[state.meta.playerTeamId]?.staff.strategist.skill ?? 50;
       live.redFlags ??= 0;
       live.redFlag ??= null;
@@ -353,6 +376,10 @@ export function migrateState(state: GameState): GameState {
           ...PU_COMBUSTION_PARTS.map(type => [type, car.iceReliability]),
           ...PU_ELECTRICAL_PARTS.map(type => [type, car.electricalReliability]),
         ]);
+        if (live.physicsVersion === 2) {
+          car.tyreWearAge ??= car.tyreAge;
+          car.tyreTemperature ??= 70;
+        }
       }
     }
   }
@@ -402,6 +429,9 @@ export function migrateState(state: GameState): GameState {
   }
   if (state.rules.tyres[state.rules.wetCompound]?.name === '雨胎') state.rules.tyres[state.rules.wetCompound].name = '半雨胎';
   migrateTyreInventory(state);
+  for (const team of Object.values(state.teams)) for (const inventory of Object.values(team.tyreInventory ?? {})) {
+    for (const set of inventory) set.wearAge = Number.isFinite(set.wearAge) ? Math.max(0, set.wearAge!) : Math.max(0, set.laps);
+  }
   if (state.weekend?.practiceReturn) {
     const team = state.teams[state.meta.playerTeamId];
     const key = `${state.season.year}:r${state.weekend.roundIndex + 1}`;

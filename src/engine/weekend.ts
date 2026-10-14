@@ -8,6 +8,7 @@ import { createPreRaceRainWindow, createWeatherTrajectory } from './raceWeather'
 import { Rng } from './rng';
 import { raceEngineerFor, staffAbility } from './staff';
 import { effectiveSetup } from './supernatural';
+import { practiceEffects, trackFit } from './performance';
 import { ensureDriverWeekendTyres, provisionWeekendTyres, returnEligibleTyreSets, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
 import type {
   DriverPlan,
@@ -53,6 +54,8 @@ function baseSetup(team: TeamState, slot: number): SetupState {
   return {
     confidence: round1(25 + team.facilities.simulator * 5 + staffAbility(engineer, 'setup') * 0.1),
     tyreKnowledge: round1(20 + staffAbility(team.staff.strategist, 'strategy') * 0.1),
+    thermalKnowledge: round1(18 + staffAbility(engineer, 'communication') * 0.08),
+    trackKnowledge: round1(18 + team.facilities.simulator * 4),
     qualiBonus: 0,
   };
 }
@@ -93,6 +96,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     raceWeatherSeed,
     ...(rainBias ? { supernaturalRainBias: rainBias } : {}),
     setup: {},
+    practiceBaseline: {},
     plans: {},
     teamOrders: prev?.teamOrders ? deepClone(prev.teamOrders) : { mode: 'free', favorDriverId: null },
     penalties: {},
@@ -120,6 +124,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
   for (const { driver, team, car } of activeEntries(state)) {
     ensureDriverWeekendTyres(state, team, driver.id);
     weekend.setup[driver.id] = baseSetup(team, car.slot);
+    (weekend.practiceBaseline ??= {})[driver.id] = deepClone(weekend.setup[driver.id]);
     const old = prev?.plans[driver.id];
     weekend.plans[driver.id] = old ? { ...deepClone(old), tyrePlan: 'auto', sprintTyre: 'auto' } : deepClone(DEFAULT_PLAN);
   }
@@ -140,12 +145,22 @@ function setupOf(state: GameState, driverId: string, team: TeamState, slot: numb
   return w.setup[driverId];
 }
 
-const PROGRAM: Record<PracticeProgram, { setup: number; tyre: number; quali: number }> = {
-  setup: { setup: 1, tyre: 0.35, quali: 0 },
-  longrun: { setup: 0.4, tyre: 1, quali: 0 },
-  quali_sim: { setup: 0.6, tyre: 0.2, quali: 0.08 },
-  parts: { setup: 0.35, tyre: 0.3, quali: 0 },
+const PROGRAM: Record<PracticeProgram, { setup: number; tyre: number; thermal: number; track: number; quali: number }> = {
+  setup: { setup: 1, tyre: 0.35, thermal: .3, track: .9, quali: 0 },
+  longrun: { setup: 0.4, tyre: 1, thermal: 1, track: .35, quali: 0 },
+  quali_sim: { setup: 0.6, tyre: 0.2, thermal: .2, track: .85, quali: 0.08 },
+  parts: { setup: 0.35, tyre: 0.3, thermal: .25, track: .3, quali: 0 },
 };
+
+function aiPracticeProgram(setup: SetupState): PracticeProgram {
+  const rows: Array<[PracticeProgram, number]> = [
+    ['longrun', 100 - ((setup.tyreKnowledge + (setup.thermalKnowledge ?? 0)) / 2)],
+    ['setup', 100 - ((setup.confidence + (setup.trackKnowledge ?? 0)) / 2)],
+    ['quali_sim', 100 - Math.min(100, setup.qualiBonus / .2 * 100)],
+    ['parts', 0],
+  ];
+  return rows.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+}
 
 export function runPractice(state: GameState, rng: Rng): PracticeResult {
   const w = state.weekend!;
@@ -160,18 +175,23 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
   const result: PracticeResult = { timesheet: [], gains: {}, events: [] };
 
   for (const { driver, team, car } of activeEntries(state)) {
-    const plan = team.isPlayer ? planOf(state, driver.id) : { ...DEFAULT_PLAN };
-    const program = PROGRAM[plan.practiceProgram] ? plan.practiceProgram : 'setup';
-    const f = PROGRAM[program];
     const setup = setupOf(state, driver.id, team, car.slot);
+    const plan = team.isPlayer ? planOf(state, driver.id) : { ...DEFAULT_PLAN };
+    const program = team.isPlayer && PROGRAM[plan.practiceProgram] ? plan.practiceProgram : aiPracticeProgram(setup);
+    const f = PROGRAM[program];
     const engineer = raceEngineerFor(team, car.slot);
     const base =
       (18 + driver.attrs.feedback * 0.18 + staffAbility(engineer, 'setup') * 0.07 + staffAbility(engineer, 'communication') * 0.03 + team.facilities.simulator * 3) * rng.range(0.85, 1.15);
     const setupGain = base * f.setup * sessionMul * (wet ? 0.7 : 1);
     const tyreGain = base * f.tyre * sessionMul * (wet ? 0.5 : 1);
+    const thermalGain = base * f.thermal * sessionMul * (wet ? .6 : 1);
+    const trackGain = base * f.track * sessionMul * (wet ? .75 : 1);
+    const qualiGain = f.quali * (0.6 + driver.attrs.feedback / 250);
     setup.confidence = round1(clamp(setup.confidence + setupGain, 0, 100));
     setup.tyreKnowledge = round1(clamp(setup.tyreKnowledge + tyreGain, 0, 100));
-    setup.qualiBonus = round3(f.quali * (0.6 + driver.attrs.feedback / 250));
+    setup.thermalKnowledge = round1(clamp((setup.thermalKnowledge ?? 0) + thermalGain, 0, 100));
+    setup.trackKnowledge = round1(clamp((setup.trackKnowledge ?? 0) + trackGain, 0, 100));
+    setup.qualiBonus = round3(clamp(setup.qualiBonus + qualiGain, 0, rules.performance.qualiBonusMax));
 
     const verified: string[] = [];
     if (program === 'parts') {
@@ -183,7 +203,7 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
         }
       }
     }
-    result.gains[driver.id] = { setup: round1(setupGain), tyre: round1(tyreGain), program, verified };
+    result.gains[driver.id] = { setup: round1(setupGain), tyre: round1(tyreGain), thermal: round1(thermalGain), track: round1(trackGain), quali: round3(qualiGain), program, verified };
 
     const score = trackScore(carRatings(team, car, rules), track);
     const time =
@@ -261,8 +281,7 @@ function qualiLap(
     (track.baseLap - 1.2) * (wet ? 1.12 : 1) +
     (100 - score) * rules.secPerCarPoint +
     (100 - qualiSkill(driver, wet)) * rules.secPerDriverPoint -
-    (setup.confidence / 100) * 0.3 -
-    setup.qualiBonus +
+    practiceEffects(setup, rules, trackFit(carRatings(team, team.cars.find(car => car.driverId === driver.id)!, rules), track)).quali +
     approach.mean -
     sessionIndex * 0.12 +
     rng.normal(0, sigma);
