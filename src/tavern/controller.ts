@@ -19,6 +19,7 @@ import {
   type ProjectPreview,
 } from '../engine/development';
 import { createGame, type NewGameOptions } from '../engine/newgame';
+import { addNarration } from '../engine/log';
 import { migrateState } from '../engine/migrate';
 import { previewContractOffer } from '../engine/market';
 import { buildStatePrompt } from '../engine/prompt';
@@ -1215,6 +1216,20 @@ export class F1Controller {
     return current;
   }
 
+  private negotiationNarrationDetail(session: ActiveNegotiation, outcome: string): string {
+    const transcript = session.messages.map(message => `${message.speaker}：${message.text}`).join('\n');
+    return `${transcript}\n谈判结果：${outcome}`;
+  }
+
+  private async triggerNegotiationNarration(): Promise<void> {
+    try {
+      const result = await this.requestNarration('（特殊谈判已经结束。请根据【待叙述事件】和谈判记录，把过程与结果写成连续的 SillyTavern 正文。）');
+      if (!result.ok) this.env.toast('warning', result.message);
+    } catch (error) {
+      this.env.toast('warning', error instanceof Error ? `特殊谈判正文生成失败：${error.message}` : '特殊谈判正文生成失败');
+    }
+  }
+
   async sendSpecialNegotiationTurn(request: { text: unknown; sessionId: unknown }): Promise<NegotiationResult> {
     const fail = (message: string): NegotiationResult => ({ ok: false, message, session: this.getSpecialNegotiation() });
     const session = this.specialNegotiation;
@@ -1259,6 +1274,11 @@ export class F1Controller {
       if (reply.status === 'breakdown') {
         session.status = 'breakdown';
         session.outcome = '谈判破裂，存档没有变化。';
+        const narrated = deepClone(latest.state);
+        addNarration(narrated, 'special_negotiation', `${definition.title}破裂`, this.negotiationNarrationDetail(session, session.outcome));
+        this.store.commit(narrated, { floor: Math.max(0, session.floor), kind: 'ui', label: `${definition.title}：谈判破裂` });
+        this.notify('negotiation');
+        await this.triggerNegotiationNarration();
         return { ok: true, message: session.outcome, session: this.getSpecialNegotiation() };
       }
       const choice = definition.choices[reply.choice!];
@@ -1267,12 +1287,19 @@ export class F1Controller {
       if (!applied.ok) {
         session.status = 'breakdown';
         session.outcome = `协议无法执行：${applied.message}`;
+        const narrated = deepClone(latest.state);
+        addNarration(narrated, 'special_negotiation', `${definition.title}未能执行`, this.negotiationNarrationDetail(session, session.outcome));
+        this.store.commit(narrated, { floor: Math.max(0, session.floor), kind: 'ui', label: `${definition.title}：协议未执行` });
+        this.notify('negotiation');
+        await this.triggerNegotiationNarration();
         return { ok: true, message: session.outcome, session: this.getSpecialNegotiation() };
       }
-      this.store.commit(applied.state, { floor: Math.max(0, session.floor), kind: 'ui', label: `${definition.title}：${choice.label}` });
       session.status = 'agreement';
       session.outcome = `${choice.label}。${applied.message}`;
+      addNarration(applied.state, 'special_negotiation', `${definition.title}达成协议`, this.negotiationNarrationDetail(session, session.outcome));
+      this.store.commit(applied.state, { floor: Math.max(0, session.floor), kind: 'ui', label: `${definition.title}：${choice.label}` });
       this.notify('negotiation');
+      await this.triggerNegotiationNarration();
       return { ok: true, message: session.outcome, session: this.getSpecialNegotiation() };
     } catch (error) {
       return fail(error instanceof Error ? error.message : '谈判 API 请求失败');
