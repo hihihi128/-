@@ -666,6 +666,26 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
   });
 
+  it('生命周期结算后的残留标记会解锁，但下一次生成开始会重新锁定面板', async () => {
+    env.generating = true;
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(false);
+
+    await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'normal', {}, false);
+    expect(ctrl.status().generating).toBe(true);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(false);
+
+    await env.fire(env.events.GENERATION_ENDED);
+    expect(ctrl.status().generating).toBe(false);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+
+    await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'normal', {}, false);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'suspension', ambition: 'standard' })).ok).toBe(false);
+
+    await env.fire(env.events.GENERATION_STOPPED);
+    expect(ctrl.status().generating).toBe(false);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'suspension', ambition: 'standard' })).ok).toBe(true);
+  });
+
   it('进入赛前阶段后的面板操作会直接启动本周随机事件', async () => {
     const save = JSON.parse(ctrl.exportSave()!);
     save.state.season.phase = 'pre_race';
@@ -673,6 +693,87 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect((await ctrl.importSave(JSON.stringify(save))).ok).toBe(true);
     expect((await ctrl.dispatch({ type: 'CLEAR_NARRATION' })).ok).toBe(true);
     expect(ctrl.stateAt()!.randomEvents?.current).toMatchObject({ status: 'awaiting_player' });
+  });
+
+  it('赛前的后续面板操作不会重复创建同一周的随机事件', async () => {
+    const save = JSON.parse(ctrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 1, maxPerWeek: 1, routineWeight: 1, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    expect((await ctrl.importSave(JSON.stringify(save))).ok).toBe(true);
+
+    expect((await ctrl.dispatch({ type: 'CLEAR_NARRATION' })).ok).toBe(true);
+    const first = ctrl.stateAt()!.randomEvents!;
+    const eventId = first.current!.id;
+    const weeklyStarted = first.weeklyStarted;
+
+    expect((await ctrl.dispatch({ type: 'CLEAR_NARRATION' })).ok).toBe(true);
+    expect(ctrl.stateAt()!.randomEvents).toMatchObject({ weeklyStarted, current: { id: eventId, status: 'awaiting_player' } });
+  });
+
+  it('随机事件内容准备期间只保留一次事件请求和一次最终提交', async () => {
+    const save = JSON.parse(ctrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 1, maxPerWeek: 1, routineWeight: 1, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    expect((await ctrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    const revisionsBefore = ctrl.status().revisions;
+    ctrl.updateSettings({ engineerProxyPreset: 'event-test' });
+    let requests = 0;
+    let release!: (text: string) => void;
+    env.generateText = async () => {
+      requests += 1;
+      return new Promise<string>(resolve => { release = resolve; });
+    };
+    env.messages.push({ role: 'assistant', swipes: [`赛前回复。${update(['{"op":"media","delta":0.1}'])}`], swipe_id: 0, variables: [{}] });
+    const eventMessageId = env.lastMessageId();
+    const preparing = ctrl.onMessageReceived(eventMessageId, 'normal');
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(requests).toBe(1);
+    expect(ctrl.status().revisions).toBe(revisionsBefore + 1);
+    expect(ctrl.stateAt()!.randomEvents?.current).toBeNull();
+    const duplicate = ctrl.onMessageReceived(eventMessageId, 'normal');
+    const blocked = await ctrl.dispatch({ type: 'CLEAR_NARRATION' });
+    expect(blocked).toMatchObject({ ok: false, message: expect.stringContaining('准备随机事件') });
+    expect(requests).toBe(1);
+
+    release('{"title":"固定事件","prompt":"固定题干","answerOptions":["甲","乙"]}');
+    await Promise.all([preparing, duplicate]);
+    expect(ctrl.status().revisions).toBe(revisionsBefore + 2);
+    expect(ctrl.stateAt()!.randomEvents).toMatchObject({ weeklyStarted: 1, current: { status: 'awaiting_player', title: '固定事件' } });
+  });
+
+  it('新周随机事件忽略过期周计数和历史，保持相同种子下的稳定选择', async () => {
+    const eventFor = async (staleWeeklyState: boolean) => {
+      const localEnv = new FakeTavern();
+      const localCtrl = new F1Controller(localEnv);
+      localCtrl.init();
+      expect((await localCtrl.newGame({ playerTeamId: 'team_c', seed: 2024 })).ok).toBe(true);
+      const save = JSON.parse(localCtrl.exportSave()!);
+      save.state.season.phase = 'pre_race';
+      save.state.rules.randomEvents = { minPerWeek: 1, maxPerWeek: 3, routineWeight: 1, noneWeight: 1, driverInjuryWeight: 1, windTunnelWeight: 1, partIssueWeight: 1, minDialogueTurns: 2, maxDialogueTurns: 2 };
+      if (staleWeeklyState) {
+        save.state.randomEvents = {
+          lastRoundKey: '0-w0-r0', weekKey: '0-w0-r0', weeklyQuota: 9, weeklyStarted: 7, current: null,
+          history: [{
+            id: 'old-event', roundKey: '0-w0-r0', kind: 'routine_social', category: 'routine', status: 'resolved',
+            title: '旧事件', detail: '旧事件细节', prompt: '旧事件细节', answerOptions: [], playerAnswer: null,
+            mainReply: null, outcomeSummary: '已结束', effects: [], generationError: null,
+            totalDialogueTurns: 1, completedDialogueTurns: 1, dialogue: [],
+          }],
+        };
+      }
+      expect((await localCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+      expect((await localCtrl.dispatch({ type: 'CLEAR_NARRATION' })).ok).toBe(true);
+      const weekly = localCtrl.stateAt()!.randomEvents!;
+      const event = weekly.current!;
+      return { weekKey: weekly.weekKey, weeklyQuota: weekly.weeklyQuota, weeklyStarted: weekly.weeklyStarted, kind: event.kind, category: event.category, title: event.title, prompt: event.prompt, answerOptions: event.answerOptions, roundKey: event.roundKey };
+    };
+
+    const clean = await eventFor(false);
+    const stale = await eventFor(true);
+    expect(stale).toEqual(clean);
+    expect(stale.weekKey).toBe(`${ctrl.stateAt()!.season.number}-w${ctrl.stateAt()!.season.week}-r${ctrl.stateAt()!.season.roundIndex}`);
+    expect(stale.weeklyStarted).toBe(1);
   });
 
   it('版本数量受上限约束，且当前状态始终可解析', async () => {
@@ -835,6 +936,22 @@ describe('流式生成、继续生成与重新开局', () => {
     expect(ctrl.stateAt()!.teams.team_c.projects).toHaveLength(1);
     expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 2, 1);
     expect(env.toasts.some(([, m]) => m.includes('面板操作'))).toBe(true);
+  });
+
+  it('停止生成后保留续写基线，使迟到的续写仍结算到本楼面板状态', async () => {
+    await env.userSays('谈谈');
+    const media0 = ctrl.stateAt()!.teams.team_c.mediaReputation;
+    const first = `第一段。${update(['{"op":"media","delta":2}'])}`;
+    const id = await env.aiReplies(first);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+
+    await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'continue', {}, false);
+    await env.fire(env.events.GENERATION_STOPPED);
+    await env.setMessageText(id, `${first}第二段。${update(['{"op":"media","delta":3}'])}`);
+    await ctrl.onMessageReceived(id, 'continue');
+
+    expect(ctrl.stateAt()!.teams.team_c.projects).toHaveLength(1);
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 5, 1);
   });
 
   it('没有面板操作时继续生成会按全文重新结算', async () => {

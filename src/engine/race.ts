@@ -914,7 +914,8 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
     if (engineerDecisionRoll(session, car, `light-rain:${car.engineerWeatherSpell ?? 0}`, risk.probability)) {
       car.engineerTyreOverride = state.rules.wetCompound;
       car.engineerTyreOverrideUntilLap = session.lap + risk.holdLaps;
-      liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师对小雨反应过度，要求提前换半雨胎`, [car.driverId], car.player);
+      const call = car.teamId === 'ferrari' ? '要求' : '建议';
+      liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师对小雨反应过度，${call}提前换半雨胎`, [car.driverId], car.player);
       return true;
     }
   }
@@ -926,7 +927,8 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
       if (dry) {
         car.engineerTyreOverride = dry;
         car.engineerTyreOverrideUntilLap = session.lap + risk.holdLaps;
-        liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师误判湿地，要求换上${state.rules.tyres[dry]?.name ?? dry}`, [car.driverId], car.player);
+        const call = car.teamId === 'ferrari' ? '要求' : '建议';
+        liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师误判湿地，${call}换上${state.rules.tyres[dry]?.name ?? dry}`, [car.driverId], car.player);
         return true;
       }
     }
@@ -948,7 +950,7 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const differentCompound = targetCompound !== car.tyre;
   const weatherReady = aiWeatherStopReady(state, session, car, targetCompound);
   const weatherStop = differentCompound && (weatherReady || (car.teamId === 'ferrari' && engineerOverride));
-  const plannedStop = !weatherStop && planned && differentCompound && car.tyreAge >= pitTriggerLap(car);
+  const plannedStop = !weatherStop && planned && car.tyreAge >= pitTriggerLap(car);
   const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
   const neutralActive = session.scLeft > 0 || session.vscLeft > 0;
   if (!neutralActive) car.neutralStopTaken = false;
@@ -967,6 +969,10 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
     // A decision can choose a compound, but it takes effect only after this car
     // has actually entered the pits. AI changes respond to the public surface.
     car.tyre = targetCompound;
+    if (weatherStop && !state.rules.tyres[targetCompound]?.wet) {
+      const matchingDryStint = car.plannedCompounds.slice(car.stintIndex + 1).findIndex(compound => compound === targetCompound);
+      if (matchingDryStint >= 0) car.stintIndex += matchingDryStint + 1;
+    }
     const replacement = takeTyreSet(state.teams[car.teamId], car.driverId, car.tyre, weekendTyreKey(state), car.tyreSetId);
     car.tyreSetId = replacement?.id;
     car.tyreAge = replacement?.laps ?? 0;

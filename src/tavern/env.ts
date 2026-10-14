@@ -73,6 +73,7 @@ export interface TavernEnv {
     CHAT_CHANGED: string;
     GENERATION_AFTER_COMMANDS: string;
     GENERATION_ENDED: string;
+    GENERATION_STOPPED: string;
   };
 }
 
@@ -330,6 +331,7 @@ export function createTavernEnv(): TavernEnv {
       CHAT_CHANGED: ev('CHAT_CHANGED', 'chat_id_changed'),
       GENERATION_AFTER_COMMANDS: ev('GENERATION_AFTER_COMMANDS', 'GENERATION_AFTER_COMMANDS'),
       GENERATION_ENDED: ev('GENERATION_ENDED', 'generation_ended'),
+      GENERATION_STOPPED: ev('GENERATION_STOPPED', 'generation_stopped'),
     },
   };
 }

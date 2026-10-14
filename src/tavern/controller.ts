@@ -296,6 +296,7 @@ export class F1Controller {
     const e = this.env.events;
     this.env.on(e.MESSAGE_RECEIVED, (id: number, type?: string) => void this.onMessageReceived(Number(id), type));
     this.env.on(e.GENERATION_ENDED, () => void this.onGenerationEnded());
+    this.env.on(e.GENERATION_STOPPED, () => this.onGenerationStopped());
     this.env.on(e.GENERATION_AFTER_COMMANDS, (type: string, _opts: unknown, dryRun: boolean) => this.onGenerationStart(type, dryRun));
     this.env.on(e.MESSAGE_EDITED, (id: number) => void this.onMessageEdited(Number(id)));
     this.env.on(e.CHAT_CHANGED, () => this.onChatChanged());
@@ -427,13 +428,18 @@ export class F1Controller {
   }
 
   private generationInProgress(): boolean {
-    return this.generationState === 'unknown' ? this.env.isGenerating() : this.generationState === 'active';
+    return this.generationState === 'unknown'
+      ? this.env.isGenerating()
+      : this.generationState === 'active' && this.env.isGenerating();
   }
 
   private startWeeklyRandomEvent(state: GameState): RandomEventRecord | null {
-    const ordinal = (state.randomEvents?.weeklyStarted ?? 0) + 1;
+    const weekKey = `${state.season.number}-w${state.season.week}-r${state.season.roundIndex}`;
+    const ordinal = (state.randomEvents?.weekKey === weekKey ? state.randomEvents.weeklyStarted : 0) + 1;
     const seed = (state.rng
       ^ Math.imul(state.season.year, 0x45d9f3b)
+      ^ Math.imul(state.season.number, 0x27d4eb2d)
+      ^ Math.imul(state.season.week + 1, 0x165667b1)
       ^ Math.imul(state.season.roundIndex + 1, 0x119de1f3)
       ^ Math.imul(ordinal, 0x3449f1d)) >>> 0;
     return triggerNextWeeklyRandomEvent(state, new Rng(seed));
@@ -705,6 +711,7 @@ export class F1Controller {
     if (this.busy) return { ok: false, message: '上一个操作还在处理中' };
     if (this.adjudicatingRandomEventId) return { ok: false, message: '副 API 正在判定随机事件，请等待判定结束后再操作' };
     if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成回复，请等待生成结束后再操作' };
+    if (this.preparingWeeklyRandomEvent) return { ok: false, message: '正在准备随机事件，请稍候' };
     const floor = this.latestFloor();
     let cur = this.store.resolve(floor);
     if (!cur) return { ok: false, message: '还没有开局' };
@@ -1483,6 +1490,11 @@ export class F1Controller {
       }
       if (!randomEventNarration) await this.maybeStartRandomEventAfterChat(last);
     }
+  }
+
+  onGenerationStopped(): void {
+    this.generationState = 'settled';
+    this.notify('generation-stopped');
   }
 
   async onMessageReceived(id: number, type?: string): Promise<void> {
