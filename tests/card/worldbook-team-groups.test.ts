@@ -14,6 +14,7 @@ const teams = YAML.parse(readFileSync(path.join(dir, 'data-teams.yaml'), 'utf8')
     aeroChief: { name?: string };
     raceEngineer: { name: string };
     raceEngineer2: { name: string };
+    pitCrew: { name?: string };
     strategist: { name: string; abilities: { risk: number } };
   };
 }>;
@@ -72,6 +73,14 @@ describe('车队策略组与技术赛道核心组世界书', () => {
     for (const team of teams) {
       expect(strategyFiles).toContain(`lore-strategy-${slugs[team.id]}.md`);
       expect(staffFiles).toContain(`lore-staff-${slugs[team.id]}.md`);
+    }
+  });
+
+  it('所有员工条目都有可显示的姓名或组名', () => {
+    for (const team of teams) {
+      for (const [role, staff] of Object.entries(team.staff)) {
+        expect(staff.name?.trim(), `${team.id}.${role}`).toBeTruthy();
+      }
     }
   });
 
