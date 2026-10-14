@@ -150,10 +150,13 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(second).toMatchObject({ ok: true, session: { round: 2, status: 'agreement' } });
     expect(specialCtrl.stateAt()!.audi?.alliance).toBe(true);
     expect(specialCtrl.listRevisions()[0].label).toContain('ADUO 四队联盟谈判');
-    expect(specialEnv.triggered).toBe(1);
-    expect(specialEnv.created.at(-1)).toContain('特殊谈判已经结束');
+    expect(specialEnv.triggered).toBe(0);
+    expect(specialEnv.created).toHaveLength(0);
     expect(specialCtrl.stateAt()!.narration.at(-1)).toMatchObject({ kind: 'special_negotiation', title: 'ADUO 四队联盟谈判达成协议' });
     expect(specialCtrl.stateAt()!.narration.at(-1)?.detail).toContain('谈判结果：达成四队联盟');
+    expect((await specialCtrl.requestNarration()).ok).toBe(true);
+    expect(specialEnv.triggered).toBe(1);
+    expect(specialEnv.created.at(-1)).toContain('待叙述事件');
   });
 
   it('谈判破裂、取消或等待期间换档都不会修改事件状态', async () => {
@@ -172,7 +175,7 @@ describe('后端控制器（模拟酒馆环境）', () => {
     const breakdown = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '奥迪不能再让步。' });
     expect(breakdown).toMatchObject({ ok: true, session: { status: 'breakdown', round: 2 } });
     expect(specialCtrl.stateAt()!.audi?.alliance).toBe(false);
-    expect(specialEnv.triggered).toBe(1);
+    expect(specialEnv.triggered).toBe(0);
     expect(specialCtrl.stateAt()!.narration.at(-1)).toMatchObject({ kind: 'special_negotiation', title: 'ADUO 四队联盟谈判破裂' });
     expect(specialCtrl.cancelSpecialNegotiation()).toMatchObject({ ok: true, session: null });
 
