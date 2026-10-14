@@ -51,6 +51,14 @@ import {
   randomEventResolutionPrompt,
 } from './randomEventFlow';
 import { parseStrategyReview, strategyReviewPrompt, type RacePlanFields, type StrategyReview } from './strategyReview';
+import {
+  isSpecialActionNarrationMarker,
+  specialActionNarrationMessage,
+  SPECIAL_ACTION_NARRATION_VAR,
+  type SpecialAction,
+  type SpecialActionNarrationMarker,
+  validateSpecialActionRequest,
+} from './specialActionContext';
 import { AI_PTR, GAME_PTR, PTR, SaveStore, type RevisionInfo } from './store';
 
 export const HUD_TAG = '<F1M_HUD/>';
@@ -213,6 +221,28 @@ export interface RandomEventResolutionResult extends Outcome {
   mainReply: string | null;
 }
 
+export type SpecialActionNarrationStatus = 'not_requested' | 'pending' | 'completed' | 'failed' | 'stale';
+
+export interface SpecialActionResult extends Outcome {
+  requestId: string;
+  actionApplied: boolean;
+  actionRevisionId?: string;
+  narrationStatus: SpecialActionNarrationStatus;
+}
+
+interface SpecialActionReceipt {
+  requestId: string;
+  action: SpecialAction;
+  contextText: string;
+  chatId: string;
+  gameId: string;
+  floor: number;
+  actionRevisionId: string;
+  userFloor: number | null;
+  narrationStatus: SpecialActionNarrationStatus;
+  message: string;
+}
+
 interface PendingRandomEventNarration {
   chatId: string;
   gameId: string;
@@ -313,6 +343,8 @@ export class F1Controller {
   private strategyReviewTokens = new Map<string, number>();
   private strategyReviewSerial = 0;
   private pendingRandomEventNarration: PendingRandomEventNarration | null = null;
+  private specialActionReceipt: SpecialActionReceipt | null = null;
+  private readonly specialActionReceipts = new Map<string, SpecialActionReceipt>();
   private adjudicatingRandomEventId: string | null = null;
   private preparingWeeklyRandomEvent = false;
   /**
@@ -631,6 +663,7 @@ export class F1Controller {
       latestFloor: last,
       anchorFloor: resolved?.floor ?? null,
       revisionId: resolved?.rev.id ?? null,
+      specialAction: this.specialActionStatus(),
       fallback: resolved?.fallback ?? false,
       revisions: this.store.revisionCount,
       storeSize: this.store.totalSize,
@@ -645,6 +678,18 @@ export class F1Controller {
           }
         : null,
       userName: this.env.userName(),
+    };
+  }
+
+  private specialActionStatus(): Omit<SpecialActionResult, 'ok'> | null {
+    const receipt = this.specialActionReceipt;
+    if (!receipt) return null;
+    return {
+      requestId: receipt.requestId,
+      message: receipt.message,
+      actionApplied: true,
+      actionRevisionId: receipt.actionRevisionId,
+      narrationStatus: this.specialActionCurrent(receipt) ? receipt.narrationStatus : 'stale',
     };
   }
 
@@ -855,6 +900,7 @@ export class F1Controller {
     }
     this.store.reset(state.gameId);
     this.specialNegotiation = null;
+    this.staleSpecialAction();
     const floor = Math.max(0, this.latestFloor());
     this.store.commit(state, { floor, kind: 'new', label: `新开局：${state.teams[state.meta.playerTeamId].name}`, parent: null });
     this.invalidateStrategyReviews();
@@ -905,6 +951,7 @@ export class F1Controller {
         }
       }
       this.store.commit(res.state, { floor: Math.max(0, floor), kind: 'ui', label: res.message });
+      this.staleSpecialAction();
       this.invalidateStrategyReviews();
       this.notify('action');
       if (this.settings.autoNarrate && isSimulation(action as Action) && res.state.narration.length) {
@@ -913,6 +960,116 @@ export class F1Controller {
       return { ok: true, message: `${res.message}${strategySummary}` };
     } finally {
       this.busy = false;
+    }
+  }
+
+  async executeSpecialAction(request: unknown): Promise<SpecialActionResult> {
+    const invalid = validateSpecialActionRequest(request);
+    if (!invalid.ok) return this.specialActionFailure('', invalid.message);
+    const existing = this.specialActionReceipts.get(invalid.requestId);
+    if (existing?.requestId === invalid.requestId) return this.specialActionResult(existing, this.specialActionCurrent(existing));
+    if (this.busy || this.generationInProgress() || this.adjudicatingRandomEventId || this.preparingWeeklyRandomEvent) return this.specialActionFailure(invalid.requestId, '当前已有生成或存档操作，请稍后再试');
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    if (!current || current.rev.id !== invalid.expectedRevisionId) return this.specialActionFailure(invalid.requestId, '存档版本已经变化，请重新选择动作');
+    const guard = { chatId: this.env.chatId(), gameId: current.state.gameId, floor };
+    this.busy = true;
+    try {
+      const applied = dispatch(current.state, invalid.action);
+      if (!applied.ok) return this.specialActionFailure(invalid.requestId, applied.message);
+      const revision = this.store.commit(applied.state, { floor: Math.max(0, floor), kind: 'ui', label: applied.message });
+      const receipt: SpecialActionReceipt = {
+        requestId: invalid.requestId, action: invalid.action, contextText: invalid.contextText,
+        chatId: guard.chatId, gameId: guard.gameId, floor: guard.floor, actionRevisionId: revision.id, userFloor: null,
+        narrationStatus: invalid.contextText ? 'pending' : 'not_requested',
+        message: invalid.contextText ? '动作已执行，正在请求主聊天叙述' : applied.message,
+      };
+      this.specialActionReceipt = receipt;
+      this.specialActionReceipts.set(receipt.requestId, receipt);
+      if (this.specialActionReceipts.size > 64) this.specialActionReceipts.delete(this.specialActionReceipts.keys().next().value!);
+      this.invalidateStrategyReviews();
+      this.notify('special_action');
+      if (!invalid.contextText) return this.specialActionResult(receipt, true);
+      return await this.startSpecialActionNarration(receipt, applied.message);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  async retrySpecialActionNarration(request: unknown): Promise<SpecialActionResult> {
+    if (!isObjectWithExactKeys(request, ['requestId', 'expectedRevisionId']) || typeof request.requestId !== 'string' || typeof request.expectedRevisionId !== 'string') return this.specialActionFailure('', '重试请求字段无效');
+    const receipt = this.specialActionReceipts.get(request.requestId);
+    if (!receipt || receipt.requestId !== request.requestId) return this.specialActionFailure(request.requestId, '找不到可重试的特殊动作叙述');
+    if (receipt.narrationStatus !== 'failed') return this.specialActionResult(receipt, this.specialActionCurrent(receipt));
+    if (this.busy || this.generationInProgress()) return this.specialActionFailure(receipt.requestId, '当前已有生成或存档操作，请稍后再试', true, receipt);
+    if (request.expectedRevisionId !== receipt.actionRevisionId || !this.specialActionCurrent(receipt)) return this.staleSpecialActionResult(receipt);
+    this.busy = true;
+    try {
+      receipt.narrationStatus = 'pending';
+      receipt.message = '正在重试主聊天叙述';
+      this.notify('special_action');
+      return await this.startSpecialActionNarration(receipt, receipt.message);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async startSpecialActionNarration(receipt: SpecialActionReceipt, actionMessage: string): Promise<SpecialActionResult> {
+    try {
+      if (receipt.userFloor === null) {
+        await this.env.createUserMessage(specialActionNarrationMessage(receipt.action, actionMessage, receipt.contextText));
+        receipt.userFloor = this.latestFloor();
+        if (receipt.userFloor <= receipt.floor || this.env.chatId() !== receipt.chatId) return this.staleSpecialActionResult(receipt);
+        this.store.patchFloorVars(receipt.userFloor, { [SPECIAL_ACTION_NARRATION_VAR]: this.specialActionMarker(receipt) });
+      }
+      if (!this.specialActionCurrent(receipt)) return this.staleSpecialActionResult(receipt);
+      this.generationState = 'active';
+      await this.env.triggerGeneration();
+      receipt.message = '动作已执行，等待主聊天叙述完成';
+      this.notify('special_action');
+      return this.specialActionResult(receipt, true);
+    } catch (error) {
+      this.generationState = 'settled';
+      receipt.narrationStatus = 'failed';
+      receipt.message = `动作已执行，叙述未完成：${error instanceof Error ? error.message : '主聊天请求失败'}`;
+      this.notify('special_action');
+      return this.specialActionResult(receipt, false);
+    }
+  }
+
+  private specialActionMarker(receipt: SpecialActionReceipt): SpecialActionNarrationMarker {
+    return { version: 1, requestId: receipt.requestId, gameId: receipt.gameId, actionRevisionId: receipt.actionRevisionId, mode: 'narration_only' };
+  }
+
+  private specialActionCurrent(receipt: SpecialActionReceipt): boolean {
+    const latest = this.latestFloor();
+    const current = this.store.resolve(latest);
+    return this.env.chatId() === receipt.chatId && !!current && current.state.gameId === receipt.gameId && current.rev.id === receipt.actionRevisionId
+      && (receipt.userFloor === null ? latest === receipt.floor : latest === receipt.userFloor || latest === receipt.userFloor + 1)
+      && (receipt.userFloor === null || isSpecialActionNarrationMarker(this.env.getMessageVars(receipt.userFloor)[SPECIAL_ACTION_NARRATION_VAR]));
+  }
+
+  private specialActionResult(receipt: SpecialActionReceipt, current: boolean): SpecialActionResult {
+    const narrationStatus = current ? receipt.narrationStatus : 'stale';
+    return { ok: narrationStatus !== 'failed' && narrationStatus !== 'stale', message: narrationStatus === 'stale' ? '动作结果已过期' : receipt.message, requestId: receipt.requestId, actionApplied: true, actionRevisionId: receipt.actionRevisionId, narrationStatus };
+  }
+
+  private specialActionFailure(requestId: string, message: string, actionApplied = false, receipt?: SpecialActionReceipt): SpecialActionResult {
+    return { ok: false, message, requestId, actionApplied, ...(receipt ? { actionRevisionId: receipt.actionRevisionId } : {}), narrationStatus: receipt?.narrationStatus ?? 'failed' };
+  }
+
+  private staleSpecialActionResult(receipt: SpecialActionReceipt): SpecialActionResult {
+    receipt.narrationStatus = 'stale';
+    receipt.message = '动作已执行，但聊天或存档已变化，未继续叙述';
+    this.notify('special_action');
+    return this.specialActionResult(receipt, false);
+  }
+
+  private staleSpecialAction(): void {
+    const receipt = this.specialActionReceipt;
+    if (receipt && receipt.narrationStatus === 'pending') {
+      receipt.narrationStatus = 'stale';
+      receipt.message = '动作已执行，但后续操作已使叙述过期';
     }
   }
 
@@ -1224,6 +1381,7 @@ export class F1Controller {
     if (!rev) return { ok: false, message: '找不到该存档版本' };
     const state = this.store.stateOf(rev);
     this.specialNegotiation = null;
+    this.staleSpecialAction();
     this.invalidateStrategyReviews();
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'restore', label: `读档：${rev.label}` });
     await this.syncLeadershipWorldbook(state);
@@ -1250,6 +1408,7 @@ export class F1Controller {
     }
     migrateState(state);
     this.specialNegotiation = null;
+    this.staleSpecialAction();
     this.invalidateStrategyReviews();
     this.store.reset(state.gameId);
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'import', label: '导入存档', parent: null });
@@ -1748,6 +1907,7 @@ export class F1Controller {
     this.specialNegotiation = null;
     this.invalidateStrategyReviews();
     this.pendingRandomEventNarration = null;
+    this.staleSpecialAction();
     this.adjudicatingRandomEventId = null;
     this.generationState = 'unknown';
     this.recoverInterruptedRandomEvent();
@@ -1763,6 +1923,7 @@ export class F1Controller {
       this.adjudicatingRandomEventId = null;
     }
     this.recoverInterruptedRandomEvent();
+    this.staleSpecialAction();
     this.notify('chat');
   }
 
@@ -1794,8 +1955,10 @@ export class F1Controller {
     const msg = this.env.getMessage(last);
     if (msg?.role === 'assistant') {
       const randomEventNarration = this.isPendingRandomEventNarrationMessage(last);
+      const specialActionNarration = this.isSpecialActionNarrationMessage(last);
       const visibleReply = stripAiCommands(stripHud(msg.message ?? '')).trim();
-      await this.processAssistantMessage(last, { fallback: true, ignoreCommands: randomEventNarration });
+      await this.processAssistantMessage(last, { fallback: true, ignoreCommands: randomEventNarration || specialActionNarration });
+      this.finishSpecialActionNarration(last, visibleReply);
       if (randomEventNarration) {
         // A cancelled stream can leave SillyTavern's placeholder without ever
         // emitting MESSAGE_RECEIVED. It is not narration and must never reach
@@ -1808,12 +1971,17 @@ export class F1Controller {
           }
         } else await this.settleRandomEventNarration(last);
       }
-      if (!randomEventNarration) await this.maybeStartRandomEventAfterChat(last);
+      if (!randomEventNarration && !specialActionNarration) await this.maybeStartRandomEventAfterChat(last);
     }
   }
 
   onGenerationStopped(): void {
     this.generationState = 'settled';
+    const receipt = this.specialActionReceipt;
+    if (receipt?.narrationStatus === 'pending' && this.specialActionCurrent(receipt)) {
+      receipt.narrationStatus = 'failed';
+      receipt.message = '动作已执行，主聊天生成已停止；可仅重试叙述';
+    }
     this.notify('generation-stopped');
   }
 
@@ -1821,15 +1989,17 @@ export class F1Controller {
     this.generationState = 'settled';
     if (type === 'impersonate' || type === 'quiet' || type === 'first_message') return;
     const pendingNarration = this.isPendingRandomEventNarrationMessage(id);
+    const specialActionNarration = this.isSpecialActionNarrationMessage(id);
     const orphanedEvent = !this.pendingRandomEventNarration && this.store.resolve(id)?.state.randomEvents?.current?.status === 'awaiting_narration';
     if (orphanedEvent) {
       const event = this.store.resolve(id)?.state.randomEvents?.current;
       if (event) this.restoreRandomEventForRetry(event.id, '主 API 剧情被重新生成、切换或删除；请重新提交处理方案。', stripAiCommands(stripHud(this.env.getMessage(id)?.message ?? '')).trim() || null);
     }
-    await this.processAssistantMessage(id, { type, ignoreCommands: pendingNarration || orphanedEvent });
+    await this.processAssistantMessage(id, { type, ignoreCommands: pendingNarration || orphanedEvent || specialActionNarration });
+    this.finishSpecialActionNarration(id, stripAiCommands(stripHud(this.env.getMessage(id)?.message ?? '')).trim());
     if (orphanedEvent) return;
     await this.settleRandomEventNarration(id);
-    if (!pendingNarration) await this.maybeStartRandomEventAfterChat(id);
+    if (!pendingNarration && !specialActionNarration) await this.maybeStartRandomEventAfterChat(id);
   }
 
   private async maybeStartRandomEventAfterChat(id: number): Promise<void> {
@@ -1867,7 +2037,7 @@ export class F1Controller {
     }
     // 只有最新楼层的编辑会重新结算（中间楼层的修改不重算后续楼层）
     if (id !== this.latestFloor()) return;
-    await this.processAssistantMessage(id, { type: 'edit' });
+    await this.processAssistantMessage(id, { type: 'edit', ignoreCommands: this.isSpecialActionNarrationMessage(id) });
   }
 
   private processing = new Set<number>();
@@ -1875,6 +2045,25 @@ export class F1Controller {
   private isPendingRandomEventNarrationMessage(id: number): boolean {
     const pending = this.pendingRandomEventNarration;
     return !!pending && !!this.randomEventNarrationCurrent(pending, id);
+  }
+
+  private isSpecialActionNarrationMessage(id: number): boolean {
+    const own = this.env.getMessageVars(id)[SPECIAL_ACTION_NARRATION_VAR];
+    const previous = id > 0 ? this.env.getMessageVars(id - 1)[SPECIAL_ACTION_NARRATION_VAR] : undefined;
+    const marker = isSpecialActionNarrationMarker(own)
+      ? own
+      : isSpecialActionNarrationMarker(previous) && this.env.getMessage(id - 1)?.role === 'user' ? previous : null;
+    if (!marker || this.env.getMessage(id)?.role !== 'assistant') return false;
+    if (!isSpecialActionNarrationMarker(own)) this.store.patchFloorVars(id, { [SPECIAL_ACTION_NARRATION_VAR]: marker });
+    return true;
+  }
+
+  private finishSpecialActionNarration(id: number, visibleReply: string): void {
+    const receipt = this.specialActionReceipt;
+    if (!receipt || receipt.narrationStatus !== 'pending' || !this.isSpecialActionNarrationMessage(id) || !this.specialActionCurrent(receipt)) return;
+    receipt.narrationStatus = visibleReply && visibleReply !== STREAM_PLACEHOLDER ? 'completed' : 'failed';
+    receipt.message = receipt.narrationStatus === 'completed' ? '动作已执行，主聊天叙述已完成' : '动作已执行，主聊天没有返回叙述；可仅重试叙述';
+    this.notify('special_action');
   }
 
   /** 解析并结算一条 AI 回复（幂等：同样的文本不会重复结算） */
@@ -1935,10 +2124,11 @@ export class F1Controller {
       await this.ensureHud(id, text);
       return;
     }
-    const { commands, errors } = parseAiCommands(opts.ignoreCommands ? stripAiCommands(text) : text);
+    const narrationOnly = opts.ignoreCommands || this.isSpecialActionNarrationMessage(id);
+    const { commands, errors } = parseAiCommands(narrationOnly ? stripAiCommands(text) : text);
     const next = base.state;
     const logs = applyAiCommands(next, commands, { messageId: id });
-    const narrated = takeNarration(next);
+    const narrated = narrationOnly ? [] : takeNarration(next);
     const changes = describeChanges(next, logs, errors);
     if (logs.length === 0 && narrated.length === 0) {
       // 无状态变化：不生成新版本，清掉可能残留的旧指针（例如重新编辑去掉了指令）
@@ -1964,10 +2154,11 @@ export class F1Controller {
     const cur = this.store.resolve(id);
     const vars = this.env.getMessageVars(id);
     if (!cur) return;
-    const { commands, errors } = parseAiCommands(suffix);
+    const narrationOnly = this.isSpecialActionNarrationMessage(id);
+    const { commands, errors } = parseAiCommands(narrationOnly ? stripAiCommands(suffix) : suffix);
     const next = cur.state;
     const logs = applyAiCommands(next, commands, { messageId: id, prior: parseAiCommands(original).commands });
-    const narrated = takeNarration(next);
+    const narrated = narrationOnly ? [] : takeNarration(next);
     const changes = [...(Array.isArray(vars.f1m_changes) ? vars.f1m_changes : []), ...describeChanges(next, logs, errors)];
     const allNarrated = [...(Array.isArray(vars.f1m_narrated) ? vars.f1m_narrated : []), ...narrated];
     if (logs.length === 0 && narrated.length === 0) {
@@ -1998,6 +2189,12 @@ export class F1Controller {
 
 function stripHud(text: string): string {
   return text.split(HUD_TAG).join('');
+}
+
+function isObjectWithExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!value || Object.prototype.toString.call(value) !== '[object Object]') return false;
+  const actual = Object.keys(value as Record<string, unknown>);
+  return actual.length === keys.length && actual.every(key => keys.includes(key) && key !== '__proto__' && key !== 'constructor' && key !== 'prototype');
 }
 
 const UPDATE_BLOCK = /<F1M_UPDATE>[\s\S]*?<\/F1M_UPDATE>/gi;

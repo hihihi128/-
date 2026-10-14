@@ -13,6 +13,17 @@ import type { NegotiationSessionView } from '../../tavern/negotiation';
 type Status = ReturnType<F1ManagerApi['status']>;
 export type StrategyReviewRequest = Parameters<F1ManagerApi['requestStrategyReview']>[0];
 export type StrategyReviewResult = Awaited<ReturnType<F1ManagerApi['requestStrategyReview']>>;
+export interface SpecialActionRequest {
+  requestId: string;
+  action: Action;
+  contextText: string;
+  expectedRevisionId: string;
+}
+export interface RetrySpecialActionNarrationRequest {
+  requestId: string;
+  expectedRevisionId: string;
+}
+export type SpecialActionResult = Awaited<ReturnType<F1ManagerApi['executeSpecialAction']>>;
 
 export interface Toast {
   id: number;
