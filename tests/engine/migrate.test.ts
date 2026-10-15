@@ -23,11 +23,15 @@ describe('旧存档升级', () => {
     state.tracks.spa.rainChance = .48;
     state.teams.ferrari.staff.strategist.skill = 78;
     state.teams.ferrari.staff.strategist.abilities = { strategy: 76, weather: 74, reaction: 73, risk: 82 };
+    state.teams.williams.staff.strategist.id = '';
+    state.teams.williams.staff.strategist.name = `${state.teams.williams.name} strategist`;
+    state.teams.williams.staff.strategist.skill = 80;
     state.teams.mclaren.staff.strategist = { ...state.teams.mclaren.staff.strategist, id: 'hired-strategist', name: '玩家签约策略师', skill: 99 };
 
     const restored = migrateState(state);
     expect(restored.tracks.spa.rainChance).toBe(.24);
     expect(restored.teams.ferrari.staff.strategist).toMatchObject({ skill: 54, abilities: { strategy: 54, weather: 52, reaction: 52, risk: 82 } });
+    expect(restored.teams.williams.staff.strategist).toMatchObject({ id: 'williams-strategist', name: '夏尔-安托万·弗洛朗坦', skill: 85 });
     expect(restored.teams.mclaren.staff.strategist).toMatchObject({ id: 'hired-strategist', name: '玩家签约策略师', skill: 99 });
     expect(restored.flags['strategy-rain-balance-v1']).toBe(true);
 

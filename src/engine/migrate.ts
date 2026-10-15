@@ -190,7 +190,6 @@ function fillMissing(target: Record<string, unknown>, defaults: Record<string, u
 
 export function migrateState(state: GameState): GameState {
   if (!state?.rules || !state.teams) return state;
-  migrateStrategyAndRainBalance(state);
   // This is deliberately before the modern-save return: old or malformed saves
   // must never opt into a privileged mode merely by being loaded.
   if (state.meta) state.meta.supernaturalMode = state.meta.supernaturalMode === true;
@@ -365,6 +364,7 @@ export function migrateState(state: GameState): GameState {
   const hadMarket = !!state.market;
   ensureMarket(state);
   replaceLegacyStaffPlaceholders(state);
+  migrateStrategyAndRainBalance(state);
   if (!hadMarket && state.season?.phase === 'season_end') openMarket(state, state.season.year + 1);
   // Live race is additive and must be initialized before the legacy early return.
   // Never synthesize a session or consume RNG while loading an older save.
