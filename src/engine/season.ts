@@ -19,11 +19,30 @@ import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, find
 import type { Rng } from './rng';
 import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, PracticeReturnRequest, RaceResult, TeamState } from './types';
 import { clamp, deepClone, money, round1, round2 } from './util';
-import { completedPracticeSessions, createWeekend, currentRound, currentTrack, practiceSessionCount, runPractice, runQualifying } from './weekend';
+import { advanceQualifyingSegment, completedPracticeSessions, createWeekend, currentRound, currentTrack, practiceSessionCount, runPractice } from './weekend';
 import { driverTyreSets, weekendTyreKey } from './tyres';
 
 const ok = (message: string): Outcome => ({ ok: true, message });
 const fail = (message: string): Outcome => ({ ok: false, message });
+
+function validateRaceTyreSetPlans(state: GameState): Outcome {
+  const team = playerTeam(state);
+  const key = weekendTyreKey(state);
+  for (const car of team.cars) {
+    if (!car.driverId) continue;
+    const plan = state.weekend?.plans[car.driverId];
+    if (!plan?.raceTyreSetPlan?.length) continue;
+    if (!Array.isArray(plan.tyrePlan) || plan.raceTyreSetPlan.length !== plan.tyrePlan.length) {
+      return fail(`${driverName(state, car.driverId)} 必须为每个正赛赛段选择一套轮胎`);
+    }
+    const sets = driverTyreSets(team, car.driverId, key);
+    for (let index = 0; index < plan.tyrePlan.length; index++) {
+      const set = sets.find(candidate => candidate.id === plan.raceTyreSetPlan![index] && !candidate.returned);
+      if (!set || set.compound !== plan.tyrePlan[index]) return fail(`${driverName(state, car.driverId)} 的第 ${index + 1} 个正赛赛段轮胎组不可用`);
+    }
+  }
+  return ok('正赛轮胎组有效');
+}
 
 export interface NextAction {
   action: Action;
@@ -179,11 +198,12 @@ export function returnPracticeTyres(state: GameState, driverId: string, setIds: 
   return advanceAfterPracticeReturns(state);
 }
 
-export function doQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 'sprint_qualifying'): Outcome {
+export function doQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 'sprint_qualifying', tyreSetIds?: Record<string, string[]>): Outcome {
   if (state.season.phase !== kind || !state.weekend) return fail(`当前不是${LABELS.phase[kind]}阶段`);
-  const res = runQualifying(state, rng, kind);
-  state.season.phase = kind === 'qualifying' ? 'race' : 'sprint';
-  return ok(`${LABELS.phase[kind]}结束，杆位：${driverName(state, res.order[0])}`);
+  const step = advanceQualifyingSegment(state, rng, kind, tyreSetIds);
+  if (!step.ok) return fail(step.message);
+  if (step.result) state.season.phase = kind === 'qualifying' ? 'race' : 'sprint';
+  return ok(step.message);
 }
 
 /** Compatibility automatic finish. It resumes any paused matching session instead of rerolling it. */
@@ -192,6 +212,10 @@ export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint', aiPl
   let live = state.weekend.liveRace;
   if (live && live.kind !== kind) return fail('另一场比赛正在进行，不能重新发车');
   if (!live) {
+    if (kind === 'race') {
+      const validation = validateRaceTyreSetPlans(state);
+      if (!validation.ok) return validation;
+    }
     if (kind === 'race') applyAllocationFairness(state);
     live = createRaceSession(state, rng, kind, expectedPositions(state), aiPlans);
     state.weekend.liveRace = live;
@@ -213,6 +237,10 @@ export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint', aiPl
 export function startLiveRace(state: GameState, rng: Rng, kind: 'race' | 'sprint', aiPlans?: Record<string, Partial<DriverPlan>>): Outcome {
   if (state.season.phase !== kind || !state.weekend) return fail(`当前不是${LABELS.phase[kind]}阶段`);
   if (state.weekend.liveRace) return fail('比赛已经开始');
+  if (kind === 'race') {
+    const validation = validateRaceTyreSetPlans(state);
+    if (!validation.ok) return validation;
+  }
   if (kind === 'race') applyAllocationFairness(state);
   state.weekend.liveRace = createRaceSession(state, rng, kind, expectedPositions(state), aiPlans);
   return ok(`${LABELS.phase[kind]}已发车，等待起跑策略确认`);
@@ -543,7 +571,8 @@ function processCrashes(state: GameState, extras: RaceExtras, rng: Rng): string[
     if (!team || !car) continue;
     const destroyed: string[] = [];
     for (const [pt, def] of Object.entries(rules.parts)) {
-      const p = c.dnf ? def.crashDamage : pt === 'front_wing' ? 1 : 0;
+      const exactFailure = c.cause === 'power_unit' && c.affectedPartTypes?.includes(pt);
+      const p = exactFailure ? 1 : c.cause === 'power_unit' ? 0 : c.dnf ? def.crashDamage : pt === 'front_wing' ? 1 : 0;
       if (p <= 0 || !rng.chance(p)) continue;
       const lost = findSpec(team, pt, car.fitted[pt]);
       const replacement = pickReplacement(team, pt, lost);

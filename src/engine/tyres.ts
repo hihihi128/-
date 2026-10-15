@@ -115,6 +115,11 @@ export function takeTyreSet(team: TeamState, driverId: string, compound: Compoun
   return candidates[0] ?? null;
 }
 
+/** Resolve a specific usable physical set without changing its state. */
+export function tyreSetById(team: TeamState, driverId: string, key: string, setId: string): TyreSet | null {
+  return driverTyreSets(team, driverId, key).find(set => set.id === setId && !set.returned) ?? null;
+}
+
 export function useTyreSet(set: TyreSet | null | undefined, laps: number, wearIncrement = laps): void {
   if (!set) return;
   set.state = 'used';

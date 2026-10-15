@@ -25,6 +25,7 @@ const practiceSessions = computed(() => {
 });
 const practiceSessionTotal = computed(() => w.value?.practiceSessionTotal ?? 0);
 const returnSelections = ref<Record<string, string[]>>({});
+const qualifyingTyreSelections = ref<Record<string, string[]>>({});
 function toggleReturnSet(driverId: string, setId: string) {
   const selected = returnSelections.value[driverId] ?? [];
   const required = w.value?.practiceReturn?.required ?? 0;
@@ -85,6 +86,7 @@ function practiceTyreOptions(d: WeekendDriverView) {
 }
 
 const customPlans = ref<Record<string, string[]>>({});
+const customSetPlans = ref<Record<string, string[]>>({});
 const engineerApi = ref<Record<string, 'main' | 'secondary'>>({});
 const engineerSuggestions = ref<Record<string, EngineerStrategyResult>>({});
 const perfectSuggestions = ref<Record<string, EngineerStrategyResult>>({});
@@ -153,6 +155,8 @@ function percentChange(value: number | undefined): string {
 }
 watch(() => w.value?.roundIndex, () => {
   customPlans.value = {};
+  customSetPlans.value = {};
+  qualifyingTyreSelections.value = {};
   engineerSuggestions.value = {};
   perfectSuggestions.value = {};
   perfectOpen.value = false;
@@ -163,6 +167,38 @@ watch(() => practiceSessions.value.length, length => {
   if (length > 0) practiceResultIndex.value = length - 1;
 });
 watch(() => practiceSessions.value.length, () => { returnSelections.value = {}; });
+watch(() => w.value?.liveQualifying?.segmentIndex, () => { qualifyingTyreSelections.value = {}; });
+
+const qualifyingPhase = computed(() => phase.value === 'qualifying' || phase.value === 'sprint_qualifying');
+const qualifyingSegmentIndex = computed(() => w.value?.liveQualifying?.segmentIndex ?? 0);
+const qualifyingSegmentCount = computed(() => w.value?.liveQualifying?.segmentCount ?? 3);
+const qualifyingRuns = computed(() => phase.value === 'sprint_qualifying' ? 1 : qualifyingSegmentCount.value === 1 ? 3 : 2);
+const qualifyingSegmentLabel = computed(() => `${phase.value === 'sprint_qualifying' ? 'SQ' : 'Q'}${qualifyingSegmentCount.value === 1 ? '' : qualifyingSegmentIndex.value + 1}`);
+
+function qualifyingSetOptions(d: WeekendDriverView) {
+  const weather = phase.value === 'sprint_qualifying' ? w.value?.weather.sprintQualifying : w.value?.weather.qualifying;
+  const wet = weather === 'wet';
+  const sprintMedium = v.value.rules.dryCompounds[1] ?? v.value.rules.dryCompounds[0];
+  return d.tyreSets.filter(set => {
+    if (set.returned || !!v.value.labels.tyres[set.compound]?.wet !== wet) return false;
+    if (phase.value === 'sprint_qualifying' && qualifyingSegmentIndex.value < 2 && !wet) return set.compound === sprintMedium && set.state === 'new';
+    return true;
+  });
+}
+
+function qualifyingSelection(d: WeekendDriverView): string[] {
+  const options = qualifyingSetOptions(d);
+  const existing = qualifyingTyreSelections.value[d.driverId];
+  if (!existing || existing.length !== qualifyingRuns.value) {
+    qualifyingTyreSelections.value[d.driverId] = Array.from({ length: qualifyingRuns.value }, (_, index) => options[index % Math.max(1, options.length)]?.id ?? '');
+  }
+  return qualifyingTyreSelections.value[d.driverId];
+}
+
+function runQualifyingSegment() {
+  const tyreSetIds = Object.fromEntries((w.value?.drivers ?? []).map(d => [d.driverId, qualifyingSelection(d).filter(Boolean)]));
+  return act({ type: phase.value === 'sprint_qualifying' ? 'RUN_SPRINT_QUALIFYING' : 'RUN_QUALIFYING', tyreSetIds });
+}
 
 function customFor(d: WeekendDriverView): string[] {
   if (!customPlans.value[d.driverId]) {
@@ -172,18 +208,36 @@ function customFor(d: WeekendDriverView): string[] {
   return customPlans.value[d.driverId];
 }
 
+function customSetsFor(d: WeekendDriverView): string[] {
+  if (!customSetPlans.value[d.driverId]) customSetPlans.value[d.driverId] = [...(d.plan.raceTyreSetPlan ?? [])];
+  const sets = customSetPlans.value[d.driverId];
+  while (sets.length < customFor(d).length) sets.push('');
+  return sets;
+}
+
 function setCustomCompound(d: WeekendDriverView, index: number, compound: string) {
   customFor(d)[index] = compound;
+  customSetsFor(d)[index] = '';
 }
 
 function addCustomCompound(d: WeekendDriverView) {
   const plan = customFor(d);
-  if (plan.length < 4) plan.push(v.value.rules.dryCompounds[0]);
+  const sets = customSetsFor(d);
+  if (plan.length < 4) { plan.push(v.value.rules.dryCompounds[0]); sets.push(''); }
 }
 
 function removeCustomCompound(d: WeekendDriverView) {
   const plan = customFor(d);
-  if (plan.length > 2) plan.pop();
+  if (plan.length > 2) { plan.pop(); customSetsFor(d).pop(); }
+}
+
+function raceSetOptions(d: WeekendDriverView, compound: string) {
+  return d.tyreSets.filter(set => !set.returned && set.compound === compound);
+}
+
+function applyCustomPlan(d: WeekendDriverView) {
+  const sets = customSetsFor(d);
+  return setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)], raceTyreSetPlan: sets.every(Boolean) ? [...sets] : [] });
 }
 
 async function askEngineer(d: WeekendDriverView) {
@@ -322,7 +376,8 @@ const chartSeries = computed(() => {
         </div>
         <div class="row">
           <button v-if="v.narration.length" class="small" :disabled="generating" @click="call(a => a.requestNarration())">{{ raceResultNarration ? '让 AI 叙述比赛结果' : `让 AI 叙述（${v.narration.length}）` }}</button>
-          <button v-if="v.next" class="primary" :disabled="store.busy || generating" @click="act({ type: 'ADVANCE' })">▶ {{ v.next.label }}</button>
+          <button v-if="v.next && !qualifyingPhase" class="primary" :disabled="store.busy || generating" @click="act({ type: 'ADVANCE' })">▶ {{ v.next.label }}</button>
+          <button v-else-if="v.next && qualifyingPhase" class="primary" :disabled="store.busy || generating" @click="runQualifyingSegment">▶ 运行 {{ qualifyingSegmentLabel }}</button>
         </div>
       </div>
     </div>
@@ -413,6 +468,20 @@ const chartSeries = computed(() => {
               <button v-for="[k, label, tip] in approaches" :key="k" :title="tip" :class="{ on: d.plan.qualiApproach === k }" :disabled="done.qualifying || store.busy" @click="setPlan(d, { qualiApproach: k })">{{ label }}</button>
             </div>
           </div>
+          <div v-if="qualifyingPhase && (!w.liveQualifying || w.liveQualifying.alive.includes(d.driverId))" class="block stack-s">
+            <div class="label">{{ qualifyingSegmentLabel }} 实体轮胎组</div>
+            <div v-if="qualifyingSetOptions(d).length" class="row wrap">
+              <label v-for="run in qualifyingRuns" :key="run" class="small row">
+                第 {{ run }} 次出场
+                <select v-model="qualifyingSelection(d)[run - 1]" :disabled="store.busy">
+                  <option v-for="set in qualifyingSetOptions(d)" :key="set.id" :value="set.id">
+                    {{ v.labels.tyres[set.compound]?.name ?? set.compound }} · {{ set.id }} · {{ set.state === 'new' ? '新胎' : `${set.laps}L` }}
+                  </option>
+                </select>
+              </label>
+            </div>
+            <div v-else class="notice warn tiny">没有符合本分段规则的轮胎组。车手仍可参加，但本分段不会取得成绩。</div>
+          </div>
           <div v-if="isSprint && d.sprintOptions.length" class="block">
             <div class="label">冲刺赛轮胎</div>
             <div class="seg">
@@ -439,14 +508,23 @@ const chartSeries = computed(() => {
               <div v-if="(d.plan.strategySource ?? 'player') === 'player'" class="plan on">
                 <span class="badge">玩家</span>
                 <span class="small">自定轮胎方案</span>
-                <span class="row grow wrap" style="gap: 4px">
-                  <select v-for="(compound, index) in customFor(d)" :key="index" :value="compound" :disabled="done.race || store.busy" @change="setCustomCompound(d, index, ($event.target as HTMLSelectElement).value)">
-                    <option v-for="c in v.rules.dryCompounds" :key="c" :value="c">{{ v.labels.tyres[c]?.name ?? c }}</option>
-                  </select>
+                <span class="grow stack-s">
+                  <span v-for="(compound, index) in customFor(d)" :key="index" class="row wrap" style="gap: 4px">
+                    <span class="tiny muted">赛段 {{ index + 1 }}</span>
+                    <select :value="compound" :disabled="done.race || store.busy" @change="setCustomCompound(d, index, ($event.target as HTMLSelectElement).value)">
+                      <option v-for="c in v.rules.dryCompounds" :key="c" :value="c">{{ v.labels.tyres[c]?.name ?? c }}</option>
+                    </select>
+                    <select v-model="customSetsFor(d)[index]" :disabled="done.race || store.busy">
+                      <option value="">自动选择实体组</option>
+                      <option v-for="set in raceSetOptions(d, compound)" :key="set.id" :value="set.id">{{ set.id }} · {{ set.state === 'new' ? '新胎' : `${set.laps}L` }}</option>
+                    </select>
+                  </span>
+                  <span class="row" style="gap: 4px">
                   <button class="small" :disabled="done.race || store.busy || customFor(d).length >= 4" @click="addCustomCompound(d)">＋</button>
                   <button class="small" :disabled="done.race || store.busy || customFor(d).length <= 2" @click="removeCustomCompound(d)">－</button>
+                  </span>
                 </span>
-                <button class="small" :disabled="done.race || store.busy" @click="setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)] })">采用</button>
+                <button class="small" :disabled="done.race || store.busy" @click="applyCustomPlan(d)">采用</button>
               </div>
               <div v-else class="plan engineer-plan on">
                 <span v-if="currentStrategyReview(d)" class="badge warn">副 API 点评更正</span>

@@ -145,7 +145,7 @@ describe('完整赛季流程', () => {
 
   it('视图模型可以在每个阶段构建', () => {
     let s = newTestGame(99);
-    for (let i = 0; i < 300 && s.season.phase !== 'season_end'; i++) {
+    for (let i = 0; i < 400 && s.season.phase !== 'season_end'; i++) {
       const v = buildView(s);
       expect(v.player.cars).toHaveLength(2);
       expect(v.standings.teams).toHaveLength(11);

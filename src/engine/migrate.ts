@@ -386,6 +386,12 @@ export function migrateState(state: GameState): GameState {
     team.projects.filter(project => project.kind === 'design' && project.partType && aduoPartsBeforePuMigration.has(project.partType)).length,
   ]));
   migrateSixPartPowerUnit(state);
+  if (state.weekend?.liveQualifying) {
+    const live = state.weekend.liveQualifying;
+    if (live.version !== 1 || !Array.isArray(live.alive) || !Array.isArray(live.sessions) || live.segmentIndex < 0 || live.segmentIndex >= live.segmentCount) {
+      state.weekend.liveQualifying = null;
+    }
+  }
   if (state.weekend?.liveRace) {
     const live = state.weekend.liveRace;
     // Do not attempt to resume malformed or incompatible private simulation data.

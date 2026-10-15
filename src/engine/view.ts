@@ -261,6 +261,7 @@ export interface WeekendView {
   /** Latest practice result retained for consumers of the old view shape. */
   practice: PracticeResult | null;
   practiceReturn: { required: number; driverIds: string[] } | null;
+  liveQualifying: WeekendState['liveQualifying'];
   sprintQualifying: QualiResult | null;
   sprint: RaceResult | null;
   qualifying: QualiResult | null;
@@ -873,6 +874,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
     practiceSessionTotal: state.calendar[w.roundIndex]?.sprint ? 1 : 3,
     practice: w.practice,
     practiceReturn: w.practiceReturn ? { required: w.practiceReturn.required, driverIds: [...w.practiceReturn.driverIds] } : null,
+    liveQualifying: w.liveQualifying ?? null,
     sprintQualifying: w.sprintQualifying,
     sprint: w.sprint,
     qualifying: w.qualifying,
