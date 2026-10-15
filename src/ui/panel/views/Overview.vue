@@ -38,9 +38,11 @@ const specialActionBlocked = computed(() => store.busy || !!store.status?.genera
 const overviewRoot = ref<HTMLElement | null>(null);
 const fiaChoice = ref<'support' | 'oppose' | 'compromise' | null>(null);
 
-watch(() => fia.value?.current?.index ?? null, () => {
-  fiaChoice.value = fia.value?.current?.forcedStance ?? null;
-}, { immediate: true });
+watch(
+  () => [fia.value?.current?.index ?? null, fia.value?.current?.forcedStance ?? null],
+  () => { fiaChoice.value = fia.value?.current?.forcedStance ?? null; },
+  { immediate: true },
+);
 
 function openSpecialAction(action: Action, title: string, hint: string, subject?: string): void {
   specialAction.value = { action, title, hint, subject };
