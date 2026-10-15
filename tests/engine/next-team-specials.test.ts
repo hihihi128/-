@@ -10,7 +10,7 @@ import type { GameState } from '../../src/engine/types';
 import { buildView } from '../../src/engine/view';
 import { act, advanceUntil, cardSources } from '../helpers';
 
-type TeamId = 'aston_martin' | 'racing_bulls' | 'audi' | 'cadillac' | 'ferrari' | 'alpine' | 'mclaren' | 'williams';
+type TeamId = 'aston_martin' | 'racing_bulls' | 'audi' | 'cadillac' | 'ferrari' | 'alpine' | 'mclaren' | 'red_bull' | 'williams';
 
 function game(teamId: TeamId, seed = 123): GameState {
   const loaded = normalizeDatabase(cardSources());
@@ -108,6 +108,15 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     expect(state.drivers[reserve].role).toBe('reserve');
     expect(state.drivers[reserve].puUsed).toEqual(originalPuUsed);
     expect(state.drivers[reserve].puPool).toEqual(originalPuPool);
+  });
+
+  it('AI 小红牛不会调用玩家红牛车队的储备车手', () => {
+    const state = game('red_bull');
+    state.rules.racingBulls.recallChance = 1;
+    maybeTriggerRacingBullsRecall(state, new Rng(4));
+    expect(state.racingBulls?.pendingRecall).toBeNull();
+    expect(state.racingBulls?.activeRecall?.replacementId).toBeTruthy();
+    expect(state.drivers[state.racingBulls!.activeRecall!.replacementId].teamId).toBe('racing_bulls');
   });
 
   it('小红牛在周末中途换上储备车手时补发该车手的本周末轮胎', () => {

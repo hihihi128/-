@@ -4,7 +4,7 @@ import { supplyCustomers } from '../../src/engine/aduo';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
 import { migrateState } from '../../src/engine/migrate';
-import { afterManagementRace, applyAlpinePuPenalty, completeAlpineDriverExit, completeWilliamsHandover } from '../../src/engine/managementSpecials';
+import { advanceAiManagementSpecial, afterManagementRace, applyAlpinePuPenalty, completeAlpineDriverExit, completeWilliamsHandover } from '../../src/engine/managementSpecials';
 import { applyRandomEventResolution, beginRandomEventWeek, setRandomEventContent, triggerNextWeeklyRandomEvent, triggerWeekendRandomEvent } from '../../src/engine/randomEvents';
 import { Rng } from '../../src/engine/rng';
 import type { Action, GameState } from '../../src/engine/types';
@@ -24,6 +24,28 @@ function run(state: GameState, action: Action) {
 }
 
 describe('阿尔派、哈斯、威廉姆斯与随机事件', () => {
+  it('AI 哈斯只在资金紧张时接受丰田注资', () => {
+    const state = game('alpine');
+    const haas = state.teams.haas;
+    const beforeFunds = haas.funds;
+    for (let week = 1; week <= 20; week++) {
+      state.season.week = week;
+      advanceAiManagementSpecial(state, haas);
+    }
+    expect(haas.funds).toBe(beforeFunds);
+    expect(state.haas?.fundingProvided).toBe(0);
+  });
+
+  it('AI 管理层低满意度不会解雇玩家或冻结自己的机制', () => {
+    const state = game('williams');
+    state.alpine!.briatoreSatisfaction = 0;
+    state.alpine!.lastActionRace = null;
+    afterManagementRace(state);
+    expect(state.flags.fired).not.toBe(true);
+    expect(state.alpine?.dismissed).toBeNull();
+    expect(state.alpine!.briatoreSatisfaction).toBeGreaterThan(state.rules.alpine.dismissBriatoreSatisfaction);
+  });
+
   it('旧阿尔派存档把两组动力单元惩罚迁移到六类部件', () => {
     const state = game('alpine');
     const team = state.teams.alpine;

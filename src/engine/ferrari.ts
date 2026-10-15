@@ -130,7 +130,7 @@ export function ferrariOnOrder(state: GameState, yieldedId: string, favoredId: s
 
 /** 法拉利媒体对正赛成绩的反应：基础变化 × 倍率 − 每站耐心消耗 */
 export function ferrariMediaDelta(state: GameState, base: number): number {
-  if (playerTeam(state).special !== 'ferrari' || !ferrariActive(state)) return base;
+  if (!ferrariActive(state)) return base;
   const r = state.rules.ferrari;
   return round1(base * r.mediaResultMul - r.mediaPerRace);
 }

@@ -251,26 +251,27 @@ export function afterManagementRace(state: GameState): void {
   if (state.haas) {
     const h = state.haas;
     const team = Object.values(state.teams).find(value => value.special === 'haas');
-    if (!team) throw new Error('哈斯车队数据缺失');
-    h.toyotaInfluence = round1(clamp(h.toyotaInfluence + state.rules.haas.influencePerRace, 0, 100));
-    if (h.lastActionRace !== key) { h.geneSupport -= 4; h.toyotaSupport -= 4; }
-    if (!h.partnershipWithdrawn && h.toyotaSupport > 20) {
-      const grant = round2(0.3 + h.toyotaInfluence / 100);
-      team.funds = round2(team.funds + grant); h.fundingProvided = round2(h.fundingProvided + grant);
-    }
-    h.geneSupport = round1(clamp(h.geneSupport, 0, 100)); h.toyotaSupport = round1(clamp(h.toyotaSupport, 0, 100));
-    if (h.toyotaSupport <= 10 && !h.partnershipWithdrawn) { h.partnershipWithdrawn = true; addNews(state, '股东', '丰田冻结进一步资金与技术投入。'); }
-    if (h.geneSupport < state.rules.haas.dismissGeneSupport && !h.dismissed) {
-      if (team.isPlayer) {
-        h.dismissed = `吉恩·哈斯支持度降至 ${h.geneSupport}`;
-        state.flags.fired = true;
-        state.flags.firedReason = h.dismissed;
-      } else {
-        h.geneSupport = Math.max(state.rules.haas.dismissGeneSupport + 8, state.rules.haas.startGeneSupport - 10);
-        addNews(state, '车队', '哈斯因股东支持不足调整了管理架构。');
+    if (team) {
+      h.toyotaInfluence = round1(clamp(h.toyotaInfluence + state.rules.haas.influencePerRace, 0, 100));
+      if (h.lastActionRace !== key) { h.geneSupport -= 4; h.toyotaSupport -= 4; }
+      if (!h.partnershipWithdrawn && h.toyotaSupport > 20) {
+        const grant = round2(0.3 + h.toyotaInfluence / 100);
+        team.funds = round2(team.funds + grant); h.fundingProvided = round2(h.fundingProvided + grant);
       }
+      h.geneSupport = round1(clamp(h.geneSupport, 0, 100)); h.toyotaSupport = round1(clamp(h.toyotaSupport, 0, 100));
+      if (h.toyotaSupport <= 10 && !h.partnershipWithdrawn) { h.partnershipWithdrawn = true; addNews(state, '股东', '丰田冻结进一步资金与技术投入。'); }
+      if (h.geneSupport < state.rules.haas.dismissGeneSupport && !h.dismissed) {
+        if (team.isPlayer) {
+          h.dismissed = `吉恩·哈斯支持度降至 ${h.geneSupport}`;
+          state.flags.fired = true;
+          state.flags.firedReason = h.dismissed;
+        } else {
+          h.geneSupport = Math.max(state.rules.haas.dismissGeneSupport + 8, state.rules.haas.startGeneSupport - 10);
+          addNews(state, '车队', '哈斯因股东支持不足调整了管理架构。');
+        }
+      }
+      if ((state.season.roundIndex + 1) % 3 === 0) h.preferredParts = [...DIRECTIONS[(Math.floor((state.season.roundIndex + 1) / 3) + 1) % DIRECTIONS.length]];
     }
-    if ((state.season.roundIndex + 1) % 3 === 0) h.preferredParts = [...DIRECTIONS[(Math.floor((state.season.roundIndex + 1) / 3) + 1) % DIRECTIONS.length]];
   }
   if (state.williams) {
     const w = state.williams;
@@ -289,7 +290,9 @@ export function advanceAiManagementSpecial(state: GameState, team: TeamState): v
       : state.alpine!.gaslyCommitment < 45 ? 'reassure_gasly' : 'back_colapinto';
     applyAlpineManagement(state, strategy);
   } else if (team.special === 'haas' && state.haas?.lastActionRound !== weekKey(state)) {
-    const strategy = state.haas!.geneSupport <= state.haas!.toyotaSupport ? 'protect_independence' : 'accept_toyota';
+    const strategy = team.funds < 15 && state.haas!.geneSupport > state.rules.haas.dismissGeneSupport + 12
+      ? 'accept_toyota'
+      : 'protect_independence';
     applyHaasBalance(state, strategy);
   } else if (team.special === 'williams' && state.williams?.focusRound !== weekKey(state)) {
     const choices = ['development', 'facilities', 'reserve'] as const;

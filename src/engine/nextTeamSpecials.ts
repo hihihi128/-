@@ -105,10 +105,11 @@ export function maybeTriggerRacingBullsRecall(state: GameState, rng: Rng): void 
   const r = state.racingBulls;
   if (!r || r.pendingRecall || r.activeRecall || !rng.chance(state.rules.racingBulls.recallChance)) return;
   const team = state.teams.racing_bulls;
+  if (!team?.cars.length) return;
   const candidates = Object.values(state.drivers)
     .filter(d => d.role === 'reserve' && (d.teamId === 'red_bull' || d.teamId === 'racing_bulls') && (team.isPlayer || d.teamId !== state.meta.playerTeamId))
     .map(d => d.id);
-  if (!team?.cars.length || !candidates.length) return;
+  if (!candidates.length) return;
   const car = team.cars[rng.int(0, team.cars.length - 1)];
   if (!car.driverId) return;
   r.pendingRecall = { driverId: car.driverId, candidateIds: candidates };

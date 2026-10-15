@@ -461,11 +461,12 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
       const rank = rankOfTeam(state, tid);
       const podium = result.classification.some(c => c.teamId === tid && c.pos !== null && c.pos <= 3);
       team.boardConfidence = round1(clamp(team.boardConfidence + clamp((team.targetPosition - rank) * 0.8, -3, 3) + (podium ? 1 : 0), 0, 100));
-      if (team.isPlayer) {
+      if (team.isPlayer || team.special === 'ferrari') {
         const best = Math.min(...result.classification.filter(c => c.teamId === tid && c.pos !== null).map(c => c.pos as number), 99);
         const crashed = result.classification.some(c => c.teamId === tid && /撞|碰撞|失控/.test(c.reason));
         const dRep = (best === 1 ? 4 : best <= 3 ? 2 : best <= 10 ? 0.5 : 0) - (crashed ? 1 : 0);
-        team.mediaReputation = round1(clamp(team.mediaReputation + ferrariMediaDelta(state, dRep), 0, 100));
+        const mediaDelta = team.special === 'ferrari' ? ferrariMediaDelta(state, dRep) : dRep;
+        team.mediaReputation = round1(clamp(team.mediaReputation + mediaDelta, 0, 100));
       }
     }
     verifyFittedParts(state);

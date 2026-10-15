@@ -110,7 +110,7 @@ describe('法拉利：AI 粉丝指令', () => {
     expect(logs[2].ok).toBe(false);
 
     const other = newTestGame();
-    const l2 = applyAiCommands(other, [{ op: 'fans', driver: 'c1', delta: 3 }], { messageId: 1 });
+    const l2 = applyAiCommands(other, [{ op: 'fans', driver: 'hamilton', delta: 3 }], { messageId: 1 });
     expect(other.ferrari!.fans.hamilton).toBe(other.rules.ferrari.startFans);
     expect(l2[0].ok).toBe(false);
   });
