@@ -250,8 +250,15 @@ function raceSetOptions(d: WeekendDriverView, compound: string) {
 
 function applyCustomPlan(d: WeekendDriverView) {
   const sets = customSetsFor(d);
-  if (!sets.every(Boolean)) return;
-  return setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)], raceTyreSetPlan: [...sets] });
+  const filled = sets.filter(Boolean).length;
+  if (filled > 0 && filled !== sets.length) return;
+  return setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)], raceTyreSetPlan: filled ? [...sets] : [] });
+}
+
+function partialRaceSetSelection(d: WeekendDriverView): boolean {
+  const sets = customSetsFor(d);
+  const filled = sets.filter(Boolean).length;
+  return filled > 0 && filled !== sets.length;
 }
 
 async function askEngineer(d: WeekendDriverView) {
@@ -538,7 +545,7 @@ const chartSeries = computed(() => {
                   <button class="small" :disabled="done.race || store.busy || customFor(d).length <= 2" @click="removeCustomCompound(d)">－</button>
                   </span>
                 </span>
-                <button class="small" :disabled="done.race || store.busy || !customSetsFor(d).every(Boolean)" :title="customSetsFor(d).every(Boolean) ? '' : '请为每个赛段选择实体轮胎组'" @click="applyCustomPlan(d)">采用</button>
+                <button class="small" :disabled="done.race || store.busy || partialRaceSetSelection(d)" :title="partialRaceSetSelection(d) ? '请为所有赛段选择实体轮胎组，或全部使用自动选择' : ''" @click="applyCustomPlan(d)">采用</button>
               </div>
               <div v-else class="plan engineer-plan on">
                 <span v-if="currentStrategyReview(d)" class="badge warn">副 API 点评更正</span>

@@ -20,7 +20,7 @@ import type { Rng } from './rng';
 import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, PracticeReturnRequest, RaceResult, TeamState } from './types';
 import { clamp, deepClone, money, round1, round2 } from './util';
 import { advanceQualifyingSegment, completedPracticeSessions, createWeekend, currentRound, currentTrack, practiceSessionCount, runPractice } from './weekend';
-import { driverTyreSets, weekendTyreKey } from './tyres';
+import { driverTyreSets, returnEligibleTyreSets, weekendTyreKey } from './tyres';
 
 const ok = (message: string): Outcome => ({ ok: true, message });
 const fail = (message: string): Outcome => ({ ok: false, message });
@@ -184,7 +184,8 @@ export function returnPracticeTyres(state: GameState, driverId: string, setIds: 
   if (state.season.phase !== 'practice' || !request || !team || !request.driverIds.includes(driverId)) return fail('当前无需交回该车手的练习赛轮胎');
   if (new Set(setIds).size !== request.required) return fail(`必须交回 ${request.required} 组轮胎`);
   const eligibleIds = request.eligibleSetIds?.[driverId] ?? [];
-  if (setIds.some(id => !eligibleIds.includes(id))) return fail('选择中包含不符合本节练习赛交回条件的轮胎组');
+  const currentlyEligible = new Set(returnEligibleTyreSets(state, team, driverId).map(set => set.id));
+  if (setIds.some(id => !eligibleIds.includes(id) || !currentlyEligible.has(id))) return fail('选择中包含不符合本节练习赛交回条件或已纳入正赛计划的轮胎组');
   const sets = driverTyreSets(team, driverId, weekendTyreKey(state));
   const selected = setIds.map(id => sets.find(set => set.id === id));
   if (selected.some(set => !set || set.returned)) return fail('选择中包含无效或已交回的轮胎组');
