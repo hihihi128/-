@@ -590,7 +590,9 @@ export class F1Controller {
       run = value === compound ? run + 1 : 0;
       longest = Math.max(longest, run);
     }
-    return longest;
+    // After the second consecutive stint, the first set is no longer fitted
+    // and can be reused. The live race therefore needs at most two sets.
+    return Math.min(longest, 2);
   }
 
   private validateReviewedPlan(state: GameState, driverId: string, plan: RacePlanFields): string | null {

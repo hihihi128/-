@@ -179,6 +179,8 @@ describe('physical tyre sets and pit crew timing', () => {
     const key = weekendTyreKey(state);
     const [soft, medium] = state.rules.dryCompounds;
     expect(canRunTyreStrategy(team, driverId, key, [soft, medium])).toBe(true);
+    expect(canRunTyreStrategy(team, driverId, key, [soft, medium, soft])).toBe(true);
+    expect(canRunTyreStrategy(team, driverId, key, [medium, medium, medium])).toBe(true);
     for (const set of team.tyreInventory![driverId]) if (set.compound === soft) set.returned = true;
     expect(canRunTyreStrategy(team, driverId, key, [soft, medium])).toBe(false);
     expect(canRunTyreStrategy(team, driverId, key, [medium, medium])).toBe(true);
