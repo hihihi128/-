@@ -570,6 +570,7 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
   const result: RaceResult = {
     kind,
     weather: wet ? 'wet' : 'dry',
+    rainHistory: Array(totalLaps).fill(wet ? .6 : 0),
     laps: totalLaps,
     classification,
     events,
@@ -1432,7 +1433,7 @@ export function finishRaceSession(state: GameState, session: LiveRaceState): { r
   const wetLaps = session.weatherHistory.filter(v => v > .25).length;
   const summary = wetLaps === 0 ? 'dry' : wetLaps === session.weatherHistory.length ? 'wet' : 'mixed';
   if (leader && !session.events.some(event => event.type === 'finish')) liveEvent(session, session.totalLaps, 'finish', `${leader.driverId} 赢得${session.kind === 'sprint' ? '冲刺赛' : '正赛'}！`, [leader.driverId], true);
-  return { result: { kind: session.kind, weather: wetLaps ? 'wet' : 'dry', weatherSummary: summary, laps: session.totalLaps, classification, events: session.events.map(({ id: _id, ...event }) => event), fastestLap: session.fastestLap, lapChart: session.lapChart, safetyCars: session.safetyCars, redFlags: session.redFlags, orderOutcomes: session.orderOutcomes }, extras: { crashes: session.damageLedger.filter(d => d.affectedPartTypes.length > 0).map(d => ({ teamId: d.teamId, slot: d.slot, driverId: d.driverId, dnf: d.severity === 'dnf' })) } };
+  return { result: { kind: session.kind, weather: wetLaps ? 'wet' : 'dry', weatherSummary: summary, rainHistory: [...session.weatherHistory], laps: session.totalLaps, classification, events: session.events.map(({ id: _id, ...event }) => event), fastestLap: session.fastestLap, lapChart: session.lapChart, safetyCars: session.safetyCars, redFlags: session.redFlags, orderOutcomes: session.orderOutcomes }, extras: { crashes: session.damageLedger.filter(d => d.affectedPartTypes.length > 0).map(d => ({ teamId: d.teamId, slot: d.slot, driverId: d.driverId, dnf: d.severity === 'dnf' })) } };
 }
 
 /** Backward-compatible automatic path: it drives exactly the same resumable simulation. */

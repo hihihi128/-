@@ -26,6 +26,8 @@ describe('比赛模拟', () => {
     expect(result.events.length).toBeGreaterThan(0);
     expect(Object.keys(result.lapChart)).toHaveLength(2);
     expect(result.lapChart[Object.keys(result.lapChart)[0]]).toHaveLength(result.laps);
+    expect(result.rainHistory).toHaveLength(result.laps);
+    expect(result.rainHistory?.every(value => value >= 0 && value <= 1)).toBe(true);
   });
 
   it('更强的赛车 + 车手统计上更常获胜', () => {
