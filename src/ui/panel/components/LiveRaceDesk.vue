@@ -40,7 +40,7 @@ function choice(id: string) {
 function weatherLabel() {
   if (!live.value) return '';
   const rain = Math.round(live.value.weather.rain * 100);
-  return `${rain ? `降雨强度 ${rain}%` : '无降雨'} · 赛道湿度 ${Math.round(live.value.weather.wetness * 100)}%`;
+  return `${rain ? `降雨强度 ${rain}%` : '无降雨'} · 赛道湿度 ${Math.floor(live.value.weather.wetness * 100)}%`;
 }
 function reasonLabel(reason: string) { return ({ grid: '发车', pit_opportunity: '进站机会', weather_change: '天气变化', sc: '安全车', vsc: '虚拟安全车', red_flag: '红旗暂停', incident: '事故与损伤' } as Record<string, string>)[reason] ?? reason; }
 function driverName(id: string) { return names.value.get(id) ?? id; }

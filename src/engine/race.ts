@@ -97,6 +97,7 @@ export interface RaceExtras {
 }
 
 export const WET_TYRE_MIN_WETNESS = .22;
+export const INTERMEDIATE_OPTIMAL_MIN_WETNESS = .34;
 export const FULL_WET_MIN_WETNESS = .82;
 
 /** Severe multi-car and wet incidents are more likely to require a full stoppage. */
@@ -943,7 +944,7 @@ function aiWeatherStopReady(state: GameState, session: LiveRaceState, car: LiveR
 function replacementCompound(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound {
   if (car.pendingCompound) return car.pendingCompound;
   if (car.engineerTyreOverride && session.lap <= (car.engineerTyreOverrideUntilLap ?? 0)) return car.engineerTyreOverride;
-  if (session.wetness >= .22) return wetCompoundFor(state.rules, session.wetness);
+  if (session.wetness >= WET_TYRE_MIN_WETNESS) return wetCompoundFor(state.rules, session.wetness);
   // A wet-start plan contains W only. On a drying track choose a real dry tyre
   // instead of pitting repeatedly onto the same mismatched compound.
   const planned = car.plannedCompounds.slice(car.stintIndex + 1).find(compound => !state.rules.tyres[compound]?.wet);

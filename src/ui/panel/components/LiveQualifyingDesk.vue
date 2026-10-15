@@ -14,7 +14,7 @@ const playerCars = computed(() => live.value?.cars.filter(car => car.player && l
 const onTrackCars = computed(() => live.value?.cars.filter(car => ['out_lap', 'flying_lap', 'in_lap'].includes(car.phase)) ?? []);
 const garageCars = computed(() => live.value?.cars.filter(car => car.phase === 'garage') ?? []);
 const selectedDriverId = ref('');
-const expandedTrackGroup = ref('');
+const expandedTrackDrivers = ref<string[]>([]);
 const selections = ref<Record<string, string>>({});
 const mounted = ref(false);
 const playbackArmed = ref(false);
@@ -47,7 +47,7 @@ const mobileTrackGroups = computed(() => {
   const groups: Array<{ key: string; progress: number; cars: LiveQualifyingView['cars'] }> = [];
   for (const car of [...onTrackCars.value].sort((a, b) => a.progress - b.progress)) {
     const current = groups.at(-1);
-    if (!current || car.progress - current.cars[0].progress >= .15) groups.push({ key: car.driverId, progress: car.progress, cars: [car] });
+    if (!current || car.progress - current.cars[0].progress >= .18) groups.push({ key: car.driverId, progress: car.progress, cars: [car] });
     else {
       current.cars.push(car);
       current.key = current.cars.map(item => item.driverId).join(':');
@@ -56,7 +56,7 @@ const mobileTrackGroups = computed(() => {
   }
   return groups;
 });
-const openMobileTrackGroup = computed(() => mobileTrackGroups.value.find(group => group.key === expandedTrackGroup.value) ?? null);
+const openMobileTrackCars = computed(() => expandedTrackDrivers.value.map(driverId => onTrackCars.value.find(car => car.driverId === driverId)).filter((car): car is LiveQualifyingView['cars'][number] => !!car));
 
 function tyreOptions(car: LiveQualifyingView['cars'][number]) {
   const driver = playerDriverById.value.get(car.driverId);
@@ -80,8 +80,7 @@ function syncSelections() {
     selectedDriverId.value = playerCars.value[0]?.driverId ?? onTrackCars.value[0]?.driverId ?? '';
   }
 }
-watch(() => `${live.value?.id ?? ''}:${live.value?.segmentIndex ?? -1}`, syncSelections, { immediate: true });
-watch(() => `${live.value?.id ?? ''}:${live.value?.segmentIndex ?? -1}`, () => { expandedTrackGroup.value = ''; });
+watch(() => `${live.value?.id ?? ''}:${live.value?.segmentIndex ?? -1}`, () => { syncSelections(); expandedTrackDrivers.value = []; }, { immediate: true });
 watch(() => playerCars.value.map(car => `${car.driverId}:${car.legalTyreSetIds.join(',')}`).join('|'), syncSelections);
 
 async function start() {
@@ -212,9 +211,12 @@ function groupStyle(group: typeof mobileTrackGroups.value[number]) {
 }
 function toggleTrackGroup(group: typeof mobileTrackGroups.value[number]) {
   if (group.cars.length === 1) {
-    expandedTrackGroup.value = '';
+    expandedTrackDrivers.value = [];
     selectMarker(group.cars[0].driverId);
-  } else expandedTrackGroup.value = expandedTrackGroup.value === group.key ? '' : group.key;
+  } else {
+    const ids = group.cars.map(car => car.driverId);
+    expandedTrackDrivers.value = expandedTrackDrivers.value.length === ids.length && ids.every(id => expandedTrackDrivers.value.includes(id)) ? [] : ids;
+  }
 }
 function formatGap(progress: number) { return `${(Math.max(0, progress) * 100).toFixed(1)}% 圈`; }
 </script>
@@ -270,12 +272,14 @@ function formatGap(progress: number) { return `${(Math.max(0, progress) * 100).t
             class="track-marker mobile-marker"
             :class="{ selected: group.cars.some(car => car.driverId === selectedDriverId), mine: group.cars.some(car => car.player), traffic: group.cars.some(car => car.trafficStatus !== 'clear'), cluster: group.cars.length > 1 }"
             :style="groupStyle(group)"
-            :aria-label="group.cars.length === 1 ? `${group.cars[0].driverShort}，${trafficLabel(group.cars[0])}` : `${group.cars.length} 辆赛车，展开选择`"
-            :aria-expanded="group.cars.length > 1 ? expandedTrackGroup === group.key : undefined"
+            :aria-label="group.cars.length === 1 ? `${group.cars[0].driverShort}，${phaseLabel(group.cars[0])}，${trafficLabel(group.cars[0])}` : `${group.cars.length} 辆赛车：${group.cars.map(car => car.driverShort).join('、')}，展开选择`"
+            :aria-pressed="group.cars.length === 1 ? selectedDriverId === group.cars[0].driverId : undefined"
+            :aria-expanded="group.cars.length > 1 ? group.cars.some(car => expandedTrackDrivers.includes(car.driverId)) : undefined"
             @click="toggleTrackGroup(group)"
+            @focus="group.cars.length === 1 && selectMarker(group.cars[0].driverId)"
           >{{ group.cars.length === 1 ? group.cars[0].driverShort : `+${group.cars.length}` }}</button>
         </div>
-        <div v-if="openMobileTrackGroup" class="mobile-cluster-picker" aria-label="同位置赛车"><button v-for="car in openMobileTrackGroup.cars" :key="car.driverId" :class="{ selected: selectedDriverId === car.driverId, mine: car.player }" :style="{ '--team-color': car.teamColor }" @click="selectMarker(car.driverId)">{{ car.driverShort }}</button></div>
+        <div v-if="openMobileTrackCars.length" class="mobile-cluster-picker" role="group" aria-label="同位置赛车"><button v-for="car in openMobileTrackCars" :key="car.driverId" :class="{ selected: selectedDriverId === car.driverId, mine: car.player }" :style="{ '--team-color': car.teamColor }" :aria-pressed="selectedDriverId === car.driverId" @click="selectMarker(car.driverId)">{{ car.driverShort }}</button></div>
         <div v-if="selectedCar" class="selected-traffic" aria-live="polite">
           <b :style="{ color: selectedCar.teamColor }">{{ selectedCar.driverShort }}</b>
           <span>{{ trafficLabel(selectedCar) }}</span>
