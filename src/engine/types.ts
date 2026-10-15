@@ -919,6 +919,8 @@ export interface RaceResult {
   weather: Weather;
   /** 赛后实际天气摘要；旧结果可不含此字段。 */
   weatherSummary?: 'dry' | 'wet' | 'mixed';
+  /** 每圈实际降雨强度，0 为无雨，1 为暴雨；旧结果可不含此字段。 */
+  rainHistory?: number[];
   laps: number;
   classification: ClassificationEntry[];
   events: RaceEvent[];

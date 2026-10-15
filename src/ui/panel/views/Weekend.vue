@@ -2,6 +2,7 @@
 import { computed, nextTick, ref, watch } from 'vue';
 import Bar from '../components/Bar.vue';
 import LapChart from '../components/LapChart.vue';
+import RainHistoryChart from '../components/RainHistoryChart.vue';
 import Tyre from '../components/Tyre.vue';
 import LiveRaceDesk from '../components/LiveRaceDesk.vue';
 import WeekendWeatherForecast from '../components/WeekendWeatherForecast.vue';
@@ -560,6 +561,7 @@ const chartSeries = computed(() => {
           {{ raceLike.weather === 'wet' ? '雨战' : '干地' }} · {{ raceLike.laps }} 圈 · 安全车 {{ raceLike.safetyCars }} 次 · 红旗 {{ raceLike.redFlags ?? 0 }} 次
           <template v-if="raceLike.fastestLap"> · 最快圈 {{ name(raceLike.fastestLap.driverId) }} {{ lapTime(raceLike.fastestLap.time) }}</template>
         </div>
+        <RainHistoryChart v-if="raceLike.rainHistory?.length" :history="raceLike.rainHistory" />
         <div class="table-wrap">
           <table>
             <thead><tr><th>名次</th><th>车手</th><th>发车</th><th>差距</th><th>进站</th><th>静止时间（预估/实际）</th><th>轮胎</th><th>最快圈</th><th>积分</th></tr></thead>
