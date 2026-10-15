@@ -54,7 +54,7 @@ import type {
 } from './types';
 import { round1 } from './util';
 import { predictedStationaryTime } from './pitstop';
-import { currentRound } from './weekend';
+import { currentRound, qualifyingTyreSets } from './weekend';
 import { marketCloseBlockers } from './market';
 
 export interface PartView {
@@ -202,6 +202,7 @@ export interface WeekendDriverView {
   sprintOptions: StrategyOption[];
   tyreLife: Record<string, number>;
   tyreSets: Array<{ id: string; compound: string; state: 'new' | 'used'; laps: number; returned: boolean; returnEligible: boolean }>;
+  qualifyingTyreSetIds: string[];
 }
 
 function tyreThermalState(state: GameState, car: import('./types').LiveRaceCar): 'cold' | 'optimal' | 'hot' {
@@ -261,6 +262,7 @@ export interface WeekendView {
   /** Latest practice result retained for consumers of the old view shape. */
   practice: PracticeResult | null;
   practiceReturn: { required: number; driverIds: string[] } | null;
+  liveQualifying: WeekendState['liveQualifying'];
   sprintQualifying: QualiResult | null;
   sprint: RaceResult | null;
   qualifying: QualiResult | null;
@@ -787,6 +789,8 @@ function buildWeekendView(state: GameState): WeekendView | null {
       const ctx = { driverTyre: d.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge, performanceContext };
       const sprintLaps = Math.max(3, Math.round(track.laps * state.rules.sprintLapsFactor));
       const factor = degFactor(track, ctx);
+      const protectedRaceSets = new Set(plan.raceTyreSetPlan ?? []);
+      const currentReturnable = new Set((w.practiceReturn?.eligibleSetIds?.[d.id] ?? []).filter(id => !protectedRaceSets.has(id)));
       drivers.push({
         driverId: d.id,
         driverName: d.name,
@@ -816,7 +820,10 @@ function buildWeekendView(state: GameState): WeekendView | null {
           })
           : [],
         tyreLife: Object.fromEntries(Object.entries(state.rules.tyres).map(([k, t]) => [k, round1(predictedTyreLife(t, factor, { context: performanceContext, paceMode: plan.paceMode, rules: state.rules }))])),
-        tyreSets: (team.tyreInventory?.[d.id] ?? []).filter(set => set.weekendKey === weekendTyreKey(state, w.roundIndex)).map(set => ({ id: set.id, compound: set.compound, state: set.state, laps: set.laps, returned: set.returned, returnEligible: !!w.practiceReturn?.eligibleSetIds?.[d.id]?.includes(set.id) })),
+        tyreSets: (team.tyreInventory?.[d.id] ?? []).filter(set => set.weekendKey === weekendTyreKey(state, w.roundIndex)).map(set => ({ id: set.id, compound: set.compound, state: set.state, laps: set.laps, returned: set.returned, returnEligible: !!w.practiceReturn?.eligibleSetIds?.[d.id]?.includes(set.id) && currentReturnable.has(set.id) })),
+        qualifyingTyreSetIds: state.season.phase === 'qualifying' || state.season.phase === 'sprint_qualifying'
+          ? qualifyingTyreSets(state, team, d.id, state.season.phase, w.liveQualifying?.segmentIndex ?? 0).map(set => set.id)
+          : [],
       });
     }
   }
@@ -873,6 +880,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
     practiceSessionTotal: state.calendar[w.roundIndex]?.sprint ? 1 : 3,
     practice: w.practice,
     practiceReturn: w.practiceReturn ? { required: w.practiceReturn.required, driverIds: [...w.practiceReturn.driverIds] } : null,
+    liveQualifying: w.liveQualifying ?? null,
     sprintQualifying: w.sprintQualifying,
     sprint: w.sprint,
     qualifying: w.qualifying,

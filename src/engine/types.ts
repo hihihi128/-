@@ -773,6 +773,8 @@ export interface DriverPlan {
   qualiApproach: QualiApproach;
   /** 轮胎策略：各段配方；'auto' 由策略组自动选择 */
   tyrePlan: Compound[] | 'auto';
+  /** 玩家为各正赛赛段指定的实体轮胎组；与 tyrePlan 下标对齐。 */
+  raceTyreSetPlan?: string[];
   /** 冲刺赛起步配方；'auto' 自动 */
   sprintTyre: Compound | 'auto';
   paceMode: PaceMode;
@@ -859,6 +861,18 @@ export interface QualiResult {
   /** 最终发车顺序（已计罚退） */
   grid: string[];
   pole: { driverId: string; time: number } | null;
+  events: RaceEvent[];
+}
+
+/** 可暂停并逐段推进的排位赛。 */
+export interface LiveQualifyingState {
+  version: 1;
+  kind: 'qualifying' | 'sprint_qualifying';
+  segmentIndex: number;
+  segmentCount: number;
+  alive: string[];
+  finalOrder: string[];
+  sessions: QualiSession[];
   events: RaceEvent[];
 }
 
@@ -985,6 +999,8 @@ export interface LiveRaceCar {
   tyreSetId?: string;
   usedCompounds: Compound[];
   plannedCompounds: Compound[];
+  /** Physical sets selected for each planned dry stint. */
+  plannedTyreSetIds?: string[];
   stints: number[];
   stintIndex: number;
   pits: number;
@@ -1035,7 +1051,7 @@ export interface RaceDamageRecord {
   driverId: string;
   teamId: string;
   slot: number;
-  cause: 'single_car' | 'collision';
+  cause: 'single_car' | 'collision' | 'power_unit';
   severity: 'minor' | 'wing' | 'dnf';
   affectedPartTypes: string[];
   repairedInRace: boolean;
@@ -1144,6 +1160,8 @@ export interface WeekendState {
   practice: PracticeResult | null;
   /** Set after each practice until the player returns the required sets. */
   practiceReturn?: PracticeReturnRequest | null;
+  /** 当前可恢复的逐段排位赛；分段全部完成后清空。 */
+  liveQualifying?: LiveQualifyingState | null;
   sprintQualifying: QualiResult | null;
   sprint: RaceResult | null;
   qualifying: QualiResult | null;
@@ -1557,9 +1575,9 @@ export type Action =
   | { type: 'START_WEEKEND' }
   | { type: 'RUN_PRACTICE' }
   | { type: 'RETURN_PRACTICE_TYRES'; driverId: string; setIds: string[] }
-  | { type: 'RUN_SPRINT_QUALIFYING' }
+  | { type: 'RUN_SPRINT_QUALIFYING'; tyreSetIds?: Record<string, string[]> }
   | { type: 'RUN_SPRINT' }
-  | { type: 'RUN_QUALIFYING' }
+  | { type: 'RUN_QUALIFYING'; tyreSetIds?: Record<string, string[]> }
   | { type: 'RUN_RACE'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'START_RACE'; kind: 'race' | 'sprint'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'ADVANCE_RACE'; sessionId: string; expectedRevision: number; until: 'next_lap' | 'next_decision' }

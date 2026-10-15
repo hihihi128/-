@@ -16,8 +16,8 @@ import { applyAudiStartDrop, applyFerrariStartGain, astonVibrationActive } from 
 import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from './raceWeather';
 import { validOrders, validRaceChoice } from './raceDecisions';
 import { actualStationaryTime } from './pitstop';
-import { PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES } from './powerunit';
-import { canRunTyreStrategy, ensureDriverWeekendTyres, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
+import { powerUnitWearRate, PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES } from './powerunit';
+import { canRunTyreStrategy, ensureDriverWeekendTyres, takeTyreSet, tyreSetById, useTyreSet, weekendTyreKey } from './tyres';
 import {
   degFactor,
   predictedTyreLife,
@@ -45,6 +45,8 @@ import type {
   RaceDecisionWindow,
   RaceDriverDecision,
   PowerUnitPartType,
+  PartType,
+  RaceDamageRecord,
 } from './types';
 import { clamp, gapText, round3 } from './util';
 import { currentTrack, planOf } from './weekend';
@@ -91,7 +93,7 @@ interface SimCar {
 
 export interface RaceExtras {
   /** 本场因事故需要扣除的零件 [teamId, slot] */
-  crashes: Array<{ teamId: string; slot: number; driverId: string; dnf: boolean }>;
+  crashes: Array<{ teamId: string; slot: number; driverId: string; dnf: boolean; cause?: RaceDamageRecord['cause']; affectedPartTypes?: PartType[] }>;
 }
 
 /** Severe multi-car and wet incidents are more likely to require a full stoppage. */
@@ -307,6 +309,8 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
           } else {
             c.status = 'dnf';
             c.reason = rng.pick(['内燃机故障', '能量回收系统故障', '变速箱故障', '液压故障', '刹车过热', '冷却系统故障']);
+            const failedPuPart: PartType | null = c.reason === '内燃机故障' ? 'ice' : c.reason === '能量回收系统故障' ? 'mgu_k' : null;
+            if (failedPuPart) extras.crashes.push({ teamId: c.team.id, slot: c.car.slot, driverId: c.driver.id, dnf: true, cause: 'power_unit', affectedPartTypes: [failedPuPart] });
             pushEvent(lap, 'dnf', `${driverName(state, c.driver.id)} 因${c.reason}退赛`, [c.driver.id], true);
             deploy(lap, false);
           }
@@ -763,7 +767,9 @@ export function createRaceSession(
     })) as NonNullable<LiveRaceCar['puComponentHealth']>;
     const componentReliability = Object.fromEntries(PU_PART_TYPES.map(type => [type, puSpecs[type]?.rel ?? ratings.reliability])) as NonNullable<LiveRaceCar['puComponentReliability']>;
     ensureDriverWeekendTyres(state, entry.team, id);
-    const startingSet = takeTyreSet(entry.team, id, compounds[0], weekendTyreKey(state));
+    const requestedStartSet = kind === 'race' ? plan.raceTyreSetPlan?.[0] : undefined;
+    const chosenStartSet = requestedStartSet ? tyreSetById(entry.team, id, weekendTyreKey(state), requestedStartSet) : null;
+    const startingSet = chosenStartSet?.compound === compounds[0] ? chosenStartSet : takeTyreSet(entry.team, id, compounds[0], weekendTyreKey(state));
     cars[id] = {
       driverId: id, teamId: entry.team.id, slot: entry.car.slot, player: entry.team.isPlayer, grid: index + 1,
       score: trackScore(ratings, track), skill: raceSkill(entry.driver, wet), consistency: entry.driver.attrs.consistency,
@@ -771,7 +777,7 @@ export function createRaceSession(
       tyreFactor: factor, setupBonus: practiceEffects(setup, rules, performanceContext.trackFit).race,
       raceEngineerReaction: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'reaction'),
       raceEngineerWeather: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'weather'),
-      plan, tyre: compounds[0], tyreAge: startingSet?.laps ?? 0, tyreTemperature: (rules.tyres[compounds[0]]?.temperatureWindow?.[0] ?? 80) - 18, tyreWearAge: startingSet?.wearAge ?? startingSet?.laps ?? 0, performanceContext, tyreSetId: startingSet?.id, usedCompounds: [compounds[0]], plannedCompounds: compounds,
+      plan, tyre: compounds[0], tyreAge: startingSet?.laps ?? 0, tyreTemperature: (rules.tyres[compounds[0]]?.temperatureWindow?.[0] ?? 80) - 18, tyreWearAge: startingSet?.wearAge ?? startingSet?.laps ?? 0, performanceContext, tyreSetId: startingSet?.id, usedCompounds: [compounds[0]], plannedCompounds: compounds, plannedTyreSetIds: kind === 'race' ? [...(plan.raceTyreSetPlan ?? [])] : undefined,
       stints: optimizeStints(rules, track, compounds, totalLaps, factor, { context: performanceContext, paceMode: plan.paceMode }), stintIndex: 0, pits: 0, pitStops: [], cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
       damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced',
       iceHealth: groupHealth(componentHealth, PU_COMBUSTION_PARTS), electricalHealth: groupHealth(componentHealth, PU_ELECTRICAL_PARTS),
@@ -830,6 +836,13 @@ function createWindow(session: LiveRaceState, reasons: RaceDecisionWindow['reaso
 
 export function wetCompoundFor(rules: GameState['rules'], wetness: number): Compound {
   return wetness >= .82 ? rules.fullWetCompound : rules.wetCompound;
+}
+
+function plannedTyreSet(state: GameState, car: LiveRaceCar, compound: Compound, stintIndex: number) {
+  const team = state.teams[car.teamId];
+  const setId = car.plannedTyreSetIds?.[stintIndex];
+  const selected = team && setId ? tyreSetById(team, car.driverId, weekendTyreKey(state), setId) : null;
+  return selected?.compound === compound && selected.id !== car.tyreSetId ? selected : null;
 }
 
 /** Fits grid equipment without recording a pit stop or consuming race time. */
@@ -1023,7 +1036,8 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
       const matchingDryStint = car.plannedCompounds.slice(car.stintIndex + 1).findIndex(compound => compound === targetCompound);
       if (matchingDryStint >= 0) car.stintIndex += matchingDryStint + 1;
     }
-    const replacement = takeTyreSet(state.teams[car.teamId], car.driverId, car.tyre, weekendTyreKey(state), car.tyreSetId);
+    const replacement = plannedTyreSet(state, car, car.tyre, car.stintIndex)
+      ?? takeTyreSet(state.teams[car.teamId], car.driverId, car.tyre, weekendTyreKey(state), car.tyreSetId);
     car.tyreSetId = replacement?.id;
     car.tyreAge = replacement?.laps ?? 0;
     car.tyreWearAge = replacement?.wearAge ?? replacement?.laps ?? 0;
@@ -1087,7 +1101,7 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
         const baseWear = electrical ? .014 : .012;
         const stress = electrical ? (car.energyMode === 'deploy' ? .018 : 0) : (car.plan.paceMode === 'push' ? .012 : 0);
         const heat = Math.max(0, car.puTemperature - 102) * (electrical ? .004 : .003);
-        const rate = type === 'exhaust' ? .7 : type === 'control_electronics' ? .8 : type === 'turbocharger' ? 1.1 : 1;
+        const rate = powerUnitWearRate(type);
         car.puComponentHealth[type] = clamp((car.puComponentHealth[type] ?? 100) - (baseWear + Math.max(0, 88 - rel) * (electrical ? .0014 : .0012) + stress + heat) * rate, 0, 100);
       }
       car.iceHealth = groupHealth(car.puComponentHealth, PU_COMBUSTION_PARTS);
@@ -1142,6 +1156,7 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
               car.reason = '动力单元异常放电后失控撞车';
               const incidentId = `${session.id}:i${session.damageLedger.length + 1}`;
               session.damageLedger.push({ id: `${incidentId}:damage`, incidentId, driverId: car.driverId, teamId: car.teamId, slot: car.slot, cause: 'single_car', severity: 'dnf', affectedPartTypes: ['front_wing'], repairedInRace: false });
+              session.damageLedger.push({ id: `${incidentId}:pu`, incidentId, driverId: car.driverId, teamId: car.teamId, slot: car.slot, cause: 'power_unit', severity: 'dnf', affectedPartTypes: ['energy_store'], repairedInRace: false });
               incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 遭遇动力单元异常放电并失控撞车`, [car.driverId], true));
             } else {
               car.partial = Math.max(car.partial, 1.1);
@@ -1150,6 +1165,9 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
           } else if (rng.chance(.45)) {
             car.status = 'dnf';
             car.reason = '动力单元可靠性故障';
+            const incidentId = `${session.id}:i${session.damageLedger.length + 1}`;
+            const failedType = [...PU_PART_TYPES].sort((a, b) => (car.puComponentHealth?.[a] ?? 100) - (car.puComponentHealth?.[b] ?? 100))[0];
+            session.damageLedger.push({ id: `${incidentId}:pu`, incidentId, driverId: car.driverId, teamId: car.teamId, slot: car.slot, cause: 'power_unit', severity: 'dnf', affectedPartTypes: [failedType], repairedInRace: false });
             incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因动力单元可靠性故障退赛`, [car.driverId], true));
           } else {
             car.partial = Math.max(car.partial, .9);
@@ -1160,7 +1178,12 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
           const failedType = [...PU_PART_TYPES].sort((a, b) => failureScore(a) - failureScore(b))[0];
           const failedName = rules.parts[failedType]?.name ?? failedType;
           if (rng.chance(.35) && car.partial === 0) { car.partial = rng.range(.6, 1.2); incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 的${failedName}进入保护模式`, [car.driverId], car.player)); }
-          else { car.status = 'dnf'; car.reason = `${failedName}故障`; incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因${car.reason}退赛`, [car.driverId], true)); }
+          else {
+            car.status = 'dnf'; car.reason = `${failedName}故障`;
+            const incidentId = `${session.id}:i${session.damageLedger.length + 1}`;
+            session.damageLedger.push({ id: `${incidentId}:pu`, incidentId, driverId: car.driverId, teamId: car.teamId, slot: car.slot, cause: 'power_unit', severity: 'dnf', affectedPartTypes: [failedType], repairedInRace: false });
+            incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因${car.reason}退赛`, [car.driverId], true));
+          }
         } else if (rng.chance(pCrash * (lap === 1 ? 4 : 1))) {
           const dnf = rng.chance(.45);
           const incidentId = `${session.id}:i${session.damageLedger.length + 1}`;
@@ -1432,7 +1455,7 @@ export function finishRaceSession(state: GameState, session: LiveRaceState): { r
   const wetLaps = session.weatherHistory.filter(v => v > .25).length;
   const summary = wetLaps === 0 ? 'dry' : wetLaps === session.weatherHistory.length ? 'wet' : 'mixed';
   if (leader && !session.events.some(event => event.type === 'finish')) liveEvent(session, session.totalLaps, 'finish', `${leader.driverId} 赢得${session.kind === 'sprint' ? '冲刺赛' : '正赛'}！`, [leader.driverId], true);
-  return { result: { kind: session.kind, weather: wetLaps ? 'wet' : 'dry', weatherSummary: summary, rainHistory: [...session.weatherHistory], laps: session.totalLaps, classification, events: session.events.map(({ id: _id, ...event }) => event), fastestLap: session.fastestLap, lapChart: session.lapChart, safetyCars: session.safetyCars, redFlags: session.redFlags, orderOutcomes: session.orderOutcomes }, extras: { crashes: session.damageLedger.filter(d => d.affectedPartTypes.length > 0).map(d => ({ teamId: d.teamId, slot: d.slot, driverId: d.driverId, dnf: d.severity === 'dnf' })) } };
+  return { result: { kind: session.kind, weather: wetLaps ? 'wet' : 'dry', weatherSummary: summary, rainHistory: [...session.weatherHistory], laps: session.totalLaps, classification, events: session.events.map(({ id: _id, ...event }) => event), fastestLap: session.fastestLap, lapChart: session.lapChart, safetyCars: session.safetyCars, redFlags: session.redFlags, orderOutcomes: session.orderOutcomes }, extras: { crashes: session.damageLedger.filter(d => d.affectedPartTypes.length > 0).map(d => ({ teamId: d.teamId, slot: d.slot, driverId: d.driverId, dnf: d.severity === 'dnf', cause: d.cause, affectedPartTypes: d.affectedPartTypes })) } };
 }
 
 /** Backward-compatible automatic path: it drives exactly the same resumable simulation. */

@@ -137,12 +137,22 @@ function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>,
       if (err) return fail(err);
       plan.tyrePlan = [...patch.tyrePlan];
     } else return fail('轮胎策略格式错误');
+    if (!Object.prototype.hasOwnProperty.call(patch, 'raceTyreSetPlan')) delete plan.raceTyreSetPlan;
+  }
+  if (patch.raceTyreSetPlan !== undefined) {
+    if (!Array.isArray(patch.raceTyreSetPlan) || patch.raceTyreSetPlan.some(id => typeof id !== 'string' || id.length > 100)) return fail('正赛轮胎组策略格式错误');
+    if (patch.raceTyreSetPlan.length === 0) delete plan.raceTyreSetPlan;
+    else {
+      if (!Array.isArray(plan.tyrePlan) || patch.raceTyreSetPlan.length !== plan.tyrePlan.length) return fail('每个正赛赛段必须对应一套实体轮胎组');
+      if (new Set(patch.raceTyreSetPlan).size !== patch.raceTyreSetPlan.length) return fail('每个正赛赛段必须使用不同的实体轮胎组');
+      plan.raceTyreSetPlan = [...patch.raceTyreSetPlan];
+    }
   }
   if (patch.sprintTyre !== undefined) {
     if (patch.sprintTyre !== 'auto' && (!rules.tyres[patch.sprintTyre] || rules.tyres[patch.sprintTyre].wet)) return fail('冲刺赛配方无效');
     plan.sprintTyre = patch.sprintTyre;
   }
-  const changesRaceStrategy = patch.strategySource !== undefined || patch.tyrePlan !== undefined || patch.paceMode !== undefined || patch.pitTiming !== undefined || patch.scReaction !== undefined;
+  const changesRaceStrategy = patch.strategySource !== undefined || patch.tyrePlan !== undefined || patch.raceTyreSetPlan !== undefined || patch.paceMode !== undefined || patch.pitTiming !== undefined || patch.scReaction !== undefined;
   if (patch.strategyReview !== undefined) return fail('策略点评来源只能由受控点评流程写入');
   if (trustedReview !== undefined) {
     const review = trustedReview;
@@ -240,11 +250,11 @@ function run(state: GameState, action: Action | InternalReviewedPlanAction, rng:
     case 'RETURN_PRACTICE_TYRES':
       return returnPracticeTyres(state, action.driverId, action.setIds);
     case 'RUN_SPRINT_QUALIFYING':
-      return doQualifying(state, rng, 'sprint_qualifying');
+      return doQualifying(state, rng, 'sprint_qualifying', action.tyreSetIds);
     case 'RUN_SPRINT':
       return doRace(state, rng, 'sprint');
     case 'RUN_QUALIFYING':
-      return doQualifying(state, rng, 'qualifying');
+      return doQualifying(state, rng, 'qualifying', action.tyreSetIds);
     case 'RUN_RACE':
       return doRace(state, rng, 'race', action.aiPlans);
     case 'START_RACE':

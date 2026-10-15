@@ -10,6 +10,7 @@
 import { addNews, driverName } from './log';
 import type { CarState, DriverState, GameState, PartType, PowerUnitPartType } from './types';
 import { addGridPenalty } from './weekend';
+import { clamp } from './util';
 
 export const PU_PART_TYPES: readonly PowerUnitPartType[] = ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust'];
 export const PU_COMBUSTION_PARTS: readonly PowerUnitPartType[] = ['ice', 'turbocharger', 'exhaust'];
@@ -17,6 +18,26 @@ export const PU_ELECTRICAL_PARTS: readonly PowerUnitPartType[] = ['mgu_k', 'ener
 
 export function isPowerUnitPart(type: PartType): type is PowerUnitPartType {
   return PU_PART_TYPES.includes(type as PowerUnitPartType);
+}
+
+export function powerUnitWearRate(type: PowerUnitPartType): number {
+  return type === 'exhaust' ? .7 : type === 'control_electronics' ? .8 : type === 'turbocharger' ? 1.1 : 1;
+}
+
+/** Add persistent wear to every fitted PU component after a non-race session. */
+export function addPowerUnitWear(car: CarState, wear: number): void {
+  if (!(wear > 0)) return;
+  car.puWear ??= {};
+  car.puWearPool ??= {};
+  for (const type of PU_PART_TYPES) {
+    const specId = car.fitted[type];
+    if (!specId) continue;
+    const pool = car.puWearPool[type] ??= {};
+    const current = pool[specId] ?? (car.puWear[type]?.specId === specId ? car.puWear[type]!.wear : 0);
+    const next = clamp(current + wear * powerUnitWearRate(type), 0, 99);
+    pool[specId] = next;
+    car.puWear[type] = { specId, wear: next };
+  }
 }
 
 /** 本赛季最后一场正赛已经开始：配额将在新赛季重置，超额不再罚退到下一站（即下赛季首站） */

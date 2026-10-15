@@ -9,7 +9,8 @@ import { Rng } from './rng';
 import { raceEngineerFor, staffAbility } from './staff';
 import { effectiveSetup } from './supernatural';
 import { practiceEffects, trackFit } from './performance';
-import { ensureDriverWeekendTyres, provisionWeekendTyres, returnEligibleTyreSets, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
+import { addPowerUnitWear } from './powerunit';
+import { driverTyreSets, ensureDriverWeekendTyres, provisionWeekendTyres, returnEligibleTyreSets, takeTyreSet, tyreSetById, useTyreSet, weekendTyreKey } from './tyres';
 import type {
   DriverPlan,
   DriverState,
@@ -17,10 +18,11 @@ import type {
   PracticeProgram,
   PracticeSetupFocus,
   PracticeResult,
+  LiveQualifyingState,
   QualiApproach,
   QualiResult,
   QualiSession,
-  RaceEvent,
+  Compound,
   SetupState,
   TeamState,
   TrackDef,
@@ -130,6 +132,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     if (old) {
       const inherited = { ...deepClone(old), tyrePlan: 'auto' as const, sprintTyre: 'auto' as const };
       delete inherited.strategyReview;
+      delete inherited.raceTyreSetPlan;
       weekend.plans[driver.id] = inherited;
     } else weekend.plans[driver.id] = deepClone(DEFAULT_PLAN);
   }
@@ -236,6 +239,7 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
     const tyreSet = takeTyreSet(team, driver.id, compound, weekendTyreKey(state));
     const tyreStartedNew = tyreSet?.state === 'new';
     useTyreSet(tyreSet, laps);
+    addPowerUnitWear(car, laps * .012);
     result.timesheet.push({ driverId: driver.id, teamId: team.id, time: round3(time), laps, compound, tyreSetId: tyreSet?.id, tyreStartedNew });
   }
   result.timesheet.sort((a, b) => a.time - b.time);
@@ -287,6 +291,7 @@ function qualiLap(
   score: number,
   track: TrackDef,
   wet: boolean,
+  compound: Compound,
   sessionIndex: number,
   rng: Rng,
   tyreLaps = 0,
@@ -305,12 +310,49 @@ function qualiLap(
     practiceEffects(setup, rules, trackFit(carRatings(team, team.cars.find(car => car.driverId === driver.id)!, rules), track)).quali +
     approach.mean -
     sessionIndex * 0.12 +
+    (rules.tyres[compound]?.pace ?? 0) +
     tyreLaps * .018 +
     rng.normal(0, sigma);
   return { time: round3(t) };
 }
 
 export function runQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 'sprint_qualifying'): QualiResult {
+  let result: QualiResult | null = null;
+  while (!result) {
+    const step = advanceQualifyingSegment(state, rng, kind);
+    if (!step.ok) throw new Error(step.message);
+    result = step.result;
+  }
+  return result;
+}
+
+export interface QualifyingStepResult {
+  ok: boolean;
+  message: string;
+  result: QualiResult | null;
+}
+
+export function qualifyingTyreSets(state: GameState, team: TeamState, driverId: string, kind: 'qualifying' | 'sprint_qualifying', segmentIndex: number) {
+  const key = weekendTyreKey(state);
+  const wet = (kind === 'qualifying' ? state.weekend?.weather.qualifying : state.weekend?.weather.sprintQualifying) === 'wet';
+  return driverTyreSets(team, driverId, key).filter(set => {
+    if (set.returned) return false;
+    const tyre = state.rules.tyres[set.compound];
+    if (!tyre || tyre.wet !== wet) return false;
+    if (kind === 'sprint_qualifying' && segmentIndex < 2 && !wet) {
+      return set.compound === (state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0]) && set.state === 'new';
+    }
+    return true;
+  });
+}
+
+/** Run only the current Q/SQ segment. The caller can save between segments. */
+export function advanceQualifyingSegment(
+  state: GameState,
+  rng: Rng,
+  kind: 'qualifying' | 'sprint_qualifying',
+  tyreSetIds?: Record<string, string[]>,
+): QualifyingStepResult {
   const w = state.weekend!;
   const track = currentTrack(state);
   const wet = (kind === 'qualifying' ? w.weather.qualifying : w.weather.sprintQualifying) === 'wet';
@@ -318,65 +360,90 @@ export function runQualifying(state: GameState, rng: Rng, kind: 'qualifying' | '
     ...e,
     score: trackScore(carRatings(e.team, e.car, state.rules), track),
   }));
+  const entryByDriver = new Map(entries.map(entry => [entry.driver.id, entry]));
   const n = entries.length;
   const prefix = kind === 'qualifying' ? 'Q' : 'SQ';
-  const sessions: QualiSession[] = [];
-  const events: RaceEvent[] = [];
-  let alive = entries.map(e => e.driver.id);
-  const finalOrder: string[] = [];
   // 三节淘汰：最后一节保留 qualiFinalists 台车，其余平均分到前两节淘汰（2026 年 22 台车 → 6/6/10）
   const eliminated = n - state.rules.qualiFinalists;
   const knockouts = eliminated >= 2 ? [Math.ceil(eliminated / 2), Math.floor(eliminated / 2)] : [];
   const sessionCount = knockouts.length + 1;
+  const progress: LiveQualifyingState = w.liveQualifying?.kind === kind
+    ? w.liveQualifying
+    : { version: 1 as const, kind, segmentIndex: 0, segmentCount: sessionCount, alive: entries.map(e => e.driver.id), finalOrder: [], sessions: [], events: [] };
+  if (progress.segmentIndex >= progress.segmentCount) return { ok: false, message: '排位赛分段已经完成', result: null };
+  const s = progress.segmentIndex;
+  const runs = kind === 'sprint_qualifying' ? 1 : sessionCount === 1 ? 3 : 2;
 
-  for (let s = 0; s < sessionCount; s++) {
-    const runs = kind === 'sprint_qualifying' ? 1 : sessionCount === 1 ? 3 : 2;
-    const times = alive.map(id => {
-      const e = entries.find(x => x.driver.id === id)!;
+  // Validate every manual player choice before consuming RNG or tyre life.
+  if (tyreSetIds) for (const id of progress.alive) {
+    const e = entryByDriver.get(id)!;
+    if (!e.team.isPlayer) continue;
+    const legal = qualifyingTyreSets(state, e.team, id, kind, s);
+    const selected = tyreSetIds[id] ?? [];
+    if (!legal.length) continue; // No legal set means this driver is allowed to record no time.
+    if (selected.length !== runs) return { ok: false, message: `${driverName(state, id)} 必须为本分段的 ${runs} 次出场分别选择轮胎组`, result: null };
+    for (const setId of selected) if (!legal.some(set => set.id === setId)) {
+      return { ok: false, message: `${driverName(state, id)} 选择了不可用或不符合本分段规则的轮胎组`, result: null };
+    }
+  }
+
+  const times = progress.alive.map(id => {
+      const e = entryByDriver.get(id)!;
       let best: number | null = null;
       let note: string | undefined;
       const tyreRuns: NonNullable<QualiSession['entries'][number]['tyreRuns']> = [];
       for (let r = 0; r < runs; r++) {
-        const compound = wet
+        const automaticCompound = wet
           ? state.rules.wetCompound
           : kind === 'sprint_qualifying' && s < 2
             ? state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0]
             : state.rules.dryCompounds[0];
-        const set = takeTyreSet(e.team, id, compound, weekendTyreKey(state), undefined, kind === 'sprint_qualifying' && s < 2 && !wet);
+        const selectedId = e.team.isPlayer ? tyreSetIds?.[id]?.[r] : undefined;
+        const selected = selectedId ? tyreSetById(e.team, id, weekendTyreKey(state), selectedId) : null;
+        const set = selected ?? takeTyreSet(e.team, id, automaticCompound, weekendTyreKey(state), undefined, kind === 'sprint_qualifying' && s < 2 && !wet);
         if (!set) { note = '无可用轮胎'; continue; }
+        const compound = set.compound;
         const startedNew = set.state === 'new';
         const lapsBefore = set.laps;
-        const lap = qualiLap(state, e.driver, e.team, e.score, track, wet, s, rng, lapsBefore);
+        const lap = qualiLap(state, e.driver, e.team, e.score, track, wet, compound, s, rng, lapsBefore);
         const lapsAdded = 3;
         useTyreSet(set, lapsAdded);
+        addPowerUnitWear(e.car, lapsAdded * .02);
         tyreRuns.push({ compound, setId: set.id, startedNew, lapsBefore, lapsAdded, time: lap.time });
         if (lap.time === null) note = lap.note;
         else if (best === null || lap.time < best) best = lap.time;
       }
       return { driverId: id, teamId: e.team.id, time: best, eliminated: false, note: best === null ? note : undefined, tyreRuns };
-    });
-    times.sort((a, b) => (a.time ?? 9999) - (b.time ?? 9999));
-    const cut = s < knockouts.length ? knockouts[s] : 0;
-    const name = sessionCount === 1 ? prefix : `${prefix}${s + 1}`;
-    if (cut > 0) {
-      const out = times.slice(times.length - cut);
-      out.forEach(t => (t.eliminated = true));
-      // 被淘汰者按本节成绩倒序进入最终排位
-      finalOrder.unshift(...out.map(t => t.driverId));
-      alive = times.slice(0, times.length - cut).map(t => t.driverId);
-      for (const t of out) {
-        const isPlayer = state.teams[t.teamId]?.isPlayer;
-        if (isPlayer) {
-          events.push({ lap: 0, type: 'info', text: `${driverName(state, t.driverId)} 止步 ${name}${t.note ? `（${t.note}）` : ''}`, drivers: [t.driverId], key: true });
-        }
+  });
+  times.sort((a, b) => (a.time ?? 9999) - (b.time ?? 9999));
+  const cut = s < knockouts.length ? knockouts[s] : 0;
+  const name = sessionCount === 1 ? prefix : `${prefix}${s + 1}`;
+  if (cut > 0) {
+    const out = times.slice(times.length - cut);
+    out.forEach(t => (t.eliminated = true));
+    progress.finalOrder.unshift(...out.map(t => t.driverId));
+    progress.alive = times.slice(0, times.length - cut).map(t => t.driverId);
+    for (const t of out) {
+      if (state.teams[t.teamId]?.isPlayer) {
+        progress.events.push({ lap: 0, type: 'info', text: `${driverName(state, t.driverId)} 止步 ${name}${t.note ? `（${t.note}）` : ''}`, drivers: [t.driverId], key: true });
       }
-    } else {
-      finalOrder.unshift(...times.map(t => t.driverId));
     }
-    sessions.push({ name, entries: times });
+  } else {
+    progress.finalOrder.unshift(...times.map(t => t.driverId));
+  }
+  progress.sessions.push({ name, entries: times });
+  progress.segmentIndex += 1;
+  w.liveQualifying = progress;
+  w.parcFerme = true;
+
+  if (progress.segmentIndex < progress.segmentCount) {
+    const nextName = sessionCount === 1 ? prefix : `${prefix}${progress.segmentIndex + 1}`;
+    return { ok: true, message: `${name} 结束，请为 ${nextName} 选择轮胎组`, result: null };
   }
 
-  const order = finalOrder;
+  const sessions = progress.sessions;
+  const events = progress.events;
+  const order = progress.finalOrder;
   // 罚退
   const grid = applyPenalties(order, kind === 'qualifying' ? w.penalties : {});
   const lastSession = sessions[sessions.length - 1];
@@ -413,7 +480,7 @@ export function runQualifying(state: GameState, rng: Rng, kind: 'qualifying' | '
   } else {
     w.sprintQualifying = result;
   }
-  w.parcFerme = true;
+  w.liveQualifying = null;
 
   // 叙事
   const pt = playerTeam(state);
@@ -435,7 +502,7 @@ export function runQualifying(state: GameState, rng: Rng, kind: 'qualifying' | '
     `${track.name} ${kind === 'qualifying' ? '排位赛' : '冲刺排位赛'}结果`,
     `${wet ? '雨中' : ''}${kind === 'qualifying' ? '排位赛' : '冲刺排位赛'}结束，杆位 ${driverName(state, order[0])}。${lines.join('；')}。`,
   );
-  return result;
+  return { ok: true, message: `${kind === 'qualifying' ? '排位赛' : '冲刺排位赛'}结束，杆位：${driverName(state, order[0])}`, result };
 }
 
 function lastTimeOf(sessions: QualiSession[], id: string): number | null {

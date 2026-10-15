@@ -96,7 +96,7 @@ export function canRunTyreStrategy(team: TeamState, driverId: string, key: strin
 export function returnEligibleTyreSets(state: GameState, team: TeamState, driverId: string): TyreSet[] {
   const dry = new Set(state.rules.dryCompounds);
   const available = ensureDriverWeekendTyres(state, team, driverId).filter(set => !set.returned && dry.has(set.compound));
-  const protectedIds = new Set<string>();
+  const protectedIds = new Set<string>(state.weekend?.plans[driverId]?.raceTyreSetPlan ?? []);
   for (const compound of state.rules.dryCompounds) {
     const reserveCount = state.calendar[state.season.roundIndex]?.sprint && compound === state.rules.dryCompounds[1] ? 2 : 1;
     const reserves = available.filter(set => set.compound === compound)
@@ -113,6 +113,11 @@ export function takeTyreSet(team: TeamState, driverId: string, compound: Compoun
     .filter(set => set.compound === compound && !set.returned && set.id !== excludeSetId && (!newOnly || set.state === 'new'))
     .sort((a, b) => Number(a.state === 'used') - Number(b.state === 'used') || a.laps - b.laps || a.id.localeCompare(b.id));
   return candidates[0] ?? null;
+}
+
+/** Resolve a specific usable physical set without changing its state. */
+export function tyreSetById(team: TeamState, driverId: string, key: string, setId: string): TyreSet | null {
+  return driverTyreSets(team, driverId, key).find(set => set.id === setId && !set.returned) ?? null;
 }
 
 export function useTyreSet(set: TyreSet | null | undefined, laps: number, wearIncrement = laps): void {

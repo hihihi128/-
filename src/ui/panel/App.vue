@@ -41,8 +41,21 @@ onMounted(() => connect());
 
 async function advance() {
   if (!view.value?.next) return;
+  if (view.value.season.phase === 'qualifying' || view.value.season.phase === 'sprint_qualifying') {
+    store.tab = 'weekend';
+    return;
+  }
   await act({ type: 'ADVANCE' });
 }
+
+const advanceLabel = computed(() => {
+  if (!view.value?.next) return '';
+  const phase = view.value.season.phase;
+  if (phase !== 'qualifying' && phase !== 'sprint_qualifying') return view.value.next.label;
+  const live = view.value.weekend?.liveQualifying;
+  const prefix = phase === 'sprint_qualifying' ? 'SQ' : 'Q';
+  return `选择 ${prefix}${live?.segmentCount === 1 ? '' : (live?.segmentIndex ?? 0) + 1} 轮胎`;
+});
 
 async function narrate() {
   await call(a => a.requestNarration());
@@ -94,7 +107,7 @@ function supernaturalSettings() {
           <button v-if="view.narration.length" class="small" :disabled="generating" :title="'待叙述：' + view.narration.map(n => n.title).join('、')" @click="narrate">
             让 AI 叙述（{{ view.narration.length }}）
           </button>
-          <button v-if="view.next" class="primary" :disabled="store.busy || generating" @click="advance">▶ {{ view.next.label }}</button>
+          <button v-if="view.next" class="primary" :disabled="store.busy || generating" @click="advance">▶ {{ advanceLabel }}</button>
         </div>
       </header>
       <div v-if="generating" class="notice warn small" style="margin: 0 12px 8px">AI 正在生成回复，生成结束前面板只读。</div>
