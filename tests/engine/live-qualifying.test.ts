@@ -133,6 +133,28 @@ describe('实时排位状态机', () => {
     expect(restored.weekend!.liveQualifying!.events.filter((event: { text: string }) => event.text.includes('无法验证'))).toHaveLength(0);
   });
 
+  it('保存并迁移跨线后的分数 tick 不会清除实时状态', () => {
+    let state = start(atQualifying(712));
+    let live = state.weekend!.liveQualifying!;
+    state = act(state, { type: 'RELEASE_QUALIFYING_CAR', sessionId: live.id, expectedRevision: live.revision, driverId: 'c1', tyreSetId: usableSetId(state, 'c1') });
+    state = resume(state);
+    live = state.weekend!.liveQualifying!;
+    live.cars.c1.phase = 'out_lap';
+    live.cars.c1.phaseElapsedTicks = 0;
+    live.cars.c1.progress = 0;
+    live.cars.c1.activeRun!.cleanTime = 76.195;
+    for (let index = 0; index < 13 && state.weekend!.liveQualifying!.cars.c1.phase === 'out_lap'; index++) state = advance(state, 80);
+    live = state.weekend!.liveQualifying!;
+    expect(live.cars.c1.phase).toBe('flying_lap');
+    expect(Number.isInteger(live.cars.c1.phaseElapsedTicks)).toBe(false);
+
+    const restored = JSON.parse(JSON.stringify(state));
+    migrateState(restored);
+    expect(restored.weekend!.liveQualifying).toMatchObject({ controlMode: 'manual', stage: 'running' });
+    expect(restored.weekend!.liveQualifying!.cars.c1.phase).toBe('flying_lap');
+    expect(restored.weekend!.liveQualifying!.events.filter((event: { text: string }) => event.text.includes('无法验证'))).toHaveLength(0);
+  });
+
   it('迁移下一分段时允许保留已淘汰的玩家赛车状态', () => {
     let state = start(atQualifying(709));
     const live = state.weekend!.liveQualifying!;

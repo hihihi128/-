@@ -35,9 +35,9 @@ const remaining = computed(() => {
 const statusText = computed(() => {
   const session = live.value;
   if (!session) return '等待开始';
-  if (session.stage === 'finishing') return '计时结束，完成当前圈';
   if (session.paused) return session.stage === 'ready' ? '准备放车' : '已暂停';
   if (!playbackArmed.value) return '已中断，点击继续';
+  if (session.stage === 'finishing') return '计时结束，完成当前圈';
   return '计时进行中';
 });
 const selectedCar = computed(() => live.value?.cars.find(car => car.driverId === selectedDriverId.value) ?? playerCars.value[0] ?? onTrackCars.value[0] ?? null);
@@ -206,7 +206,7 @@ function formatGap(progress: number) { return `${(Math.max(0, progress) * 100).t
         <div class="clock mono" aria-label="剩余时间">{{ remaining }}</div>
         <div class="clock-copy"><b>{{ statusText }}</b><span class="tiny muted">{{ live.wet ? '雨地' : '干地' }} · {{ live.runAllowance }} 次出场上限</span></div>
         <div class="clock-actions">
-          <button class="pause" :disabled="store.busy" @click="setClock(!live.paused)">{{ live.paused ? (live.stage === 'finishing' ? '继续完成当前圈' : '开始 / 继续') : '暂停' }}</button>
+          <button class="pause" :disabled="store.busy" @click="setClock(!live.paused)">{{ live.paused || !playbackArmed ? (live.stage === 'finishing' ? '继续完成当前圈' : '开始 / 继续') : '暂停' }}</button>
           <div class="speed" aria-label="播放速度">
             <button v-for="speed in [1, 2, 4, 8]" :key="speed" :class="{ on: live.speed === speed }" :aria-pressed="live.speed === speed" :disabled="store.busy" @click="setClock(live.paused, speed as 1 | 2 | 4 | 8)">{{ speed }}×</button>
           </div>

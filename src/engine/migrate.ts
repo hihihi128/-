@@ -163,7 +163,7 @@ function hasValidLiveQualifyingPrivateState(state: GameState, live: Record<strin
       || typeof car.player !== 'boolean'
       || !phases.has(car.phase as string)
       || !Number.isFinite(car.progress) || (car.progress as number) < 0 || (car.progress as number) >= 1
-      || !Number.isInteger(car.phaseElapsedTicks) || (car.phaseElapsedTicks as number) < 0
+      || !Number.isFinite(car.phaseElapsedTicks) || (car.phaseElapsedTicks as number) < 0
       || !Number.isInteger(car.runCount) || (car.runCount as number) < 0 || (car.runCount as number) > (car.runAllowance as number)
       || !Number.isInteger(car.runAllowance) || (car.runAllowance as number) !== live.runAllowance
       || !Array.isArray(car.completedRuns)
