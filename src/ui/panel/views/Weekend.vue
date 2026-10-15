@@ -302,14 +302,20 @@ const raceLike = computed<RaceResult | null>(() => {
 });
 const selectedResultDriverId = ref('');
 const resultDriverDetail = ref<HTMLElement | null>(null);
+const resultDriverTrigger = ref<HTMLButtonElement | null>(null);
 const selectedRaceEntry = computed(() => raceLike.value?.classification.find(entry => entry.driverId === selectedResultDriverId.value) ?? null);
 watch(() => `${shownResult.value}:${raceLike.value?.kind ?? ''}`, () => { selectedResultDriverId.value = ''; });
-async function toggleResultDriver(driverId: string) {
+async function toggleResultDriver(driverId: string, event: MouseEvent) {
+  resultDriverTrigger.value = event.currentTarget as HTMLButtonElement;
   selectedResultDriverId.value = selectedResultDriverId.value === driverId ? '' : driverId;
   if (!selectedResultDriverId.value) return;
   await nextTick();
   resultDriverDetail.value?.focus();
   resultDriverDetail.value?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+}
+function closeResultDriver() {
+  selectedResultDriverId.value = '';
+  void nextTick(() => resultDriverTrigger.value?.focus());
 }
 const qualiLike = computed<QualiResult | null>(() => {
   const k = shownResult.value;
@@ -631,7 +637,7 @@ const selectedChartSeries = computed(() => {
             <tbody>
               <tr v-for="c in raceLike.classification" :key="c.driverId" :class="{ me: teamOf(c.driverId).mine }">
                 <td class="mono">{{ c.pos ?? 'DNF' }}</td>
-                <td><button class="result-driver" :class="{ selected: selectedResultDriverId === c.driverId }" :aria-expanded="selectedResultDriverId === c.driverId" aria-controls="result-driver-detail" @click="toggleResultDriver(c.driverId)"><span class="swatch" :style="{ background: teamOf(c.driverId).color }"></span>{{ name(c.driverId) }}</button></td>
+                <td><button class="result-driver" :class="{ selected: selectedResultDriverId === c.driverId }" :aria-expanded="selectedResultDriverId === c.driverId" aria-controls="result-driver-detail" @click="toggleResultDriver(c.driverId, $event)"><span class="swatch" :style="{ background: teamOf(c.driverId).color }"></span>{{ name(c.driverId) }}</button></td>
                 <td class="mono">{{ c.grid }}<span v-if="c.pos" class="tiny" :class="c.grid - c.pos > 0 ? 'pos' : c.grid - c.pos < 0 ? 'neg' : 'muted'">（{{ c.grid - c.pos > 0 ? '+' : '' }}{{ c.grid - c.pos }}）</span></td>
                 <td class="mono">{{ c.status === 'dnf' ? c.reason : c.gap }}</td>
                 <td class="mono">{{ c.pits }}</td>
@@ -644,7 +650,7 @@ const selectedChartSeries = computed(() => {
           </table>
         </div>
         <section v-if="selectedRaceEntry" id="result-driver-detail" ref="resultDriverDetail" class="card result-driver-detail" role="region" aria-label="车手比赛详情" tabindex="-1">
-          <div class="spread"><div><span class="tiny muted">车手比赛详情</span><h3><span class="swatch" :style="{ background: teamOf(selectedRaceEntry.driverId).color }"></span>{{ name(selectedRaceEntry.driverId) }}</h3></div><button class="small" aria-label="关闭车手比赛详情" @click="selectedResultDriverId = ''">✕</button></div>
+          <div class="spread"><div><span class="tiny muted">车手比赛详情</span><h3><span class="swatch" :style="{ background: teamOf(selectedRaceEntry.driverId).color }"></span>{{ name(selectedRaceEntry.driverId) }}</h3></div><button class="small" aria-label="关闭车手比赛详情" @click="closeResultDriver">✕</button></div>
           <div class="result-stats"><span>发车 <b>P{{ selectedRaceEntry.grid }}</b></span><span>完赛 <b>{{ selectedRaceEntry.pos ? `P${selectedRaceEntry.pos}` : 'DNF' }}</b></span><span>名次变化 <b :class="selectedRaceEntry.pos && selectedRaceEntry.grid - selectedRaceEntry.pos > 0 ? 'pos' : selectedRaceEntry.pos && selectedRaceEntry.grid - selectedRaceEntry.pos < 0 ? 'neg' : ''">{{ selectedRaceEntry.pos ? `${selectedRaceEntry.grid - selectedRaceEntry.pos > 0 ? '+' : ''}${selectedRaceEntry.grid - selectedRaceEntry.pos}` : '—' }}</b></span></div>
           <div><b class="small">进站圈数</b><div v-if="selectedRaceEntry.pitStops?.length" class="pit-laps"><span v-for="(stop, index) in selectedRaceEntry.pitStops" :key="`${stop.lap}-${index}`"><b>第 {{ stop.lap }} 圈</b> · 静止 {{ stop.actualStationary.toFixed(1) }}s<span v-if="stop.repair"> · 维修</span><span v-if="stop.slow" class="neg"> · 慢停</span></span></div><p v-else class="small muted">本场没有详细进站圈数记录。</p></div>
           <div><b class="small">逐圈名次</b><LapChart v-if="selectedChartSeries.length" :series="selectedChartSeries" :max-pos="raceLike.classification.length" /><p v-else class="small muted">旧比赛结果没有保存该车手的逐圈名次。</p></div>

@@ -754,7 +754,7 @@ export function createRaceSession(
       disobedient.push(id);
     }
     const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, thermalKnowledge: 30, trackKnowledge: 30, qualiBonus: 0 });
-    const wet = initialWetness >= .22;
+    const wet = initialWetness >= WET_TYRE_MIN_WETNESS;
     const compounds = wet
       ? [wetCompoundFor(rules, initialWetness)]
       : kind === 'sprint'

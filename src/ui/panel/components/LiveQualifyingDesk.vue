@@ -50,7 +50,6 @@ const mobileTrackGroups = computed(() => {
     if (!current || car.progress - current.cars[0].progress >= .18) groups.push({ key: car.driverId, progress: car.progress, cars: [car] });
     else {
       current.cars.push(car);
-      current.key = current.cars.map(item => item.driverId).join(':');
       current.progress = current.cars.reduce((sum, item) => sum + item.progress, 0) / current.cars.length;
     }
   }
@@ -82,6 +81,10 @@ function syncSelections() {
 }
 watch(() => `${live.value?.id ?? ''}:${live.value?.segmentIndex ?? -1}`, () => { syncSelections(); expandedTrackDrivers.value = []; }, { immediate: true });
 watch(() => playerCars.value.map(car => `${car.driverId}:${car.legalTyreSetIds.join(',')}`).join('|'), syncSelections);
+watch(() => onTrackCars.value.map(car => car.driverId).join('|'), () => {
+  const onTrack = new Set(onTrackCars.value.map(car => car.driverId));
+  expandedTrackDrivers.value = expandedTrackDrivers.value.filter(driverId => onTrack.has(driverId));
+});
 
 async function start() {
   await act({ type: 'START_QUALIFYING', kind: phase.value });
