@@ -2302,5 +2302,5 @@ function describeChanges(state: GameState, logs: ReturnType<typeof applyAiComman
 }
 
 function isSimulation(a: Action): boolean {
-  return ['ADVANCE', 'RUN_PRACTICE', 'RUN_QUALIFYING', 'RUN_SPRINT_QUALIFYING', 'RUN_SPRINT', 'RUN_RACE', 'FINISH_ROUND', 'START_SEASON', 'START_WEEKEND', 'START_NEXT_SEASON'].includes(a.type);
+  return ['ADVANCE', 'RUN_PRACTICE', 'RUN_QUALIFYING', 'RUN_SPRINT_QUALIFYING', 'SIMULATE_QUALIFYING', 'RUN_SPRINT', 'RUN_RACE', 'FINISH_ROUND', 'START_SEASON', 'START_WEEKEND', 'START_NEXT_SEASON'].includes(a.type);
 }

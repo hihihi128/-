@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { continuationSuffix, F1Controller, HUD_TAG, INJECT_ID, LEADERSHIP_PREFIX, PLAYER_REPLACED_LEADERSHIP, principalRole } from '../../src/tavern/controller';
 import { PTR, STORE_KEY } from '../../src/tavern/store';
 import { cardWorldbook, FakeTavern } from './fakeEnv';
@@ -56,6 +56,18 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
     expect(ctrl.status().revisions).toBe(3);
     expect(env.messages[1].variables[0][PTR]).toBeTruthy();
+  });
+
+  it('一键模拟排位赛后自动触发结果叙述', async () => {
+    const state = advanceUntil(ctrl.stateAt()!, value => value.season.phase === 'qualifying', 1200);
+    expect((await ctrl.importSave(JSON.stringify(state))).ok).toBe(true);
+    ctrl.updateSettings({ autoNarrate: true });
+    const triggeredBefore = env.triggered;
+
+    expect((await ctrl.dispatch({ type: 'SIMULATE_QUALIFYING', kind: 'qualifying' })).ok).toBe(true);
+
+    expect(ctrl.stateAt()!.season.phase).toBe('race');
+    await vi.waitFor(() => expect(env.triggered).toBe(triggeredBefore + 1));
   });
 
   it('车队工程师默认走主 API，也可使用设置中的副 API', async () => {

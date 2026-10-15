@@ -4,6 +4,7 @@ import { createApp, nextTick, type App } from 'vue';
 import { act, advanceUntil, newTestGame } from '../helpers';
 import { buildView } from '../../src/engine/view';
 import { store } from '../../src/ui/panel/bridge';
+import AppPanel from '../../src/ui/panel/App.vue';
 import Weekend from '../../src/ui/panel/views/Weekend.vue';
 
 const mounted: App[] = [];
@@ -33,6 +34,27 @@ function mountWeekend(view: ReturnType<typeof buildView>) {
   return host;
 }
 
+function mountApp(view: ReturnType<typeof buildView>) {
+  store.connected = true;
+  store.view = view;
+  store.status = { generating: false, settings: { engineerApi: 'main' } } as never;
+  store.busy = false;
+  store.tab = 'overview';
+  store.panelVisible = true;
+  (window as any).F1Manager = {
+    dispatch: vi.fn(async () => ({ ok: true, message: 'ok' })),
+    status: () => store.status,
+    view: () => view,
+    getSpecialNegotiation: () => null,
+  };
+  const host = document.createElement('div');
+  document.body.append(host);
+  const app = createApp(AppPanel);
+  mounted.push(app);
+  app.mount(host);
+  return host;
+}
+
 function driverCard(host: HTMLElement, driverName: string): HTMLElement {
   return [...host.querySelectorAll<HTMLElement>('.live-qualifying .driver-card')].find(card => card.textContent?.includes(driverName))!;
 }
@@ -45,6 +67,9 @@ afterEach(() => {
   store.status = null;
   store.view = null;
   store.busy = false;
+  store.tab = 'overview';
+  store.panelVisible = true;
+  window.dispatchEvent(new Event('pagehide'));
 });
 
 describe('segmented qualifying tyre selection UI', () => {
@@ -71,6 +96,22 @@ describe('segmented qualifying tyre selection UI', () => {
     expect(host.querySelectorAll('.live-qualifying .driver-card')).toHaveLength(0);
     expect(host.textContent).toContain('本队车手已全部淘汰');
     expect(host.textContent).toContain('结束排位赛');
+  });
+
+  it.each([
+    'qualifying',
+    'sprint_qualifying',
+  ] as const)('dispatches top-level completion after both player drivers exit %s', async kind => {
+    const { view } = qualifyingView(kind, 0);
+    const host = mountApp(view);
+    await nextTick();
+
+    const button = [...host.querySelectorAll<HTMLButtonElement>('header .primary')].find(candidate => candidate.textContent?.includes('结束排位赛'));
+    expect(button?.textContent).toContain('结束排位赛');
+    button!.click();
+    await Promise.resolve();
+
+    expect((window as any).F1Manager.dispatch).toHaveBeenCalledWith({ type: 'SIMULATE_QUALIFYING', kind });
   });
 
   it('offers one-click automatic qualifying before the live desk starts', async () => {

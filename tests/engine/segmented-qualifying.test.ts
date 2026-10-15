@@ -59,6 +59,32 @@ describe('逐段排位与实体轮胎组', () => {
     expect(result.sessions.slice(1).every(session => session.entries.some(entry => !state.teams[entry.teamId].isPlayer))).toBe(true);
   });
 
+  it('只在两名玩家车手都淘汰后自动完成实时排位的剩余分段', () => {
+    let state = advanceUntil(newTestGame(326), value => value.season.phase === 'qualifying');
+    state = act(state, { type: 'RUN_QUALIFYING' });
+    const live = state.weekend!.liveQualifying!;
+    live.controlMode = 'manual';
+    expect(tryAct(state, { type: 'SIMULATE_QUALIFYING', kind: 'qualifying' })).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('本队仍有车手晋级'),
+    });
+
+    const playerIds = new Set(state.teams[state.meta.playerTeamId].cars.flatMap(car => car.driverId ? [car.driverId] : []));
+    const newlyEliminated = live.alive.filter(driverId => playerIds.has(driverId));
+    live.alive = live.alive.filter(driverId => !playerIds.has(driverId));
+    live.finalOrder.unshift(...newlyEliminated);
+    for (const entry of live.sessions[0].entries) if (newlyEliminated.includes(entry.driverId)) entry.eliminated = true;
+    const globalRng = state.rng;
+
+    state = act(state, { type: 'SIMULATE_QUALIFYING', kind: 'qualifying' });
+    expect(state.season.phase).toBe('race');
+    expect(state.weekend!.liveQualifying).toBeNull();
+    expect(state.weekend!.qualifying!.sessions.map(session => session.name)).toEqual(['Q1', 'Q2', 'Q3']);
+    expect(new Set(state.weekend!.qualifying!.order).size).toBe(state.weekend!.qualifying!.order.length);
+    expect(state.weekend!.qualifying!.sessions.slice(1).every(session => session.entries.every(entry => !playerIds.has(entry.driverId)))).toBe(true);
+    expect(state.rng).toBe(globalRng);
+  });
+
   it('拒绝不可用轮胎组，并且不消耗随机数或推进分段', () => {
     const state = advanceUntil(newTestGame(315), value => value.season.phase === 'qualifying');
     const beforeRng = state.rng;

@@ -16,7 +16,7 @@ import { closeUnansweredRandomEvent } from './randomEvents';
 import { isPowerUnitPart, PU_PART_TYPES, resetPuUsage, recordPuFit } from './powerunit';
 import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, wetCompoundFor, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
-import type { Rng } from './rng';
+import { Rng } from './rng';
 import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, PracticeReturnRequest, RaceResult, TeamState } from './types';
 import { clamp, deepClone, money, round1, round2 } from './util';
 import { advanceQualifyingSegment, completedPracticeSessions, createWeekend, currentRound, currentTrack, practiceSessionCount, runPractice } from './weekend';
@@ -220,9 +220,10 @@ export function simulateQualifying(state: GameState, rng: Rng, kind: 'qualifying
     live.paused = true;
     live.cars = {};
   }
+  const simulationRng = live ? Rng.restore(live.rngState) : rng;
   let result: import('./types').QualiResult | null = null;
   while (!result) {
-    const step = advanceQualifyingSegment(state, rng, kind);
+    const step = advanceQualifyingSegment(state, simulationRng, kind);
     if (!step.ok) return fail(step.message);
     result = step.result;
   }

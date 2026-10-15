@@ -419,7 +419,7 @@ const RANDOM_ACTIONS = new Set(['ADVANCE', 'START_SEASON', 'ADVANCE_WEEK', 'STAR
 export function dispatch(input: GameState, action: Action | InternalReviewedPlanAction, opts: DispatchOptions = {}): ActionResult {
   const state = deepClone(input);
   const resumesLiveQualifying = !!state.weekend?.liveQualifying && action.type === 'SIMULATE_QUALIFYING';
-  let seed = resumesLiveQualifying ? state.weekend!.liveQualifying!.rngState : state.rng;
+  let seed = state.rng;
   // An in-progress session owns its persisted RNG stream. Fresh randomness applies
   // only when launching it, never when resuming or auto-finishing a checkpoint.
   const resumesLiveRace = !!state.weekend?.liveRace && (action.type === 'RUN_RACE' || action.type === 'RUN_SPRINT');
