@@ -570,7 +570,6 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
   const result: RaceResult = {
     kind,
     weather: wet ? 'wet' : 'dry',
-    rainHistory: Array(totalLaps).fill(wet ? .6 : 0),
     laps: totalLaps,
     classification,
     events,
