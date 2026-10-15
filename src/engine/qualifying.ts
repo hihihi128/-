@@ -118,7 +118,7 @@ export function startLiveQualifying(state: GameState, outerRng: Rng, kind: 'qual
   const existing = state.weekend.liveQualifying;
   if (existing?.controlMode === 'manual') return fail('实时排位已经开始');
   const { entries, segmentCount } = structure(state);
-  const seed = existing?.rngState ?? outerRng.int(0, 0xffffffff);
+  const seed = outerRng.int(0, 0xffffffff);
   const sessionRng = Rng.restore(seed);
   const live: LiveQualifyingState = existing ?? {
     version: 2,
@@ -244,8 +244,8 @@ function phaseDurationTicks(state: GameState, car: LiveQualifyingCar): number {
   const track = currentTrack(state);
   if (car.phase === 'pit_out' || car.phase === 'pit_in') return Math.max(20, Math.round(track.pitLoss * QUALIFYING_TICKS_PER_SECOND / 2));
   const base = Math.max(1, run?.cleanTime ?? track.baseLap);
-  if (car.phase === 'out_lap' || car.phase === 'in_lap') return Math.round(base * SLOW_LAP_MULTIPLIER * QUALIFYING_TICKS_PER_SECOND);
-  return Math.round(base * QUALIFYING_TICKS_PER_SECOND);
+  if (car.phase === 'out_lap' || car.phase === 'in_lap') return base * SLOW_LAP_MULTIPLIER * QUALIFYING_TICKS_PER_SECOND;
+  return base * QUALIFYING_TICKS_PER_SECOND;
 }
 
 function nearestSlowCar(car: LiveQualifyingCar, snapshot: Record<string, { phase: LiveQualifyingCar['phase']; progress: number }>): { id: string; gap: number } | null {
@@ -286,10 +286,9 @@ function moveOneTick(state: GameState, live: LiveQualifyingState): void {
   const snapshot = Object.fromEntries(Object.values(live.cars).map(car => [car.driverId, { phase: car.phase, progress: car.progress }]));
   for (const car of Object.values(live.cars).sort((a, b) => a.driverId.localeCompare(b.driverId))) {
     if (car.phase === 'garage' || car.phase === 'done') continue;
-    const duration = phaseDurationTicks(state, car);
     let multiplier = 1;
-    const previousProgress = car.progress;
     if (car.phase === 'flying_lap' && car.activeRun) {
+      const duration = phaseDurationTicks(state, car);
       const slow = nearestSlowCar(car, snapshot);
       if (slow) {
         const sectorIndex = qualifyingSectorIndex(live.sectors, car.progress);
@@ -320,48 +319,59 @@ function moveOneTick(state: GameState, live: LiveQualifyingState): void {
         car.activeRun.blockerTicks = 0;
       }
     }
-    car.phaseElapsedTicks++;
-    let crossingFraction = 1;
-    if (car.phase === 'out_lap' || car.phase === 'flying_lap' || car.phase === 'in_lap') {
-      const distance = multiplier / duration;
-      if (previousProgress + distance >= 1) crossingFraction = Math.max(0, Math.min(1, (1 - previousProgress) / distance));
-      car.progress += distance;
-      car.sector = qualifyingSectorIndex(live.sectors, car.progress) + 1;
+    let remaining = 1;
+    while (remaining > 1e-9 && car.phase !== 'garage' && car.phase !== 'done') {
+      const phase = car.phase;
+      const duration = phaseDurationTicks(state, car);
+      let used = remaining;
+      if (phase === 'pit_out' || phase === 'pit_in') {
+        used = Math.min(remaining, Math.max(0, duration - car.phaseElapsedTicks));
+        car.phaseElapsedTicks += used;
+      } else {
+        const ticksToLine = Math.max(0, (1 - car.progress) * duration / multiplier);
+        used = Math.min(remaining, ticksToLine);
+        car.phaseElapsedTicks += used;
+        car.progress += used * multiplier / duration;
+        car.sector = qualifyingSectorIndex(live.sectors, Math.min(car.progress, 1)) + 1;
+        if (phase === 'flying_lap' && car.activeRun) {
+          car.activeRun.flyingElapsedTicks += used;
+          car.activeRun.trafficLoss += (1 - multiplier) * used / QUALIFYING_TICKS_PER_SECOND;
+        }
+      }
+      remaining -= used;
+      const crossed = (phase === 'pit_out' || phase === 'pit_in')
+        ? car.phaseElapsedTicks >= duration - 1e-9
+        : car.progress >= 1 - 1e-9;
+      if (!crossed) break;
+
+      if (phase === 'pit_out') {
+        car.phase = 'out_lap';
+      } else if (phase === 'out_lap') {
+        chargeLap(state, car);
+        const crossingTick = live.elapsedTicks - remaining;
+        if (crossingTick < live.durationTicks) {
+          car.phase = 'flying_lap';
+          if (car.activeRun) car.activeRun.flyingStartedTick = crossingTick;
+        } else car.phase = 'in_lap';
+      } else if (phase === 'flying_lap') {
+        chargeLap(state, car);
+        const run = car.activeRun!;
+        car.lastTime = round3(run.flyingElapsedTicks / QUALIFYING_TICKS_PER_SECOND);
+        run.trafficLoss = Math.max(run.trafficLoss, round3(Math.max(0, car.lastTime - run.cleanTime)));
+        if (run.valid && (car.bestTime === null || car.lastTime < car.bestTime)) car.bestTime = car.lastTime;
+        car.phase = 'in_lap';
+      } else if (phase === 'in_lap') {
+        chargeLap(state, car);
+        car.phase = 'pit_in';
+      } else {
+        completeRun(car);
+        car.phase = car.runCount < car.runAllowance && live.elapsedTicks < live.durationTicks ? 'garage' : 'done';
+      }
+      car.phaseElapsedTicks = 0;
+      car.progress = 0;
+      car.sector = 1;
+      multiplier = 1;
     }
-    if (car.phase === 'flying_lap' && car.activeRun) {
-      car.activeRun.flyingElapsedTicks += crossingFraction;
-      car.activeRun.trafficLoss += (1 - multiplier) * crossingFraction / QUALIFYING_TICKS_PER_SECOND;
-    }
-    const crossed = (car.phase === 'pit_out' || car.phase === 'pit_in')
-      ? car.phaseElapsedTicks >= duration
-      : car.progress >= 1;
-    if (!crossed) continue;
-    if (car.phase === 'pit_out') {
-      car.phase = 'out_lap';
-    } else if (car.phase === 'out_lap') {
-      chargeLap(state, car);
-      const crossingTick = live.elapsedTicks - 1 + crossingFraction;
-      if (crossingTick < live.durationTicks) {
-        car.phase = 'flying_lap';
-        if (car.activeRun) car.activeRun.flyingStartedTick = crossingTick;
-      } else car.phase = 'in_lap';
-    } else if (car.phase === 'flying_lap') {
-      chargeLap(state, car);
-      const run = car.activeRun!;
-      car.lastTime = round3(run.flyingElapsedTicks / QUALIFYING_TICKS_PER_SECOND);
-      run.trafficLoss = Math.max(run.trafficLoss, round3(Math.max(0, car.lastTime - run.cleanTime)));
-      if (run.valid && (car.bestTime === null || car.lastTime < car.bestTime)) car.bestTime = car.lastTime;
-      car.phase = 'in_lap';
-    } else if (car.phase === 'in_lap') {
-      chargeLap(state, car);
-      car.phase = 'pit_in';
-    } else if (car.phase === 'pit_in') {
-      completeRun(car);
-      car.phase = car.runCount < car.runAllowance && live.elapsedTicks < live.durationTicks ? 'garage' : 'done';
-    }
-    car.phaseElapsedTicks = 0;
-    car.progress = 0;
-    car.sector = 1;
   }
 }
 

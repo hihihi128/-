@@ -175,7 +175,7 @@ describe('实时排位状态机', () => {
     live.durationTicks = 10;
     live.elapsedTicks = 9;
     live.cars.c1.phase = 'out_lap';
-    const duration = Math.round(live.cars.c1.activeRun!.cleanTime * 1.32 * 10);
+    const duration = live.cars.c1.activeRun!.cleanTime * 1.32 * 10;
     for (const car of Object.values(live.cars)) if (car.driverId !== 'c1') car.phase = 'done';
     const beforeZero = deepClone(state);
     beforeZero.weekend!.liveQualifying!.cars.c1.progress = 1 - .5 / duration;
@@ -185,7 +185,25 @@ describe('实时排位状态机', () => {
     const refused = advance(exactZero, 1);
     expect(accepted.weekend!.liveQualifying!.cars.c1.phase).toBe('flying_lap');
     expect(accepted.weekend!.liveQualifying!.cars.c1.activeRun!.flyingStartedTick).toBeCloseTo(9.5, 5);
+    expect(accepted.weekend!.liveQualifying!.cars.c1.activeRun!.flyingElapsedTicks).toBeCloseTo(.5, 5);
     expect(refused.weekend!.liveQualifying!.cars.c1.phase).toBe('in_lap');
+  });
+
+  it('空赛道飞行圈保留毫秒级 clean time', () => {
+    let state = start(atQualifying(713));
+    let live = state.weekend!.liveQualifying!;
+    state = act(state, { type: 'RELEASE_QUALIFYING_CAR', sessionId: live.id, expectedRevision: live.revision, driverId: 'c1', tyreSetId: usableSetId(state, 'c1') });
+    state = resume(state);
+    live = state.weekend!.liveQualifying!;
+    for (const car of Object.values(live.cars)) if (car.driverId !== 'c1') car.phase = 'done';
+    live.cars.c1.phase = 'flying_lap';
+    live.cars.c1.progress = 0;
+    live.cars.c1.phaseElapsedTicks = 0;
+    live.cars.c1.activeRun!.cleanTime = 76.195;
+    live.cars.c1.activeRun!.flyingStartedTick = live.elapsedTicks;
+    while (state.weekend!.liveQualifying!.cars.c1.phase === 'flying_lap') state = advance(state, 80);
+    expect(state.weekend!.liveQualifying!.cars.c1.lastTime).toBe(76.195);
+    expect(state.weekend!.liveQualifying!.cars.c1.activeRun!.trafficLoss).toBe(0);
   });
 
   it('SQ1 只接受全新指定中性胎且只有一次出场', () => {

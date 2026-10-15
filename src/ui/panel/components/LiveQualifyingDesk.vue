@@ -37,6 +37,7 @@ const statusText = computed(() => {
   if (!session) return '等待开始';
   if (session.stage === 'finishing') return '计时结束，完成当前圈';
   if (session.paused) return session.stage === 'ready' ? '准备放车' : '已暂停';
+  if (!playbackArmed.value) return '已中断，点击继续';
   return '计时进行中';
 });
 const selectedCar = computed(() => live.value?.cars.find(car => car.driverId === selectedDriverId.value) ?? playerCars.value[0] ?? onTrackCars.value[0] ?? null);
