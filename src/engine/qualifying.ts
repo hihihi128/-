@@ -55,13 +55,19 @@ function sessionGuard(state: GameState, sessionId: string, revision: number): Li
   return live;
 }
 
-function scheduleAiRuns(live: LiveQualifyingState, rng: Rng, driverId: string): number[] {
+function scheduleAiRuns(live: LiveQualifyingState, rng: Rng): number[] {
   const result: number[] = [];
   const duration = live.durationTicks;
   for (let run = 0; run < live.runAllowance; run++) {
-    const windowStart = run === 0 ? 120 : Math.floor(duration * 0.55);
-    const windowEnd = run === 0 ? Math.floor(duration * 0.34) : Math.floor(duration * 0.76);
-    result.push(Math.max(1, rng.int(windowStart, Math.max(windowStart, windowEnd))) + (driverId.charCodeAt(0) % 7));
+    const windows = live.runAllowance === 1
+      ? [[.05, .45]]
+      : live.runAllowance === 2
+        ? [[.03, .12], [.46, .54]]
+        : [[.02, .07], [.34, .39], [.66, .71]];
+    const [start, end] = windows[run] ?? windows[windows.length - 1];
+    const windowStart = Math.max(1, Math.floor(duration * start));
+    const windowEnd = Math.max(windowStart, Math.floor(duration * end));
+    result.push(rng.int(windowStart, windowEnd));
   }
   return result.sort((a, b) => a - b);
 }
@@ -98,7 +104,7 @@ function prepareSegment(state: GameState, live: LiveQualifyingState, rng: Rng): 
       lastTime: null,
       activeRun: null,
       completedRuns: [],
-      scheduledReleaseTicks: !eligible || entry.team.isPlayer ? [] : scheduleAiRuns(live, rng, id),
+      scheduledReleaseTicks: !eligible || entry.team.isPlayer ? [] : scheduleAiRuns(live, rng),
       trafficStatus: 'clear',
       trafficDriverId: null,
       sector: 1,
@@ -116,7 +122,7 @@ export function startLiveQualifying(state: GameState, outerRng: Rng, kind: 'qual
   const sessionRng = Rng.restore(seed);
   const live: LiveQualifyingState = existing ?? {
     version: 2,
-    id: `qualifying:${weekendTyreKey(state)}:${kind}`,
+    id: `qualifying:${state.gameId}:${weekendTyreKey(state)}:${kind}`,
     revision: 0,
     physicsVersion: 1,
     weekendKey: weekendTyreKey(state),
@@ -242,12 +248,13 @@ function phaseDurationTicks(state: GameState, car: LiveQualifyingCar): number {
   return Math.round(base * QUALIFYING_TICKS_PER_SECOND);
 }
 
-function nearestSlowCar(live: LiveQualifyingState, car: LiveQualifyingCar, snapshot: Record<string, { phase: LiveQualifyingCar['phase']; progress: number }>): { id: string; gap: number } | null {
+function nearestSlowCar(car: LiveQualifyingCar, snapshot: Record<string, { phase: LiveQualifyingCar['phase']; progress: number }>): { id: string; gap: number } | null {
   let nearest: { id: string; gap: number } | null = null;
   for (const [id, other] of Object.entries(snapshot)) {
     if (id === car.driverId || (other.phase !== 'out_lap' && other.phase !== 'in_lap')) continue;
     const gap = (other.progress - snapshot[car.driverId].progress + 1) % 1;
-    if (gap <= 0 || gap > TRAFFIC_LOOKAHEAD) continue;
+    const retainedRange = car.activeRun?.blockerId === id ? TRAFFIC_LOOKAHEAD * 2.5 : TRAFFIC_LOOKAHEAD;
+    if (gap <= 0 || gap > retainedRange) continue;
     if (!nearest || gap < nearest.gap) nearest = { id, gap };
   }
   return nearest;
@@ -281,32 +288,49 @@ function moveOneTick(state: GameState, live: LiveQualifyingState): void {
     if (car.phase === 'garage' || car.phase === 'done') continue;
     const duration = phaseDurationTicks(state, car);
     let multiplier = 1;
+    const previousProgress = car.progress;
     if (car.phase === 'flying_lap' && car.activeRun) {
-      const slow = nearestSlowCar(live, car, snapshot);
+      const slow = nearestSlowCar(car, snapshot);
       if (slow) {
         const sectorIndex = qualifyingSectorIndex(live.sectors, car.progress);
         const sector = live.sectors[sectorIndex];
+        const blocker = live.cars[slow.id];
+        const blockerDuration = blocker ? phaseDurationTicks(state, blocker) : duration;
+        if (duration >= blockerDuration) {
+          car.trafficStatus = 'clear';
+          car.trafficDriverId = null;
+          car.activeRun.blockerId = null;
+          car.activeRun.blockerTicks = 0;
+        } else {
+        if (car.activeRun.blockerId !== slow.id) car.activeRun.blockerTicks = 0;
         car.activeRun.blockerId = slow.id;
         car.activeRun.blockerTicks++;
         car.trafficDriverId = slow.id;
         const yieldTicks = Math.round(sector.yieldSeconds * QUALIFYING_TICKS_PER_SECOND);
         if (car.activeRun.blockerTicks <= yieldTicks) {
-          multiplier = Math.max(.45, 1 - .28 * sector.trafficSensitivity);
+          const passingFloor = Math.min(1, duration / blockerDuration + .03);
+          multiplier = Math.max(.8, passingFloor, 1 - .14 * sector.trafficSensitivity);
           car.trafficStatus = 'slower_ahead';
-          car.activeRun.trafficLoss += (1 - multiplier) / QUALIFYING_TICKS_PER_SECOND;
         } else car.trafficStatus = 'yielding';
+        }
       } else {
         car.trafficStatus = 'clear';
         car.trafficDriverId = null;
         car.activeRun.blockerId = null;
         car.activeRun.blockerTicks = 0;
       }
-      car.activeRun.flyingElapsedTicks++;
     }
     car.phaseElapsedTicks++;
+    let crossingFraction = 1;
     if (car.phase === 'out_lap' || car.phase === 'flying_lap' || car.phase === 'in_lap') {
-      car.progress += multiplier / duration;
+      const distance = multiplier / duration;
+      if (previousProgress + distance >= 1) crossingFraction = Math.max(0, Math.min(1, (1 - previousProgress) / distance));
+      car.progress += distance;
       car.sector = qualifyingSectorIndex(live.sectors, car.progress) + 1;
+    }
+    if (car.phase === 'flying_lap' && car.activeRun) {
+      car.activeRun.flyingElapsedTicks += crossingFraction;
+      car.activeRun.trafficLoss += (1 - multiplier) * crossingFraction / QUALIFYING_TICKS_PER_SECOND;
     }
     const crossed = (car.phase === 'pit_out' || car.phase === 'pit_in')
       ? car.phaseElapsedTicks >= duration
@@ -316,14 +340,16 @@ function moveOneTick(state: GameState, live: LiveQualifyingState): void {
       car.phase = 'out_lap';
     } else if (car.phase === 'out_lap') {
       chargeLap(state, car);
-      if (live.elapsedTicks < live.durationTicks) {
+      const crossingTick = live.elapsedTicks - 1 + crossingFraction;
+      if (crossingTick < live.durationTicks) {
         car.phase = 'flying_lap';
-        if (car.activeRun) car.activeRun.flyingStartedTick = live.elapsedTicks;
+        if (car.activeRun) car.activeRun.flyingStartedTick = crossingTick;
       } else car.phase = 'in_lap';
     } else if (car.phase === 'flying_lap') {
       chargeLap(state, car);
       const run = car.activeRun!;
       car.lastTime = round3(run.flyingElapsedTicks / QUALIFYING_TICKS_PER_SECOND);
+      run.trafficLoss = Math.max(run.trafficLoss, round3(Math.max(0, car.lastTime - run.cleanTime)));
       if (run.valid && (car.bestTime === null || car.lastTime < car.bestTime)) car.bestTime = car.lastTime;
       car.phase = 'in_lap';
     } else if (car.phase === 'in_lap') {
@@ -411,6 +437,7 @@ function settleSegment(state: GameState, live: LiveQualifyingState, rng: Rng): s
   const { knockouts } = structure(state);
   const prefix = live.kind === 'qualifying' ? 'Q' : 'SQ';
   const name = live.segmentCount === 1 ? prefix : `${prefix}${live.segmentIndex + 1}`;
+  const priorOrder = new Map(live.alive.map((driverId, index) => [driverId, index]));
   const times = live.alive.map(driverId => {
     const car = live.cars[driverId];
     return {
@@ -421,7 +448,7 @@ function settleSegment(state: GameState, live: LiveQualifyingState, rng: Rng): s
       note: car?.bestTime === null ? (car?.completedRuns.at(-1)?.note ?? (car?.runCount ? '无有效圈速' : '未出场')) : undefined,
       tyreRuns: car?.completedRuns ?? [],
     };
-  }).sort((a, b) => (a.time ?? 9999) - (b.time ?? 9999) || a.driverId.localeCompare(b.driverId));
+  }).sort((a, b) => (a.time ?? 9999) - (b.time ?? 9999) || (priorOrder.get(a.driverId)! - priorOrder.get(b.driverId)!));
   const cut = live.segmentIndex < knockouts.length ? knockouts[live.segmentIndex] : 0;
   if (cut > 0) {
     const out = times.slice(times.length - cut);

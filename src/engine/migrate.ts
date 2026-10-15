@@ -87,12 +87,13 @@ function qualifyingRecoveryBoundary(state: GameState, history: LegacyLiveQualify
   const rngState = isUint32(source.rngState) ? source.rngState : qualifyingRecoverySeed(state, history.kind, history.segmentIndex);
   const id = typeof source.id === 'string' && source.id.trim()
     ? source.id
-    : `qualifying:${state.season.year}:r${state.season.roundIndex + 1}:${history.kind}`;
+    : `qualifying:${state.gameId}:${state.season.year}:r${state.season.roundIndex + 1}:${history.kind}`;
   const events = history.events as RaceEvent[];
-  if (recovery) events.push({
+  const recoveryText = '排位实时进度无法验证；已保留完成分段并暂停在恢复边界。';
+  if (recovery && !events.some(event => event.text === recoveryText)) events.push({
     lap: 0,
     type: 'info',
-    text: '排位实时进度无法验证；已保留完成分段并暂停在恢复边界。',
+    text: recoveryText,
     drivers: [],
     key: true,
   });
@@ -101,7 +102,7 @@ function qualifyingRecoveryBoundary(state: GameState, history: LegacyLiveQualify
     id,
     revision: Number.isInteger(source.revision) && (source.revision as number) >= 0 ? source.revision as number : 0,
     physicsVersion: 1 as const,
-    weekendKey: typeof source.weekendKey === 'string' && source.weekendKey ? source.weekendKey : `${state.season.year}:r${state.season.roundIndex + 1}`,
+    weekendKey: `${state.season.year}:r${state.season.roundIndex + 1}`,
     controlMode: 'automatic' as const,
     rngState,
     kind: history.kind,
@@ -118,7 +119,11 @@ function qualifyingRecoveryBoundary(state: GameState, history: LegacyLiveQualify
     durationTicks: qualifyingDurationTicks(history.kind, history.segmentIndex),
     wet: (history.kind === 'qualifying' ? state.weekend!.weather.qualifying : state.weekend!.weather.sprintQualifying) === 'wet',
     runAllowance: qualifyingRunAllowance(history.kind, history.segmentCount),
-    sectors: track ? fallbackQualifyingSectors(track) : [],
+    sectors: track ? fallbackQualifyingSectors(track) : [
+      { endProgress: 1 / 3, timeWeight: 1 / 3, trafficSensitivity: 1, yieldSeconds: 1.5 },
+      { endProgress: 2 / 3, timeWeight: 1 / 3, trafficSensitivity: 1, yieldSeconds: 1.5 },
+      { endProgress: 1, timeWeight: 1 / 3, trafficSensitivity: 1, yieldSeconds: 1.5 },
+    ],
     cars: {},
   };
 }
@@ -145,11 +150,13 @@ function hasValidLiveQualifyingPrivateState(state: GameState, live: Record<strin
   const cars = live.cars;
   const durationTicks = live.durationTicks as number;
   const elapsedTicks = live.elapsedTicks as number;
-  if (Object.keys(cars).length !== history.alive.length) return false;
+  const carIds = Object.keys(cars);
+  if (history.alive.some(driverId => !carIds.includes(driverId))) return false;
   const phases = new Set(['garage', 'pit_out', 'out_lap', 'flying_lap', 'in_lap', 'pit_in', 'done']);
-  for (const driverId of history.alive) {
+  for (const driverId of carIds) {
     const car = cars[driverId];
     const driver = state.drivers[driverId];
+    const eligible = history.alive.includes(driverId);
     if (!isPlainObject(car)
       || car.driverId !== driverId
       || car.teamId !== driver?.teamId
@@ -164,10 +171,11 @@ function hasValidLiveQualifyingPrivateState(state: GameState, live: Record<strin
       || !(car.scheduledReleaseTicks as unknown[]).every(tick => Number.isInteger(tick) && (tick as number) >= 0 && (tick as number) <= durationTicks)
       || !['clear', 'slower_ahead', 'yielding'].includes(car.trafficStatus as string)
       || (car.trafficDriverId !== null && (typeof car.trafficDriverId !== 'string' || !history.alive.includes(car.trafficDriverId)))
-      || !Number.isInteger(car.sector) || (car.sector as number) < 0 || (car.sector as number) >= (live.sectors as unknown[]).length
+      || !Number.isInteger(car.sector) || (car.sector as number) < 1 || (car.sector as number) > (live.sectors as unknown[]).length
       || (car.bestTime !== null && !Number.isFinite(car.bestTime))
       || (car.lastTime !== null && !Number.isFinite(car.lastTime))
       || (car.activeRun !== null && !isPlainObject(car.activeRun))) return false;
+    if (!eligible && (!car.player || car.phase !== 'done' || car.activeRun !== null || (car.scheduledReleaseTicks as unknown[]).length)) return false;
     if (car.activeRun) {
       const inventory = state.teams[car.teamId as string]?.tyreInventory?.[driverId] ?? [];
       const activeRun = car.activeRun as Record<string, unknown>;
@@ -179,8 +187,8 @@ function hasValidLiveQualifyingPrivateState(state: GameState, live: Record<strin
         || !Number.isInteger(activeRun.lapsCharged) || (activeRun.lapsCharged as number) < 0 || (activeRun.lapsCharged as number) > 3
         || !Number.isFinite(activeRun.cleanTime) || (activeRun.cleanTime as number) <= 0
         || typeof activeRun.valid !== 'boolean'
-        || (activeRun.flyingStartedTick !== null && (!Number.isInteger(activeRun.flyingStartedTick) || (activeRun.flyingStartedTick as number) < 0 || (activeRun.flyingStartedTick as number) > elapsedTicks))
-        || !Number.isInteger(activeRun.flyingElapsedTicks) || (activeRun.flyingElapsedTicks as number) < 0
+        || (activeRun.flyingStartedTick !== null && (!Number.isFinite(activeRun.flyingStartedTick) || (activeRun.flyingStartedTick as number) < 0 || (activeRun.flyingStartedTick as number) > elapsedTicks))
+        || !Number.isFinite(activeRun.flyingElapsedTicks) || (activeRun.flyingElapsedTicks as number) < 0
         || !Number.isFinite(activeRun.trafficLoss) || (activeRun.trafficLoss as number) < 0
         || (activeRun.blockerId !== null && (typeof activeRun.blockerId !== 'string' || !history.alive.includes(activeRun.blockerId)))
         || !Number.isInteger(activeRun.blockerTicks) || (activeRun.blockerTicks as number) < 0) return false;

@@ -54,6 +54,7 @@ export function nextActionFor(state: GameState): NextAction | null {
   // A generic advance must never silently consume a strategy window. The panel uses
   // liveRace's session/revision/window tokens for the dedicated live controls.
   if (active) return null;
+  if (state.weekend?.liveQualifying?.controlMode === 'manual') return null;
   const isLast = state.season.roundIndex >= state.calendar.length - 1;
   const round = currentRound(state);
   const track = round ? state.tracks[round.trackId] : undefined;

@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PanelHost } from '../../src/tavern/panelHost';
 
 function pointer(type: string, x: number, y: number): Event {
@@ -67,6 +67,21 @@ describe('PanelHost 迷你状态卡', () => {
     expect(root.querySelector('iframe')).toBe(frame);
     expect(frame.srcdoc).toBe(srcdoc);
     expect(frame.hasAttribute('aria-hidden')).toBe(false);
+  });
+
+  it('最小化、恢复和关闭时通知面板暂停或恢复实时播放', () => {
+    const host = new PanelHost(document, '<!doctype html>');
+    host.open();
+    const frame = document.querySelector<HTMLIFrameElement>('#f1m-panel-root iframe')!;
+    const postMessage = vi.spyOn(frame.contentWindow!, 'postMessage').mockImplementation(() => undefined);
+    host.minimize();
+    host.restore();
+    host.close();
+    expect(postMessage.mock.calls.map(call => call[0])).toEqual([
+      { type: 'f1m:visibility', visible: false },
+      { type: 'f1m:visibility', visible: true },
+      { type: 'f1m:visibility', visible: false },
+    ]);
   });
 
   it('拖动迷你卡会单独保存位置且不会误恢复面板', () => {

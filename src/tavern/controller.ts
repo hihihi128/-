@@ -967,8 +967,11 @@ export class F1Controller {
         }
       }
       this.store.commit(res.state, { floor: Math.max(0, floor), kind: 'ui', label: res.message });
-      this.staleSpecialAction();
-      this.invalidateStrategyReviews();
+      const qualifyingControlAction = ['SET_QUALIFYING_CLOCK', 'RELEASE_QUALIFYING_CAR', 'ADVANCE_QUALIFYING'].includes(action.type);
+      if (!qualifyingControlAction) {
+        this.staleSpecialAction();
+        this.invalidateStrategyReviews();
+      }
       this.notify('action');
       const completedLiveQualifying = action.type === 'ADVANCE_QUALIFYING'
         && (cur.state.season.phase === 'qualifying' || cur.state.season.phase === 'sprint_qualifying')

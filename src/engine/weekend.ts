@@ -373,7 +373,7 @@ export function advanceQualifyingSegment(
     ? w.liveQualifying
     : {
         version: 2,
-        id: `qualifying:${weekendTyreKey(state)}:${kind}`,
+        id: `qualifying:${state.gameId}:${weekendTyreKey(state)}:${kind}`,
         revision: 0,
         physicsVersion: 1,
         weekendKey: weekendTyreKey(state),
@@ -459,6 +459,7 @@ export function advanceQualifyingSegment(
   }
   progress.sessions.push({ name, entries: times });
   progress.segmentIndex += 1;
+  progress.rngState = rng.state;
   w.liveQualifying = progress;
   w.parcFerme = true;
 

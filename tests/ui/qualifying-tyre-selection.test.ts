@@ -90,4 +90,25 @@ describe('segmented qualifying tyre selection UI', () => {
       tyreSetId: select.value,
     });
   });
+
+  it('pauses a restored running session instead of starting browser playback', async () => {
+    let state = advanceUntil(newTestGame(415), value => value.season.phase === 'qualifying', 1200);
+    state = act(state, { type: 'START_QUALIFYING', kind: 'qualifying' });
+    let live = state.weekend!.liveQualifying!;
+    state = act(state, { type: 'SET_QUALIFYING_CLOCK', sessionId: live.id, expectedRevision: live.revision, paused: false, speed: 8 });
+    const view = buildView(state);
+    mountWeekend(view);
+    await nextTick();
+    await Promise.resolve();
+
+    const dispatch = (window as any).F1Manager.dispatch as ReturnType<typeof vi.fn>;
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'SET_QUALIFYING_CLOCK',
+      sessionId: view.weekend!.liveQualifying!.id,
+      expectedRevision: view.weekend!.liveQualifying!.revision,
+      paused: true,
+      speed: 8,
+    }));
+    expect(dispatch.mock.calls.some(call => call[0]?.type === 'ADVANCE_QUALIFYING')).toBe(false);
+  });
 });

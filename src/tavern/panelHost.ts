@@ -299,6 +299,7 @@ export class PanelHost {
       () => {
         this.onResize();
         if (this.pendingTab) this.sendTab(this.pendingTab);
+        this.sendVisibility(this.displayState === 'expanded');
         this.pendingTab = null;
       },
       { once: true },
@@ -309,6 +310,14 @@ export class PanelHost {
   private sendTab(tab: string): void {
     try {
       this.frame?.contentWindow?.postMessage({ type: 'f1m:tab', tab }, '*');
+    } catch {
+      /* 忽略 */
+    }
+  }
+
+  private sendVisibility(visible: boolean): void {
+    try {
+      this.frame?.contentWindow?.postMessage({ type: 'f1m:visibility', visible }, '*');
     } catch {
       /* 忽略 */
     }
@@ -357,6 +366,7 @@ export class PanelHost {
     this.root!.classList.toggle('f1m-mobile', this.isMobile());
     this.frame?.removeAttribute('aria-hidden');
     if (this.frame) this.frame.tabIndex = 0;
+    this.sendVisibility(true);
     if (!this.loaded) {
       this.pendingTab = tab ?? null;
       this.load();
@@ -376,6 +386,7 @@ export class PanelHost {
     this.root!.classList.add('f1m-minimized');
     this.frame?.setAttribute('aria-hidden', 'true');
     if (this.frame) this.frame.tabIndex = -1;
+    this.sendVisibility(false);
     this.restoreMiniGeometry();
     (this.root!.querySelector('.f1m-mini-body') as HTMLElement).focus();
   }
@@ -388,6 +399,7 @@ export class PanelHost {
     this.root.classList.toggle('f1m-mobile', this.isMobile());
     this.frame?.removeAttribute('aria-hidden');
     if (this.frame) this.frame.tabIndex = 0;
+    this.sendVisibility(true);
     const focusTarget = this.focusBeforeMinimize?.isConnected ? this.focusBeforeMinimize : (this.root.querySelector('[data-act="min"]') as HTMLElement);
     focusTarget?.focus();
     this.focusBeforeMinimize = null;
@@ -402,6 +414,7 @@ export class PanelHost {
     this.root.classList.toggle('f1m-mobile', this.isMobile());
     this.frame?.removeAttribute('aria-hidden');
     if (this.frame) this.frame.tabIndex = 0;
+    this.sendVisibility(false);
   }
 
   toggle(tab?: string): void {

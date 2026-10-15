@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { act, advanceUntil, newTestGame, tryAct } from '../helpers';
 import { deepClone } from '../../src/engine/util';
+import { migrateState } from '../../src/engine/migrate';
 
 function atQualifying(seed = 700) {
   const state = advanceUntil(newTestGame(seed), value => value.season.phase === 'qualifying', 1200);
@@ -91,6 +92,61 @@ describe('实时排位状态机', () => {
     expect(state.weekend!.liveQualifying!.cars.c1.activeRun!.trafficLoss).toBeGreaterThan(0);
   });
 
+  it('慢车完成让车后不会反复重置阻挡计时', () => {
+    let state = start(atQualifying(707));
+    let live = state.weekend!.liveQualifying!;
+    for (const driverId of ['c1', 'c2']) {
+      state = act(state, { type: 'RELEASE_QUALIFYING_CAR', sessionId: live.id, expectedRevision: state.weekend!.liveQualifying!.revision, driverId, tyreSetId: usableSetId(state, driverId) });
+      live = state.weekend!.liveQualifying!;
+    }
+    live.cars.c1.phase = 'flying_lap';
+    live.cars.c1.progress = .1;
+    live.cars.c1.activeRun!.cleanTime = 80;
+    live.cars.c1.activeRun!.flyingStartedTick = 0;
+    live.cars.c2.phase = 'out_lap';
+    live.cars.c2.progress = .12;
+    live.cars.c2.activeRun!.cleanTime = 80;
+    state = resume(state);
+    for (let index = 0; index < 4; index++) state = advance(state, 80);
+    const run = state.weekend!.liveQualifying!.cars.c1.activeRun!;
+    expect(run.trafficLoss).toBeGreaterThan(0);
+    expect(run.trafficLoss).toBeLessThan(5);
+    expect(state.weekend!.liveQualifying!.cars.c1.progress).toBeGreaterThan(.35);
+  });
+
+  it('保存并迁移真实运行中的 S3 赛车不会清除实时状态', () => {
+    let state = start(atQualifying(708));
+    let live = state.weekend!.liveQualifying!;
+    state = act(state, { type: 'RELEASE_QUALIFYING_CAR', sessionId: live.id, expectedRevision: live.revision, driverId: 'c1', tyreSetId: usableSetId(state, 'c1') });
+    state = resume(state);
+    live = state.weekend!.liveQualifying!;
+    live.cars.c1.phase = 'flying_lap';
+    live.cars.c1.progress = .8;
+    live.cars.c1.sector = 3;
+    live.cars.c1.activeRun!.flyingStartedTick = live.elapsedTicks;
+    live.cars.c1.activeRun!.flyingElapsedTicks = 12.5;
+    const restored = JSON.parse(JSON.stringify(state));
+    migrateState(restored);
+    expect(restored.weekend!.liveQualifying).toMatchObject({ controlMode: 'manual', stage: 'running' });
+    expect(restored.weekend!.liveQualifying!.cars.c1).toMatchObject({ phase: 'flying_lap', sector: 3, progress: .8 });
+    migrateState(restored);
+    expect(restored.weekend!.liveQualifying!.events.filter((event: { text: string }) => event.text.includes('无法验证'))).toHaveLength(0);
+  });
+
+  it('迁移下一分段时允许保留已淘汰的玩家赛车状态', () => {
+    let state = start(atQualifying(709));
+    const live = state.weekend!.liveQualifying!;
+    live.segmentIndex = 1;
+    live.sessions = [{ name: 'Q1', entries: live.alive.map(driverId => ({ driverId, teamId: live.cars[driverId].teamId, time: 80, eliminated: driverId === 'c2' })) }];
+    live.alive = live.alive.filter(driverId => driverId !== 'c2');
+    live.finalOrder = ['c2'];
+    live.cars.c2.phase = 'done';
+    const restored = JSON.parse(JSON.stringify(state));
+    migrateState(restored);
+    expect(restored.weekend!.liveQualifying).toMatchObject({ controlMode: 'manual', segmentIndex: 1 });
+    expect(restored.weekend!.liveQualifying!.cars.c2).toMatchObject({ player: true, phase: 'done' });
+  });
+
   it('计时归零后完成赛道上的圈并结算当前分段', () => {
     let state = start(atQualifying(704));
     let live = state.weekend!.liveQualifying!;
@@ -108,6 +164,43 @@ describe('实时排位状态机', () => {
     for (const driverId of ['c1', 'c2']) if (!state.weekend!.liveQualifying!.alive.includes(driverId)) {
       expect(state.weekend!.liveQualifying!.cars[driverId].phase).toBe('done');
     }
+  });
+
+  it('按圈线通过的精确时刻决定是否可在零点前开始飞行圈', () => {
+    let state = start(atQualifying(710));
+    let live = state.weekend!.liveQualifying!;
+    state = act(state, { type: 'RELEASE_QUALIFYING_CAR', sessionId: live.id, expectedRevision: live.revision, driverId: 'c1', tyreSetId: usableSetId(state, 'c1') });
+    state = resume(state);
+    live = state.weekend!.liveQualifying!;
+    live.durationTicks = 10;
+    live.elapsedTicks = 9;
+    live.cars.c1.phase = 'out_lap';
+    const duration = Math.round(live.cars.c1.activeRun!.cleanTime * 1.32 * 10);
+    for (const car of Object.values(live.cars)) if (car.driverId !== 'c1') car.phase = 'done';
+    const beforeZero = deepClone(state);
+    beforeZero.weekend!.liveQualifying!.cars.c1.progress = 1 - .5 / duration;
+    const exactZero = deepClone(state);
+    exactZero.weekend!.liveQualifying!.cars.c1.progress = 1 - 1 / duration;
+    const accepted = advance(beforeZero, 1);
+    const refused = advance(exactZero, 1);
+    expect(accepted.weekend!.liveQualifying!.cars.c1.phase).toBe('flying_lap');
+    expect(accepted.weekend!.liveQualifying!.cars.c1.activeRun!.flyingStartedTick).toBeCloseTo(9.5, 5);
+    expect(refused.weekend!.liveQualifying!.cars.c1.phase).toBe('in_lap');
+  });
+
+  it('SQ1 只接受全新指定中性胎且只有一次出场', () => {
+    let state = advanceUntil(newTestGame(711), value => value.season.phase === 'sprint_qualifying', 1200);
+    state.weekend!.weather.sprintQualifying = 'dry';
+    state = act(state, { type: 'START_QUALIFYING', kind: 'sprint_qualifying' });
+    const live = state.weekend!.liveQualifying!;
+    expect(live.runAllowance).toBe(1);
+    const team = state.teams[state.meta.playerTeamId];
+    const soft = team.tyreInventory!.c1.find(set => set.compound === state.rules.dryCompounds[0] && !set.returned)!;
+    const medium = team.tyreInventory!.c1.find(set => set.compound === state.rules.dryCompounds[1] && set.state === 'new' && !set.returned)!;
+    const rejected = tryAct(state, { type: 'RELEASE_QUALIFYING_CAR', sessionId: live.id, expectedRevision: live.revision, driverId: 'c1', tyreSetId: soft.id });
+    expect(rejected.ok).toBe(false);
+    state = act(state, { type: 'RELEASE_QUALIFYING_CAR', sessionId: live.id, expectedRevision: live.revision, driverId: 'c1', tyreSetId: medium.id });
+    expect(state.weekend!.liveQualifying!.cars.c1.activeRun!.compound).toBe(state.rules.dryCompounds[1]);
   });
 
   it('允许暂停并继续完成计时归零时仍在赛道上的圈', () => {
