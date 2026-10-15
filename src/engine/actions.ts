@@ -27,6 +27,7 @@ import {
   advanceCalendarWeek,
   doPractice,
   doQualifying,
+  simulateQualifying,
   doRace,
   finishRound,
   nextActionFor,
@@ -44,6 +45,7 @@ import { completedPracticeSessions, practiceSessionCount } from './weekend';
 import { ENERGY_MODES, PACE_MODES, PIT_TIMINGS, validOrders } from './raceDecisions';
 import type { Action, ActionResult, DriverPlan, GameState, StrategyReviewMetadata } from './types';
 import { clamp, deepClone, hashString, round1 } from './util';
+import { advanceLiveQualifying, releaseLiveQualifyingCar, setLiveQualifyingClock, startLiveQualifying } from './qualifying';
 
 export interface DispatchOptions {
   now?: number;
@@ -251,6 +253,16 @@ function run(state: GameState, action: Action | InternalReviewedPlanAction, rng:
       return returnPracticeTyres(state, action.driverId, action.setIds);
     case 'RUN_SPRINT_QUALIFYING':
       return doQualifying(state, rng, 'sprint_qualifying', action.tyreSetIds);
+    case 'SIMULATE_QUALIFYING':
+      return simulateQualifying(state, rng, action.kind);
+    case 'START_QUALIFYING':
+      return startLiveQualifying(state, rng, action.kind);
+    case 'SET_QUALIFYING_CLOCK':
+      return setLiveQualifyingClock(state, action.sessionId, action.expectedRevision, action.paused, action.speed);
+    case 'RELEASE_QUALIFYING_CAR':
+      return releaseLiveQualifyingCar(state, action.sessionId, action.expectedRevision, action.driverId, action.tyreSetId);
+    case 'ADVANCE_QUALIFYING':
+      return advanceLiveQualifying(state, action.sessionId, action.expectedRevision, action.ticks);
     case 'RUN_SPRINT':
       return doRace(state, rng, 'sprint');
     case 'RUN_QUALIFYING':
@@ -402,15 +414,16 @@ function run(state: GameState, action: Action | InternalReviewedPlanAction, rng:
 }
 
 /** 会产生随机结果的动作（用于「每次重新随机」模式） */
-const RANDOM_ACTIONS = new Set(['ADVANCE', 'START_SEASON', 'ADVANCE_WEEK', 'START_WEEKEND', 'RUN_PRACTICE', 'RUN_SPRINT_QUALIFYING', 'RUN_SPRINT', 'RUN_QUALIFYING', 'RUN_RACE', 'START_RACE', 'FINISH_ROUND', 'START_NEXT_SEASON', 'START_PROJECT']);
+const RANDOM_ACTIONS = new Set(['ADVANCE', 'START_SEASON', 'ADVANCE_WEEK', 'START_WEEKEND', 'RUN_PRACTICE', 'RUN_SPRINT_QUALIFYING', 'SIMULATE_QUALIFYING', 'RUN_SPRINT', 'RUN_QUALIFYING', 'RUN_RACE', 'START_RACE', 'START_QUALIFYING', 'FINISH_ROUND', 'START_NEXT_SEASON', 'START_PROJECT']);
 
 export function dispatch(input: GameState, action: Action | InternalReviewedPlanAction, opts: DispatchOptions = {}): ActionResult {
   const state = deepClone(input);
+  const resumesLiveQualifying = !!state.weekend?.liveQualifying && action.type === 'SIMULATE_QUALIFYING';
   let seed = state.rng;
-  // An in-progress race owns its persisted RNG stream. Fresh randomness applies
+  // An in-progress session owns its persisted RNG stream. Fresh randomness applies
   // only when launching it, never when resuming or auto-finishing a checkpoint.
   const resumesLiveRace = !!state.weekend?.liveRace && (action.type === 'RUN_RACE' || action.type === 'RUN_SPRINT');
-  if (state.meta.randomness === 'fresh' && RANDOM_ACTIONS.has(action?.type) && !resumesLiveRace) {
+  if (state.meta.randomness === 'fresh' && RANDOM_ACTIONS.has(action?.type) && !resumesLiveRace && !resumesLiveQualifying) {
     seed = (seed ^ parseInt(hashString(String(opts.now ?? Date.now())), 16)) >>> 0;
   }
   const rng = new Rng(seed);

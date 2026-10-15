@@ -40,21 +40,32 @@ watch(
 onMounted(() => connect());
 
 async function advance() {
-  if (!view.value?.next) return;
-  if (view.value.season.phase === 'qualifying' || view.value.season.phase === 'sprint_qualifying') {
+  if (view.value?.season.phase === 'qualifying' || view.value?.season.phase === 'sprint_qualifying') {
+    if (qualifyingEndedForPlayer.value) {
+      await act({ type: 'SIMULATE_QUALIFYING', kind: view.value.season.phase });
+      return;
+    }
     store.tab = 'weekend';
     return;
   }
+  if (!view.value?.next) return;
   await act({ type: 'ADVANCE' });
 }
 
+const qualifyingEndedForPlayer = computed(() => {
+  const live = view.value?.weekend?.liveQualifying;
+  if (!live) return false;
+  const playerDriverIds = new Set(view.value?.weekend?.drivers.map(driver => driver.driverId) ?? []);
+  return !live.alive.some(driverId => playerDriverIds.has(driverId));
+});
+
 const advanceLabel = computed(() => {
-  if (!view.value?.next) return '';
-  const phase = view.value.season.phase;
-  if (phase !== 'qualifying' && phase !== 'sprint_qualifying') return view.value.next.label;
-  const live = view.value.weekend?.liveQualifying;
+  const phase = view.value?.season.phase;
+  if (phase !== 'qualifying' && phase !== 'sprint_qualifying') return view.value?.next?.label ?? '';
+  if (qualifyingEndedForPlayer.value) return '结束排位赛';
+  const live = view.value?.weekend?.liveQualifying;
   const prefix = phase === 'sprint_qualifying' ? 'SQ' : 'Q';
-  return `选择 ${prefix}${live?.segmentCount === 1 ? '' : (live?.segmentIndex ?? 0) + 1} 轮胎`;
+  return `打开实时 ${prefix}${live?.segmentCount === 1 ? '' : (live?.segmentIndex ?? 0) + 1} 控制台`;
 });
 
 async function narrate() {
@@ -107,7 +118,7 @@ function supernaturalSettings() {
           <button v-if="view.narration.length" class="small" :disabled="generating" :title="'待叙述：' + view.narration.map(n => n.title).join('、')" @click="narrate">
             让 AI 叙述（{{ view.narration.length }}）
           </button>
-          <button v-if="view.next" class="primary" :disabled="store.busy || generating" @click="advance">▶ {{ advanceLabel }}</button>
+          <button v-if="view.next || view.season.phase === 'qualifying' || view.season.phase === 'sprint_qualifying'" class="primary" :disabled="store.busy || generating" @click="advance">▶ {{ advanceLabel }}</button>
         </div>
       </header>
       <div v-if="generating" class="notice warn small" style="margin: 0 12px 8px">AI 正在生成回复，生成结束前面板只读。</div>
@@ -282,7 +293,7 @@ function supernaturalSettings() {
   .top { min-height: 56px; height: 56px; padding: 0 8px 0 0; flex-wrap: nowrap; gap: 8px; }
   .team-badge { height: 56px; width: 60px; min-width: 60px; border-radius: 0; font-size: 15px; }
   .top .grow { min-width: 0; overflow: hidden; }.title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }.title .muted { display: none; }.top .small.muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.actions { margin-left: 0; flex-wrap: nowrap; }.actions button:not(.primary) { display: none; }.actions .primary { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px; font-size: 11px; }
-  .tabs { display: none; }.content { padding: 10px 12px calc(var(--tabbar-h) + 16px); }.mobile-more button { text-align: left; }
+  .tabs { display: none; }.content { padding: 10px 12px calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); scroll-padding-bottom:calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px); }.mobile-more button { text-align: left; }
   .toasts { top: 66px; right: 12px; bottom: auto; left: 12px; max-width: none; }
   .toast:not(:last-child) { display: none; }
 }

@@ -5,6 +5,7 @@ import LapChart from '../components/LapChart.vue';
 import RainHistoryChart from '../components/RainHistoryChart.vue';
 import Tyre from '../components/Tyre.vue';
 import LiveRaceDesk from '../components/LiveRaceDesk.vue';
+import LiveQualifyingDesk from '../components/LiveQualifyingDesk.vue';
 import WeekendWeatherForecast from '../components/WeekendWeatherForecast.vue';
 import StrategyReviewDialog from '../components/StrategyReviewDialog.vue';
 import { act, call, lapTime, store } from '../bridge';
@@ -25,7 +26,6 @@ const practiceSessions = computed(() => {
 });
 const practiceSessionTotal = computed(() => w.value?.practiceSessionTotal ?? 0);
 const returnSelections = ref<Record<string, string[]>>({});
-const qualifyingTyreSelections = ref<Record<string, string[]>>({});
 function toggleReturnSet(driverId: string, setId: string) {
   const selected = returnSelections.value[driverId] ?? [];
   const required = w.value?.practiceReturn?.required ?? 0;
@@ -156,7 +156,6 @@ function percentChange(value: number | undefined): string {
 watch(() => w.value?.roundIndex, () => {
   customPlans.value = {};
   customSetPlans.value = {};
-  qualifyingTyreSelections.value = {};
   engineerSuggestions.value = {};
   perfectSuggestions.value = {};
   perfectOpen.value = false;
@@ -175,47 +174,6 @@ watch(
 );
 
 const qualifyingPhase = computed(() => phase.value === 'qualifying' || phase.value === 'sprint_qualifying');
-const qualifyingSegmentIndex = computed(() => w.value?.liveQualifying?.segmentIndex ?? 0);
-const qualifyingSegmentCount = computed(() => w.value?.liveQualifying?.segmentCount ?? 3);
-const qualifyingRuns = computed(() => phase.value === 'sprint_qualifying' ? 1 : qualifyingSegmentCount.value === 1 ? 3 : 2);
-const qualifyingSegmentLabel = computed(() => `${phase.value === 'sprint_qualifying' ? 'SQ' : 'Q'}${qualifyingSegmentCount.value === 1 ? '' : qualifyingSegmentIndex.value + 1}`);
-
-function qualifyingSetOptions(d: WeekendDriverView) {
-  const legal = new Set(d.qualifyingTyreSetIds);
-  return d.tyreSets.filter(set => legal.has(set.id));
-}
-
-function qualifyingSelection(d: WeekendDriverView): string[] {
-  return qualifyingTyreSelections.value[d.driverId] ?? [];
-}
-
-function qualifyingDriverActive(d: WeekendDriverView): boolean {
-  return !w.value?.liveQualifying || w.value.liveQualifying.alive.includes(d.driverId);
-}
-
-function syncQualifyingSelections() {
-  const next: Record<string, string[]> = {};
-  for (const d of w.value?.drivers ?? []) {
-    const options = qualifyingSetOptions(d);
-    const existing = qualifyingTyreSelections.value[d.driverId] ?? [];
-    next[d.driverId] = Array.from({ length: qualifyingRuns.value }, (_, index) => {
-      const selected = existing[index];
-      return options.some(option => option.id === selected) ? selected : options[index % Math.max(1, options.length)]?.id ?? '';
-    });
-  }
-  qualifyingTyreSelections.value = next;
-}
-
-watch(
-  () => [phase.value, qualifyingSegmentIndex.value, qualifyingRuns.value, ...(w.value?.drivers ?? []).flatMap(d => d.qualifyingTyreSetIds)],
-  syncQualifyingSelections,
-  { immediate: true },
-);
-
-function runQualifyingSegment() {
-  const tyreSetIds = Object.fromEntries((w.value?.drivers ?? []).map(d => [d.driverId, qualifyingSelection(d).filter(Boolean)]));
-  return act({ type: phase.value === 'sprint_qualifying' ? 'RUN_SPRINT_QUALIFYING' : 'RUN_QUALIFYING', tyreSetIds });
-}
 
 function customFor(d: WeekendDriverView): string[] {
   if (!customPlans.value[d.driverId]) {
@@ -342,6 +300,23 @@ const raceLike = computed<RaceResult | null>(() => {
   if (k === 'sprint') return w.value!.sprint;
   return null;
 });
+const selectedResultDriverId = ref('');
+const resultDriverDetail = ref<HTMLElement | null>(null);
+const resultDriverTrigger = ref<HTMLButtonElement | null>(null);
+const selectedRaceEntry = computed(() => raceLike.value?.classification.find(entry => entry.driverId === selectedResultDriverId.value) ?? null);
+watch(() => `${shownResult.value}:${raceLike.value?.kind ?? ''}`, () => { selectedResultDriverId.value = ''; });
+async function toggleResultDriver(driverId: string, event: MouseEvent) {
+  resultDriverTrigger.value = event.currentTarget as HTMLButtonElement;
+  selectedResultDriverId.value = selectedResultDriverId.value === driverId ? '' : driverId;
+  if (!selectedResultDriverId.value) return;
+  await nextTick();
+  resultDriverDetail.value?.focus();
+  resultDriverDetail.value?.scrollIntoView?.({ block: 'nearest', behavior: 'smooth' });
+}
+function closeResultDriver() {
+  selectedResultDriverId.value = '';
+  void nextTick(() => resultDriverTrigger.value?.focus());
+}
 const qualiLike = computed<QualiResult | null>(() => {
   const k = shownResult.value;
   if (k === 'qualifying') return w.value!.qualifying;
@@ -352,7 +327,12 @@ const chartSeries = computed(() => {
   const r = raceLike.value;
   if (!r) return [];
   const palette = ['var(--team)', '#ffffff', '#ffd400'];
-  return Object.entries(r.lapChart).map(([id, data], i) => ({ name: name(id), color: palette[i % palette.length], data }));
+  return Object.entries(r.lapChart).filter(([id]) => teamOf(id).mine).map(([id, data], i) => ({ name: name(id), color: palette[i % palette.length], data }));
+});
+const selectedChartSeries = computed(() => {
+  const id = selectedResultDriverId.value;
+  const data = raceLike.value?.lapChart[id];
+  return id && data ? [{ name: name(id), color: teamOf(id).color, data }] : [];
 });
 </script>
 
@@ -369,7 +349,7 @@ const chartSeries = computed(() => {
       :unavailable-reason="reviewUnavailableReason(reviewDriver)"
       @close="closeStrategyReview"
     />
-    <button v-if="current && w && !w.liveRace" ref="perfectFab" class="codex-fab" title="打开完美策略 AI" aria-label="打开完美策略 AI" @click="perfectOpen = true">
+    <button v-if="current && w && !w.liveRace && !w.liveQualifying" ref="perfectFab" class="codex-fab" title="打开完美策略 AI" aria-label="打开完美策略 AI" @click="perfectOpen = true">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 15 7l5.2.7-3.3 4.1.8 5.2-4.8-2.2L8.1 17l.8-5.2-3.3-4.1L10.8 7 12 2.5Zm0 5.1-1.2 3.1-3.3.2 2.5 2.2-.8 3.2 2.8-1.7 2.8 1.7-.8-3.2 2.5-2.2-3.3-.2L12 7.6Z" /></svg>
     </button>
     <div v-if="perfectOpen" class="perfect-backdrop" @click.self="closePerfect" @keydown.esc="closePerfect">
@@ -387,6 +367,7 @@ const chartSeries = computed(() => {
       </section>
     </div>
     <LiveRaceDesk v-if="current && w && ['race', 'sprint'].includes(phase)" />
+    <LiveQualifyingDesk v-if="current && w && qualifyingPhase" />
     <div class="card">
       <div class="stepper">
         <div v-for="(s, i) in steps" :key="s.id" class="step" :class="{ done: stepIndex > i || (!current && !!w), on: stepIndex === i }">
@@ -402,7 +383,6 @@ const chartSeries = computed(() => {
         <div class="row">
           <button v-if="v.narration.length" class="small" :disabled="generating" @click="call(a => a.requestNarration())">{{ raceResultNarration ? '让 AI 叙述比赛结果' : `让 AI 叙述（${v.narration.length}）` }}</button>
           <button v-if="v.next && !qualifyingPhase" class="primary" :disabled="store.busy || generating" @click="act({ type: 'ADVANCE' })">▶ {{ v.next.label }}</button>
-          <button v-else-if="v.next && qualifyingPhase" class="primary" :disabled="store.busy || generating" @click="runQualifyingSegment">▶ 运行 {{ qualifyingSegmentLabel }}</button>
         </div>
       </div>
     </div>
@@ -492,21 +472,6 @@ const chartSeries = computed(() => {
             <div class="seg">
               <button v-for="[k, label, tip] in approaches" :key="k" :title="tip" :class="{ on: d.plan.qualiApproach === k }" :disabled="done.qualifying || store.busy" @click="setPlan(d, { qualiApproach: k })">{{ label }}</button>
             </div>
-          </div>
-          <div v-if="qualifyingPhase" class="block stack-s">
-            <div class="label">{{ qualifyingSegmentLabel }} 实体轮胎组</div>
-            <div v-if="!qualifyingDriverActive(d)" class="notice tiny">该车手已在本次排位中被淘汰，无需为 {{ qualifyingSegmentLabel }} 选择轮胎组。</div>
-            <div v-else-if="qualifyingSetOptions(d).length" class="row wrap">
-              <label v-for="run in qualifyingRuns" :key="run" class="small row">
-                第 {{ run }} 次出场
-                <select v-model="qualifyingSelection(d)[run - 1]" :disabled="store.busy">
-                  <option v-for="set in qualifyingSetOptions(d)" :key="set.id" :value="set.id">
-                    {{ v.labels.tyres[set.compound]?.name ?? set.compound }} · {{ set.id }} · {{ set.state === 'new' ? '新胎' : `${set.laps}L` }}
-                  </option>
-                </select>
-              </label>
-            </div>
-            <div v-else class="notice warn tiny">没有符合本分段规则的轮胎组。车手仍可参加，但本分段不会取得成绩。</div>
           </div>
           <div v-if="isSprint && d.sprintOptions.length" class="block">
             <div class="label">冲刺赛轮胎</div>
@@ -672,7 +637,7 @@ const chartSeries = computed(() => {
             <tbody>
               <tr v-for="c in raceLike.classification" :key="c.driverId" :class="{ me: teamOf(c.driverId).mine }">
                 <td class="mono">{{ c.pos ?? 'DNF' }}</td>
-                <td><span class="swatch" :style="{ background: teamOf(c.driverId).color }"></span>{{ name(c.driverId) }}</td>
+                <td><button class="result-driver" :class="{ selected: selectedResultDriverId === c.driverId }" :aria-expanded="selectedResultDriverId === c.driverId" aria-controls="result-driver-detail" @click="toggleResultDriver(c.driverId, $event)"><span class="swatch" :style="{ background: teamOf(c.driverId).color }"></span>{{ name(c.driverId) }}</button></td>
                 <td class="mono">{{ c.grid }}<span v-if="c.pos" class="tiny" :class="c.grid - c.pos > 0 ? 'pos' : c.grid - c.pos < 0 ? 'neg' : 'muted'">（{{ c.grid - c.pos > 0 ? '+' : '' }}{{ c.grid - c.pos }}）</span></td>
                 <td class="mono">{{ c.status === 'dnf' ? c.reason : c.gap }}</td>
                 <td class="mono">{{ c.pits }}</td>
@@ -684,6 +649,12 @@ const chartSeries = computed(() => {
             </tbody>
           </table>
         </div>
+        <section v-if="selectedRaceEntry" id="result-driver-detail" ref="resultDriverDetail" class="card result-driver-detail" role="region" aria-label="车手比赛详情" tabindex="-1">
+          <div class="spread"><div><span class="tiny muted">车手比赛详情</span><h3><span class="swatch" :style="{ background: teamOf(selectedRaceEntry.driverId).color }"></span>{{ name(selectedRaceEntry.driverId) }}</h3></div><button class="small" aria-label="关闭车手比赛详情" @click="closeResultDriver">✕</button></div>
+          <div class="result-stats"><span>发车 <b>P{{ selectedRaceEntry.grid }}</b></span><span>完赛 <b>{{ selectedRaceEntry.pos ? `P${selectedRaceEntry.pos}` : 'DNF' }}</b></span><span>名次变化 <b :class="selectedRaceEntry.pos && selectedRaceEntry.grid - selectedRaceEntry.pos > 0 ? 'pos' : selectedRaceEntry.pos && selectedRaceEntry.grid - selectedRaceEntry.pos < 0 ? 'neg' : ''">{{ selectedRaceEntry.pos ? `${selectedRaceEntry.grid - selectedRaceEntry.pos > 0 ? '+' : ''}${selectedRaceEntry.grid - selectedRaceEntry.pos}` : '—' }}</b></span></div>
+          <div><b class="small">进站圈数</b><div v-if="selectedRaceEntry.pitStops?.length" class="pit-laps"><span v-for="(stop, index) in selectedRaceEntry.pitStops" :key="`${stop.lap}-${index}`"><b>第 {{ stop.lap }} 圈</b> · 静止 {{ stop.actualStationary.toFixed(1) }}s<span v-if="stop.repair"> · 维修</span><span v-if="stop.slow" class="neg"> · 慢停</span></span></div><p v-else class="small muted">本场没有详细进站圈数记录。</p></div>
+          <div><b class="small">逐圈名次</b><LapChart v-if="selectedChartSeries.length" :series="selectedChartSeries" :max-pos="raceLike.classification.length" /><p v-else class="small muted">旧比赛结果没有保存该车手的逐圈名次。</p></div>
+        </section>
         <LapChart v-if="chartSeries.length" :series="chartSeries" :max-pos="raceLike.classification.length" />
         <details open>
           <summary class="small muted">比赛事件（{{ raceLike.events.length }}）</summary>
@@ -718,6 +689,7 @@ const chartSeries = computed(() => {
   font-size: 12px;
 }
 .tyre-inventory { gap: 4px; }
+.result-driver { display:inline-flex; align-items:center; gap:5px; padding:3px 5px; border:0; background:transparent; color:inherit; text-align:left; }.result-driver:hover,.result-driver.selected { color:var(--cyan); background:var(--bg3); }.result-driver-detail { display:grid; gap:10px; border-color:var(--cyan); }.result-driver-detail h3 { margin:2px 0 0; }.result-stats { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }.result-stats span { padding:7px 8px; background:var(--bg); color:var(--muted); font-size:11px; }.result-stats b { display:block; color:var(--text); font:700 18px/1.2 var(--font-num); }.pit-laps { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }.pit-laps span { padding:6px 8px; background:var(--bg); font-size:11px; }
 .tyre-set { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px; border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
 .tyre-set.returned { opacity: .45; text-decoration: line-through; }
 .tyre-set.selected { border-color: var(--team); background: color-mix(in srgb, var(--team) 15%, transparent); }
@@ -871,5 +843,8 @@ const chartSeries = computed(() => {
   .perfect-window { max-height: calc(100vh - 16px); }
   .performance-row { grid-template-columns: 68px minmax(0, 1fr); }
   .engineer-actions { grid-column: 1 / -1; }
+  .result-stats { grid-template-columns:1fr 1fr 1fr; }
+  .result-driver-detail { padding:10px; }
+  .result-driver { min-height:44px; }
 }
 </style>

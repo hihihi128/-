@@ -30,21 +30,31 @@ function init(): void {
   const doc = env.hostDocument();
   if (doc) panel = new PanelHost(doc, PANEL_HTML);
   const updatePanelStatus = () => {
-    const status = ctrl.status();
-    const hud = ctrl.hud(ctrl.latestFloor());
-    const view = ctrl.view();
-    panel?.updateStatus({
-      hasGame: status.hasGame,
-      teamLabel: hud.team?.name,
-      teamColor: hud.team?.color,
-      year: view?.season.year,
-      round: view ? view.season.roundIndex + 1 : undefined,
-      roundCount: view?.season.rounds,
-      trackLabel: hud.season?.track,
-      phaseLabel: view?.season.phaseLabel,
-      pendingNarration: hud.pending,
-      generating: status.generating,
-    });
+    try {
+      const status = ctrl.status();
+      const view = ctrl.view();
+      let pendingNarration = 0;
+      try {
+        pendingNarration = ctrl.hud(ctrl.latestFloor()).pending;
+      } catch {
+        // A partially restored floor can temporarily lack a complete HUD.
+      }
+      panel?.updateStatus({
+        hasGame: !!view,
+        teamLabel: view?.player.team.name,
+        teamColor: view?.player.team.color,
+        year: view?.season.year,
+        round: view ? view.season.roundIndex + 1 : undefined,
+        roundCount: view?.season.rounds,
+        trackLabel: view?.round?.track.name,
+        phaseLabel: view?.season.phaseLabel,
+        pendingNarration,
+        generating: status.generating,
+      });
+    } catch (error) {
+      // Keep the subscribed listener alive across transient, incomplete states.
+      console.warn('[F1M] 迷你状态卡更新失败', error);
+    }
   };
   unsubscribePanelStatus = ctrl.subscribe(updatePanelStatus);
   updatePanelStatus();

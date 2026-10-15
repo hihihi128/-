@@ -37,6 +37,34 @@ const ctrl = new F1Controller(env);
 ctrl.init();
 const panel = new PanelHost(document, panelHtml);
 w.F1Manager = createApi(ctrl, () => panel);
+const updatePanelStatus = () => {
+  try {
+    const status = ctrl.status();
+    const view = ctrl.view();
+    let pendingNarration = 0;
+    try {
+      pendingNarration = ctrl.hud(ctrl.latestFloor()).pending;
+    } catch {
+      // The development fixture can temporarily expose an incomplete floor.
+    }
+    panel.updateStatus({
+      hasGame: !!view,
+      teamLabel: view?.player.team.name,
+      teamColor: view?.player.team.color,
+      year: view?.season.year,
+      round: view ? view.season.roundIndex + 1 : undefined,
+      roundCount: view?.season.rounds,
+      trackLabel: view?.round?.track.name,
+      phaseLabel: view?.season.phaseLabel,
+      pendingNarration,
+      generating: status.generating,
+    });
+  } catch (error) {
+    console.warn('[F1M] 开发页迷你状态卡更新失败', error);
+  }
+};
+ctrl.subscribe(updatePanelStatus);
+updatePanelStatus();
 
 type WeeklyFixtureCategory = 'routine' | 'problem';
 let weeklyFixtureCategory: WeeklyFixtureCategory = 'routine';

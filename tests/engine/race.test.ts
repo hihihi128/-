@@ -24,8 +24,8 @@ describe('比赛模拟', () => {
       expect(c.pits).toBeGreaterThanOrEqual(result.weather === 'dry' ? 1 : 0);
     }
     expect(result.events.length).toBeGreaterThan(0);
-    expect(Object.keys(result.lapChart)).toHaveLength(2);
-    expect(result.lapChart[Object.keys(result.lapChart)[0]]).toHaveLength(result.laps);
+    expect(Object.keys(result.lapChart)).toHaveLength(result.classification.length);
+    expect(Object.values(result.lapChart).every(history => history.length === result.laps)).toBe(true);
     expect(result.rainHistory).toHaveLength(result.laps);
     expect(result.rainHistory?.every(value => value >= 0 && value <= 1)).toBe(true);
   });

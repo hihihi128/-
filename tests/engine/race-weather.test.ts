@@ -27,6 +27,8 @@ describe('半雨胎与全雨胎', () => {
     expect(DEFAULT_RULES.tyres[DEFAULT_RULES.wetCompound].name).toBe('半雨胎');
     expect(DEFAULT_RULES.tyres[DEFAULT_RULES.fullWetCompound].name).toBe('全雨胎');
     expect(wetCompoundFor(DEFAULT_RULES, .45)).toBe(DEFAULT_RULES.wetCompound);
+    expect(wetCompoundFor(DEFAULT_RULES, .819)).toBe(DEFAULT_RULES.wetCompound);
+    expect(wetCompoundFor(DEFAULT_RULES, .82)).toBe(DEFAULT_RULES.fullWetCompound);
     expect(wetCompoundFor(DEFAULT_RULES, .9)).toBe(DEFAULT_RULES.fullWetCompound);
   });
 

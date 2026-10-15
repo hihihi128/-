@@ -32,6 +32,74 @@ describe('逐段排位与实体轮胎组', () => {
     expect(state.weekend!.qualifying!.sessions.map(session => session.name)).toEqual(['Q1', 'Q2', 'Q3']);
   });
 
+  it.each([
+    ['qualifying', 'race', ['Q1', 'Q2', 'Q3']],
+    ['sprint_qualifying', 'sprint', ['SQ1', 'SQ2', 'SQ3']],
+  ] as const)('一键模拟 %s，并让 AI 车手完成全部晋级分段', (kind, nextPhase, names) => {
+    let state = advanceUntil(newTestGame(kind === 'qualifying' ? 324 : 325), value => value.season.phase === kind, 1200);
+    const activeDriverIds = state.teamOrder.flatMap(teamId => state.teams[teamId].cars.flatMap(car => car.driverId ? [car.driverId] : []));
+
+    state = act(state, { type: 'SIMULATE_QUALIFYING', kind });
+
+    const result = kind === 'qualifying' ? state.weekend!.qualifying! : state.weekend!.sprintQualifying!;
+    expect(state.season.phase).toBe(nextPhase);
+    expect(state.weekend!.liveQualifying).toBeNull();
+    expect(result.sessions.map(session => session.name)).toEqual(names);
+    expect(result.order).toHaveLength(activeDriverIds.length);
+    expect(new Set(result.order)).toEqual(new Set(activeDriverIds));
+    expect(new Set(result.grid)).toEqual(new Set(activeDriverIds));
+
+    for (let index = 0; index < result.sessions.length - 1; index++) {
+      const eliminated = result.sessions[index].entries.filter(entry => entry.eliminated);
+      const nextDriverIds = new Set(result.sessions[index + 1].entries.map(entry => entry.driverId));
+      expect(eliminated.length).toBeGreaterThan(0);
+      expect(eliminated.some(entry => !state.teams[entry.teamId].isPlayer)).toBe(true);
+      expect(eliminated.every(entry => !nextDriverIds.has(entry.driverId))).toBe(true);
+    }
+    expect(result.sessions.slice(1).every(session => session.entries.some(entry => !state.teams[entry.teamId].isPlayer))).toBe(true);
+  });
+
+  it('只在两名玩家车手都淘汰后自动完成实时排位的剩余分段', () => {
+    const base = advanceUntil(newTestGame(326), value => value.season.phase === 'qualifying');
+    const automatic = act(deepClone(base), { type: 'RUN_QUALIFYING' }).weekend!.liveQualifying!;
+    let state = act(base, { type: 'START_QUALIFYING', kind: 'qualifying' });
+    const live = state.weekend!.liveQualifying!;
+    live.segmentIndex = automatic.segmentIndex;
+    live.alive = [...automatic.alive];
+    live.finalOrder = [...automatic.finalOrder];
+    live.sessions = deepClone(automatic.sessions);
+    expect(tryAct(state, { type: 'SIMULATE_QUALIFYING', kind: 'qualifying' })).toMatchObject({
+      ok: false,
+      message: expect.stringContaining('本队仍有车手晋级'),
+    });
+
+    const playerIds = new Set(state.teams[state.meta.playerTeamId].cars.flatMap(car => car.driverId ? [car.driverId] : []));
+    const newlyEliminated = live.alive.filter(driverId => playerIds.has(driverId));
+    live.alive = live.alive.filter(driverId => !playerIds.has(driverId));
+    live.finalOrder.unshift(...newlyEliminated);
+    for (const entry of live.sessions[0].entries) if (newlyEliminated.includes(entry.driverId)) entry.eliminated = true;
+    const globalRng = state.rng;
+
+    state = act(state, { type: 'SIMULATE_QUALIFYING', kind: 'qualifying' });
+    expect(state.season.phase).toBe('race');
+    expect(state.weekend!.liveQualifying).toBeNull();
+    expect(state.weekend!.qualifying!.sessions.map(session => session.name)).toEqual(['Q1', 'Q2', 'Q3']);
+    expect(new Set(state.weekend!.qualifying!.order).size).toBe(state.weekend!.qualifying!.order.length);
+    expect(state.weekend!.qualifying!.sessions.slice(1).every(session => session.entries.every(entry => !playerIds.has(entry.driverId)))).toBe(true);
+    expect(state.rng).toBe(globalRng);
+  });
+
+  it('从自动分段继续一键模拟时推进全局随机数流', () => {
+    let state = advanceUntil(newTestGame(327), value => value.season.phase === 'qualifying');
+    state = act(state, { type: 'RUN_QUALIFYING' });
+    const rngAfterQ1 = state.rng;
+
+    state = act(state, { type: 'SIMULATE_QUALIFYING', kind: 'qualifying' });
+
+    expect(state.season.phase).toBe('race');
+    expect(state.rng).not.toBe(rngAfterQ1);
+  });
+
   it('拒绝不可用轮胎组，并且不消耗随机数或推进分段', () => {
     const state = advanceUntil(newTestGame(315), value => value.season.phase === 'qualifying');
     const beforeRng = state.rng;

@@ -30,6 +30,7 @@ import type {
   WeekendState,
 } from './types';
 import { clamp, deepClone, lapTime, round1, round3 } from './util';
+import { qualifyingDurationTicks, qualifyingRunAllowance, resolvedQualifyingSectors } from './qualifyingRules';
 
 export function currentRound(state: GameState) {
   return state.calendar[state.season.roundIndex];
@@ -284,7 +285,7 @@ const APPROACH: Record<QualiApproach, { mean: number; err: number }> = {
   aggressive: { mean: -0.08, err: 1.8 },
 };
 
-function qualiLap(
+export function qualiLap(
   state: GameState,
   driver: DriverState,
   team: TeamState,
@@ -367,9 +368,34 @@ export function advanceQualifyingSegment(
   const eliminated = n - state.rules.qualiFinalists;
   const knockouts = eliminated >= 2 ? [Math.ceil(eliminated / 2), Math.floor(eliminated / 2)] : [];
   const sessionCount = knockouts.length + 1;
+  if (w.liveQualifying?.controlMode === 'manual') return { ok: false, message: '实时排位已经开始，请使用实时控制台', result: null };
   const progress: LiveQualifyingState = w.liveQualifying?.kind === kind
     ? w.liveQualifying
-    : { version: 1 as const, kind, segmentIndex: 0, segmentCount: sessionCount, alive: entries.map(e => e.driver.id), finalOrder: [], sessions: [], events: [] };
+    : {
+        version: 2,
+        id: `qualifying:${state.gameId}:${weekendTyreKey(state)}:${kind}`,
+        revision: 0,
+        physicsVersion: 1,
+        weekendKey: weekendTyreKey(state),
+        controlMode: 'automatic',
+        rngState: rng.state,
+        kind,
+        segmentIndex: 0,
+        segmentCount: sessionCount,
+        alive: entries.map(e => e.driver.id),
+        finalOrder: [],
+        sessions: [],
+        events: [],
+        stage: 'ready',
+        paused: true,
+        speed: 1,
+        elapsedTicks: 0,
+        durationTicks: qualifyingDurationTicks(kind, 0),
+        wet,
+        runAllowance: qualifyingRunAllowance(kind, sessionCount),
+        sectors: resolvedQualifyingSectors(track),
+        cars: {},
+      };
   if (progress.segmentIndex >= progress.segmentCount) return { ok: false, message: '排位赛分段已经完成', result: null };
   const s = progress.segmentIndex;
   const runs = kind === 'sprint_qualifying' ? 1 : sessionCount === 1 ? 3 : 2;
@@ -433,6 +459,7 @@ export function advanceQualifyingSegment(
   }
   progress.sessions.push({ name, entries: times });
   progress.segmentIndex += 1;
+  progress.rngState = rng.state;
   w.liveQualifying = progress;
   w.parcFerme = true;
 

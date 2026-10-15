@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { continuationSuffix, F1Controller, HUD_TAG, INJECT_ID, LEADERSHIP_PREFIX, PLAYER_REPLACED_LEADERSHIP, principalRole } from '../../src/tavern/controller';
 import { PTR, STORE_KEY } from '../../src/tavern/store';
 import { cardWorldbook, FakeTavern } from './fakeEnv';
+import { advanceUntil, newTestGame } from '../helpers';
 
 const update = (lines: string[]) => `\n<F1M_UPDATE>\n${lines.join('\n')}\n</F1M_UPDATE>`;
 
@@ -55,6 +56,18 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
     expect(ctrl.status().revisions).toBe(3);
     expect(env.messages[1].variables[0][PTR]).toBeTruthy();
+  });
+
+  it('一键模拟排位赛后自动触发结果叙述', async () => {
+    const state = advanceUntil(ctrl.stateAt()!, value => value.season.phase === 'qualifying', 1200);
+    expect((await ctrl.importSave(JSON.stringify(state))).ok).toBe(true);
+    ctrl.updateSettings({ autoNarrate: true });
+    const triggeredBefore = env.triggered;
+
+    expect((await ctrl.dispatch({ type: 'SIMULATE_QUALIFYING', kind: 'qualifying' })).ok).toBe(true);
+
+    expect(ctrl.stateAt()!.season.phase).toBe('race');
+    await vi.waitFor(() => expect(env.triggered).toBe(triggeredBefore + 1));
   });
 
   it('车队工程师默认走主 API，也可使用设置中的副 API', async () => {
@@ -805,6 +818,31 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect((await ctrl2.importSave(text)).ok).toBe(true);
     expect(ctrl2.stateAt()!.teams.team_c.projects).toHaveLength(1);
     expect((await ctrl2.importSave('{"bad":1}')).ok).toBe(false);
+  });
+
+  it('导入运行中的手动实时排位时保留进度并安全暂停', async () => {
+    const qualifying = advanceUntil(newTestGame(712), state => state.season.phase === 'qualifying', 1200);
+    qualifying.weekend!.weather.qualifying = 'dry';
+    expect((await ctrl.importSave(JSON.stringify(qualifying))).ok).toBe(true);
+    expect((await ctrl.dispatch({ type: 'START_QUALIFYING', kind: 'qualifying' })).ok).toBe(true);
+    let live = ctrl.stateAt()!.weekend!.liveQualifying!;
+    const driverId = Object.values(live.cars).find(car => car.player)!.driverId;
+    const inventory = ctrl.stateAt()!.teams[ctrl.stateAt()!.meta.playerTeamId].tyreInventory![driverId];
+    const tyreSetId = inventory.find(set => !set.returned && !ctrl.stateAt()!.rules.tyres[set.compound].wet)!.id;
+    expect((await ctrl.dispatch({ type: 'RELEASE_QUALIFYING_CAR', sessionId: live.id, expectedRevision: live.revision, driverId, tyreSetId })).ok).toBe(true);
+    live = ctrl.stateAt()!.weekend!.liveQualifying!;
+    expect((await ctrl.dispatch({ type: 'SET_QUALIFYING_CLOCK', sessionId: live.id, expectedRevision: live.revision, paused: false, speed: 1 })).ok).toBe(true);
+    live = ctrl.stateAt()!.weekend!.liveQualifying!;
+    expect((await ctrl.dispatch({ type: 'ADVANCE_QUALIFYING', sessionId: live.id, expectedRevision: live.revision, ticks: 20 })).ok).toBe(true);
+    const text = ctrl.exportSave()!;
+    const before = ctrl.stateAt()!.weekend!.liveQualifying!;
+    expect(before.paused).toBe(false);
+
+    expect((await ctrl.importSave(text)).ok).toBe(true);
+    const restored = ctrl.stateAt()!.weekend!.liveQualifying!;
+    expect(restored).toMatchObject({ controlMode: 'manual', paused: true, segmentIndex: before.segmentIndex, elapsedTicks: before.elapsedTicks });
+    expect(restored.cars[driverId].phaseElapsedTicks).toBe(before.cars[driverId].phaseElapsedTicks);
+    expect(restored.revision).toBe(before.revision + 1);
   });
 
   it('读档会把旧版本挂到最新楼层', async () => {

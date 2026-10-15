@@ -967,10 +967,16 @@ export class F1Controller {
         }
       }
       this.store.commit(res.state, { floor: Math.max(0, floor), kind: 'ui', label: res.message });
-      this.staleSpecialAction();
-      this.invalidateStrategyReviews();
+      const qualifyingControlAction = ['SET_QUALIFYING_CLOCK', 'RELEASE_QUALIFYING_CAR', 'ADVANCE_QUALIFYING'].includes(action.type);
+      if (!qualifyingControlAction) {
+        this.staleSpecialAction();
+        this.invalidateStrategyReviews();
+      }
       this.notify('action');
-      if (this.settings.autoNarrate && isSimulation(action as Action) && res.state.narration.length) {
+      const completedLiveQualifying = action.type === 'ADVANCE_QUALIFYING'
+        && (cur.state.season.phase === 'qualifying' || cur.state.season.phase === 'sprint_qualifying')
+        && res.state.season.phase !== cur.state.season.phase;
+      if (this.settings.autoNarrate && (isSimulation(action as Action) || completedLiveQualifying) && res.state.narration.length) {
         void this.requestNarration();
       }
       return { ok: true, message: `${res.message}${strategySummary}` };
@@ -1404,6 +1410,11 @@ export class F1Controller {
     const rev = this.store.getRevision(id);
     if (!rev) return { ok: false, message: '找不到该存档版本' };
     const state = this.store.stateOf(rev);
+    const liveQualifying = state.weekend?.liveQualifying;
+    if (liveQualifying?.controlMode === 'manual' && !liveQualifying.paused) {
+      liveQualifying.paused = true;
+      liveQualifying.revision++;
+    }
     this.specialNegotiation = null;
     this.staleSpecialAction();
     this.invalidateStrategyReviews();
@@ -1431,6 +1442,11 @@ export class F1Controller {
       return { ok: false, message: '存档格式不正确' };
     }
     migrateState(state);
+    const liveQualifying = state.weekend?.liveQualifying;
+    if (liveQualifying?.controlMode === 'manual' && !liveQualifying.paused) {
+      liveQualifying.paused = true;
+      liveQualifying.revision++;
+    }
     this.specialNegotiation = null;
     this.staleSpecialAction();
     this.invalidateStrategyReviews();
@@ -2286,5 +2302,5 @@ function describeChanges(state: GameState, logs: ReturnType<typeof applyAiComman
 }
 
 function isSimulation(a: Action): boolean {
-  return ['ADVANCE', 'RUN_PRACTICE', 'RUN_QUALIFYING', 'RUN_SPRINT_QUALIFYING', 'RUN_SPRINT', 'RUN_RACE', 'FINISH_ROUND', 'START_SEASON', 'START_WEEKEND', 'START_NEXT_SEASON'].includes(a.type);
+  return ['ADVANCE', 'RUN_PRACTICE', 'RUN_QUALIFYING', 'RUN_SPRINT_QUALIFYING', 'SIMULATE_QUALIFYING', 'RUN_SPRINT', 'RUN_RACE', 'FINISH_ROUND', 'START_SEASON', 'START_WEEKEND', 'START_NEXT_SEASON'].includes(a.type);
 }

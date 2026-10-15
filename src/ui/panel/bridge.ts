@@ -40,6 +40,7 @@ export const store = reactive({
   busy: false,
   toasts: [] as Toast[],
   tab: 'overview',
+  panelVisible: true,
   error: '',
   /** 已有存档时手动打开开局界面 */
   forceNewGame: false,
@@ -177,6 +178,7 @@ export function connect(): void {
   cleanup.push(() => clearInterval(poll));
   window.addEventListener('message', ev => {
     if (ev.data?.type === 'f1m:tab' && typeof ev.data.tab === 'string') store.tab = ev.data.tab;
+    if (ev.data?.type === 'f1m:visibility' && typeof ev.data.visible === 'boolean') store.panelVisible = ev.data.visible;
   });
   window.addEventListener('pagehide', () => {
     for (const fn of cleanup) {

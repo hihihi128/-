@@ -57,6 +57,7 @@ describe('rain intensity presentation', () => {
   it('separates probability and confidence from the two intensity gauges and clips the arrival window', async () => {
     const host = mount(RaceWeatherForecast, {
       rain: .05,
+      wetness: .46,
       surface: 'damp',
       completedLaps: 18,
       totalLaps: 20,
@@ -66,6 +67,10 @@ describe('rain intensity presentation', () => {
     expect(host.querySelectorAll('.rain-gauge')).toHaveLength(2);
     expect(host.textContent).toContain('降雨概率 80%');
     expect(host.textContent).toContain('预报置信度 55%');
+    expect(host.textContent).toContain('赛道湿度 46%');
+    expect(host.textContent).toContain('半雨胎 适合赛道湿度 34%–81%');
+    expect(host.textContent).toContain('全雨胎 适合赛道湿度 82%–100%');
+    expect(host.textContent).toContain('22%–33% 为干胎与半雨胎临界区');
     expect((host.querySelector('.arrival-band') as HTMLElement).style.width).not.toBe('0%');
     expect((host.querySelector('.arrival-band') as HTMLElement).style.left).toBe(lapWindowStyle([1, 5], 2)?.left);
     expect((host.querySelector('.arrival-band') as HTMLElement).style.width).toBe(lapWindowStyle([1, 5], 2)?.width);
