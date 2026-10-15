@@ -495,7 +495,7 @@ const chartSeries = computed(() => {
           </div>
           <div v-if="qualifyingPhase" class="block stack-s">
             <div class="label">{{ qualifyingSegmentLabel }} 实体轮胎组</div>
-            <div v-if="!qualifyingDriverActive(d)" class="notice tiny">该车手已在上一分段被淘汰，无需为 {{ qualifyingSegmentLabel }} 选择轮胎组。</div>
+            <div v-if="!qualifyingDriverActive(d)" class="notice tiny">该车手已在本次排位中被淘汰，无需为 {{ qualifyingSegmentLabel }} 选择轮胎组。</div>
             <div v-else-if="qualifyingSetOptions(d).length" class="row wrap">
               <label v-for="run in qualifyingRuns" :key="run" class="small row">
                 第 {{ run }} 次出场

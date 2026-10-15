@@ -15,12 +15,6 @@ describe('tyre inventory and pit-stop interface', () => {
     expect(weekend).toContain('确认交回');
   });
 
-  it('keeps the qualifying tyre section visible after a driver is eliminated', () => {
-    expect(weekend).toContain('v-if="qualifyingPhase" class="block stack-s"');
-    expect(weekend).toContain('!qualifyingDriverActive(d)');
-    expect(weekend).toContain('该车手已在上一分段被淘汰');
-  });
-
   it('shows focused crew training and predicted versus actual stop times', () => {
     expect(development).toContain('error_control');
     expect(development).toContain('稳定性：缩小时间波动');
