@@ -1000,7 +1000,7 @@ export interface RaceResult {
   classification: ClassificationEntry[];
   events: RaceEvent[];
   fastestLap: { driverId: string; time: number; lap: number } | null;
-  /** 玩家车手每圈名次（用于走势图） */
+  /** 每位车手的逐圈名次（用于赛后走势图；旧存档可能只有玩家车手） */
   lapChart: Record<string, number[]>;
   safetyCars: number;
   /** 红旗次数；旧结果可能缺失。 */

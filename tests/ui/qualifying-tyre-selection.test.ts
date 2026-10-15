@@ -125,6 +125,24 @@ describe('segmented qualifying tyre selection UI', () => {
     expect((window as any).F1Manager.dispatch).toHaveBeenCalledWith({ type: 'SIMULATE_QUALIFYING', kind: 'qualifying' });
   });
 
+  it('clusters nearby track markers for the mobile layout', async () => {
+    const { view } = qualifyingView('qualifying');
+    const cars = view.weekend!.liveQualifying!.cars.slice(0, 4);
+    cars.forEach((car, index) => {
+      car.phase = 'flying_lap';
+      car.progress = .4 + index * .02;
+    });
+    const host = mountWeekend(view);
+    await nextTick();
+
+    const cluster = [...host.querySelectorAll<HTMLButtonElement>('.mobile-marker.cluster')].find(button => button.textContent === '+4');
+    expect(cluster).toBeTruthy();
+    expect(cluster?.querySelector('em')).toBeNull();
+    cluster?.click();
+    await nextTick();
+    expect(host.querySelectorAll('.mobile-cluster-picker button')).toHaveLength(4);
+  });
+
   it('stages a physical set without releasing, then sends one guarded release action', async () => {
     let state = advanceUntil(newTestGame(414), value => value.season.phase === 'qualifying', 1200);
     state = act(state, { type: 'START_QUALIFYING', kind: 'qualifying' });

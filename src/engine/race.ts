@@ -96,6 +96,9 @@ export interface RaceExtras {
   crashes: Array<{ teamId: string; slot: number; driverId: string; dnf: boolean; cause?: RaceDamageRecord['cause']; affectedPartTypes?: PartType[] }>;
 }
 
+export const WET_TYRE_MIN_WETNESS = .22;
+export const FULL_WET_MIN_WETNESS = .82;
+
 /** Severe multi-car and wet incidents are more likely to require a full stoppage. */
 export function redFlagProbability(severity: 'minor' | 'wing' | 'dnf', wetness: number, involvedCars: number, scChance: number): number {
   if (severity !== 'dnf') return 0;
@@ -254,7 +257,7 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
 
   const extras: RaceExtras = { crashes: [] };
   const lapChart: Record<string, number[]> = {};
-  for (const c of cars) if (c.isPlayer) lapChart[c.driver.id] = [];
+  for (const c of cars) lapChart[c.driver.id] = [];
   let fastest: RaceResult['fastestLap'] = null;
   let scLeft = 0;
   let vscLeft = 0;
@@ -660,7 +663,7 @@ function playerControlledCars(session: LiveRaceState): LiveRaceCar[] {
 
 /** Wetness controls the automatic wet-grid choice; players can choose any legal tyre on every grid. */
 export function requiresWetGridTyreChoice(session: Pick<LiveRaceState, 'stage' | 'completedLaps' | 'wetness'>): boolean {
-  return session.stage === 'grid' && session.completedLaps === 0 && session.wetness >= .22;
+  return session.stage === 'grid' && session.completedLaps === 0 && session.wetness >= WET_TYRE_MIN_WETNESS;
 }
 
 function expectedLivePositions(state: GameState): Record<string, number> {
@@ -789,7 +792,7 @@ export function createRaceSession(
       engineerWeatherTarget: null, engineerWeatherEligibleLap: 0, lastWeatherPitLap: -99,
       neutralStopTaken: false,
     };
-    if (entry.team.isPlayer) lapChart[id] = [];
+    lapChart[id] = [];
   }
   const session: LiveRaceState = {
     version: 1, physicsVersion: 2, id: sessionId, kind, roundIndex: state.season.roundIndex,
@@ -835,7 +838,7 @@ function createWindow(session: LiveRaceState, reasons: RaceDecisionWindow['reaso
 }
 
 export function wetCompoundFor(rules: GameState['rules'], wetness: number): Compound {
-  return wetness >= .82 ? rules.fullWetCompound : rules.wetCompound;
+  return wetness >= FULL_WET_MIN_WETNESS ? rules.fullWetCompound : rules.wetCompound;
 }
 
 function plannedTyreSet(state: GameState, car: LiveRaceCar, compound: Compound, stintIndex: number) {
@@ -1270,7 +1273,7 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
         liveEvent(session, lap, 'order', complied ? `车队指令：${mate.driverId} 让出位置给 ${favored.driverId}` : `${mate.driverId} 拒绝执行车队指令`, [mate.driverId, favored.driverId], true);
       }
     }
-    for (const car of Object.values(session.cars).filter(c => c.player)) { const pos = session.order.indexOf(car.driverId); session.lapChart[car.driverId]?.push(pos < 0 ? 0 : pos + 1); }
+    for (const car of Object.values(session.cars)) { const pos = session.order.indexOf(car.driverId); session.lapChart[car.driverId]?.push(pos < 0 ? 0 : pos + 1); }
     const fastestCar = liveCars(session).filter(c => c.bestLap !== null).sort((a, b) => (a.bestLap ?? Infinity) - (b.bestLap ?? Infinity))[0];
     if (fastestCar && fastestCar.bestLap !== null) session.fastestLap = { driverId: fastestCar.driverId, time: round3(fastestCar.bestLap), lap };
     const plannedPlayer = playerControlledCars(session).filter(c => {

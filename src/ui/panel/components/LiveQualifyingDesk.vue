@@ -14,6 +14,7 @@ const playerCars = computed(() => live.value?.cars.filter(car => car.player && l
 const onTrackCars = computed(() => live.value?.cars.filter(car => ['out_lap', 'flying_lap', 'in_lap'].includes(car.phase)) ?? []);
 const garageCars = computed(() => live.value?.cars.filter(car => car.phase === 'garage') ?? []);
 const selectedDriverId = ref('');
+const expandedTrackGroup = ref('');
 const selections = ref<Record<string, string>>({});
 const mounted = ref(false);
 const playbackArmed = ref(false);
@@ -42,6 +43,20 @@ const statusText = computed(() => {
   return '计时进行中';
 });
 const selectedCar = computed(() => live.value?.cars.find(car => car.driverId === selectedDriverId.value) ?? playerCars.value[0] ?? onTrackCars.value[0] ?? null);
+const mobileTrackGroups = computed(() => {
+  const groups: Array<{ key: string; progress: number; cars: LiveQualifyingView['cars'] }> = [];
+  for (const car of [...onTrackCars.value].sort((a, b) => a.progress - b.progress)) {
+    const current = groups.at(-1);
+    if (!current || car.progress - current.cars[0].progress >= .15) groups.push({ key: car.driverId, progress: car.progress, cars: [car] });
+    else {
+      current.cars.push(car);
+      current.key = current.cars.map(item => item.driverId).join(':');
+      current.progress = current.cars.reduce((sum, item) => sum + item.progress, 0) / current.cars.length;
+    }
+  }
+  return groups;
+});
+const openMobileTrackGroup = computed(() => mobileTrackGroups.value.find(group => group.key === expandedTrackGroup.value) ?? null);
 
 function tyreOptions(car: LiveQualifyingView['cars'][number]) {
   const driver = playerDriverById.value.get(car.driverId);
@@ -66,6 +81,7 @@ function syncSelections() {
   }
 }
 watch(() => `${live.value?.id ?? ''}:${live.value?.segmentIndex ?? -1}`, syncSelections, { immediate: true });
+watch(() => `${live.value?.id ?? ''}:${live.value?.segmentIndex ?? -1}`, () => { expandedTrackGroup.value = ''; });
 watch(() => playerCars.value.map(car => `${car.driverId}:${car.legalTyreSetIds.join(',')}`).join('|'), syncSelections);
 
 async function start() {
@@ -190,6 +206,16 @@ function markerLane(driverId: string) {
 }
 function selectMarker(id: string) { selectedDriverId.value = id; }
 function carStyle(car: LiveQualifyingView['cars'][number]) { return { left: `${Math.max(0, Math.min(100, car.progress * 100))}%`, '--team-color': car.teamColor }; }
+function groupStyle(group: typeof mobileTrackGroups.value[number]) {
+  const representative = group.cars.find(car => car.player) ?? group.cars[0];
+  return { left: `${Math.max(0, Math.min(100, group.progress * 100))}%`, '--team-color': representative.teamColor };
+}
+function toggleTrackGroup(group: typeof mobileTrackGroups.value[number]) {
+  if (group.cars.length === 1) {
+    expandedTrackGroup.value = '';
+    selectMarker(group.cars[0].driverId);
+  } else expandedTrackGroup.value = expandedTrackGroup.value === group.key ? '' : group.key;
+}
 function formatGap(progress: number) { return `${(Math.max(0, progress) * 100).toFixed(1)}% 圈`; }
 </script>
 
@@ -230,7 +256,7 @@ function formatGap(progress: number) { return `${(Math.max(0, progress) * 100).t
           <button
             v-for="car in onTrackCars"
             :key="car.driverId"
-            class="track-marker"
+            class="track-marker desktop-marker"
             :class="[markerLane(car.driverId), { selected: selectedDriverId === car.driverId, mine: car.player, traffic: car.trafficStatus !== 'clear', resetting: car.progress < .05 && car.phase !== 'out_lap' }]"
             :style="carStyle(car)"
             :aria-label="`${car.driverShort}，${phaseLabel(car)}，${trafficLabel(car)}`"
@@ -238,7 +264,18 @@ function formatGap(progress: number) { return `${(Math.max(0, progress) * 100).t
             @click="selectMarker(car.driverId)"
             @focus="selectMarker(car.driverId)"
           ><span>{{ car.driverShort }}</span><em>{{ car.driverShort }}</em></button>
+          <button
+            v-for="group in mobileTrackGroups"
+            :key="group.key"
+            class="track-marker mobile-marker"
+            :class="{ selected: group.cars.some(car => car.driverId === selectedDriverId), mine: group.cars.some(car => car.player), traffic: group.cars.some(car => car.trafficStatus !== 'clear'), cluster: group.cars.length > 1 }"
+            :style="groupStyle(group)"
+            :aria-label="group.cars.length === 1 ? `${group.cars[0].driverShort}，${trafficLabel(group.cars[0])}` : `${group.cars.length} 辆赛车，展开选择`"
+            :aria-expanded="group.cars.length > 1 ? expandedTrackGroup === group.key : undefined"
+            @click="toggleTrackGroup(group)"
+          >{{ group.cars.length === 1 ? group.cars[0].driverShort : `+${group.cars.length}` }}</button>
         </div>
+        <div v-if="openMobileTrackGroup" class="mobile-cluster-picker" aria-label="同位置赛车"><button v-for="car in openMobileTrackGroup.cars" :key="car.driverId" :class="{ selected: selectedDriverId === car.driverId, mine: car.player }" :style="{ '--team-color': car.teamColor }" @click="selectMarker(car.driverId)">{{ car.driverShort }}</button></div>
         <div v-if="selectedCar" class="selected-traffic" aria-live="polite">
           <b :style="{ color: selectedCar.teamColor }">{{ selectedCar.driverShort }}</b>
           <span>{{ trafficLabel(selectedCar) }}</span>
@@ -290,10 +327,10 @@ function formatGap(progress: number) { return `${(Math.max(0, progress) * 100).t
 .live-qualifying { min-width: 0; }
 .start-qualifying { display:flex; align-items:center; justify-content:space-between; gap:16px; }.start-qualifying p { margin:4px 0 0; max-width:700px; }
 .qualifying-ribbon { display:grid; grid-template-columns:auto auto minmax(0,1fr) auto; align-items:center; gap:12px; padding:11px 14px; border:1px solid var(--line); border-left:4px solid var(--green); background:var(--bg2); }.qualifying-ribbon.paused { border-left-color:var(--yellow); }.qualifying-ribbon.finishing { border-left-color:var(--orange); }.session-name { display:grid; gap:1px; }.session-name b { font-size:23px; font-style:italic; }.clock { font-size:30px; font-weight:800; letter-spacing:.04em; }.clock-copy { display:grid; gap:2px; }.clock-actions,.speed { display:flex; align-items:center; gap:4px; }.pause { min-height:38px; }.speed button { min-width:38px; padding-inline:8px; }.speed button.on { color:var(--text); border-color:var(--team); background:color-mix(in srgb,var(--team) 17%,var(--bg3)); }
-.track-card { overflow:hidden; }.track-title { gap:10px; }.progress-axis { position:relative; height:132px; margin:6px 30px 0; }.axis-line { position:absolute; top:63px; left:0; right:0; height:4px; border-radius:3px; background:linear-gradient(90deg,var(--team),var(--cyan)); }.sector-boundary { position:absolute; top:48px; bottom:30px; border-left:1px dashed var(--muted); }.sector-boundary span { position:absolute; top:72px; transform:translateX(-50%); color:var(--muted); font-size:10px; white-space:nowrap; }.endpoint { position:absolute; top:82px; font-size:11px; color:var(--muted); }.endpoint.start { left:0; }.endpoint.finish { right:0; }.track-marker { position:absolute; z-index:1; width:32px; height:32px; transform:translateX(-50%); padding:0; border-radius:50%; border:2px solid var(--team-color); background:var(--bg); color:var(--text); font-size:9px; font-weight:800; line-height:1; transition:left .18s linear; }.track-marker.lane-0 { top:8px; }.track-marker.lane-1 { top:50px; }.track-marker.lane-2 { top:92px; }.track-marker.resetting { transition:none; }.track-marker.mine { box-shadow:0 0 0 2px #fff; }.track-marker.selected { outline:2px solid var(--cyan); outline-offset:3px; }.track-marker.traffic { border-style:dashed; }.track-marker em { position:absolute; top:33px; left:50%; transform:translateX(-50%); font-style:normal; font-size:10px; color:var(--text); white-space:nowrap; }.track-marker.lane-2 em { top:-17px; }.selected-traffic { display:flex; flex-wrap:wrap; gap:4px; padding:7px 9px; border-left:3px solid var(--cyan); background:var(--bg); font-size:12px; }.empty-track { padding:8px 0 0; }
+.track-card { overflow:hidden; }.track-title { gap:10px; }.progress-axis { position:relative; height:132px; margin:6px 30px 0; }.axis-line { position:absolute; top:63px; left:0; right:0; height:4px; border-radius:3px; background:linear-gradient(90deg,var(--team),var(--cyan)); }.sector-boundary { position:absolute; top:48px; bottom:30px; border-left:1px dashed var(--muted); }.sector-boundary span { position:absolute; top:72px; transform:translateX(-50%); color:var(--muted); font-size:10px; white-space:nowrap; }.endpoint { position:absolute; top:82px; font-size:11px; color:var(--muted); }.endpoint.start { left:0; }.endpoint.finish { right:0; }.track-marker { position:absolute; z-index:1; width:32px; height:32px; transform:translateX(-50%); padding:0; border-radius:50%; border:2px solid var(--team-color); background:var(--bg); color:var(--text); font-size:9px; font-weight:800; line-height:1; transition:left .18s linear; }.mobile-marker { display:none; }.track-marker.lane-0 { top:8px; }.track-marker.lane-1 { top:50px; }.track-marker.lane-2 { top:92px; }.track-marker.resetting { transition:none; }.track-marker.mine { box-shadow:0 0 0 2px #fff; }.track-marker.selected { outline:2px solid var(--cyan); outline-offset:3px; }.track-marker.traffic { border-style:dashed; }.track-marker em { position:absolute; top:33px; left:50%; transform:translateX(-50%); font-style:normal; font-size:10px; color:var(--text); white-space:nowrap; }.track-marker.lane-2 em { top:-17px; }.mobile-cluster-picker { display:none; }.selected-traffic { display:flex; flex-wrap:wrap; gap:4px; padding:7px 9px; border-left:3px solid var(--cyan); background:var(--bg); font-size:12px; }.empty-track { padding:8px 0 0; }
 .player-cards { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }.driver-card { border-color:var(--line); cursor:pointer; }.driver-card.selected { border-color:var(--team); }.driver-head,.car-status,.release-fields,.run-status { display:flex; align-items:center; gap:8px; }.driver-head { justify-content:space-between; }.driver-dot { display:inline-block; width:8px; height:20px; margin-right:6px; vertical-align:middle; }.car-status { justify-content:space-between; margin:9px 0; font-size:12px; color:var(--muted); }.release-fields { align-items:end; }.field { display:grid; flex:1; gap:3px; font-size:12px; color:var(--muted); }.field select { width:100%; }.release { min-height:38px; white-space:nowrap; }.run-status { justify-content:space-between; padding:9px; border:1px solid var(--line); background:var(--bg); font-size:12px; }.release-reason { margin-top:7px; color:var(--yellow); }.completed-runs { margin-top:8px; line-height:1.8; }.completed-runs :deep(.tyre) { vertical-align:middle; }
 .garage-list { display:grid; gap:8px; }.garage-items { display:flex; flex-wrap:wrap; gap:5px 12px; }.garage-items span { display:inline-flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); }.garage-items span.mine { color:var(--text); }.garage-items i,.timing-list i { display:inline-block; width:3px; height:16px; }.garage-items small { color:var(--muted); }
 .timing-card { display:grid; gap:8px; }.timing-list { display:grid; }.timing-list > div { display:grid; grid-template-columns:28px 4px 48px 90px minmax(0,1fr); align-items:center; gap:7px; min-height:30px; border-bottom:1px solid var(--line); font-size:12px; }.timing-list > div.mine { background:color-mix(in srgb,var(--team) 9%,transparent); }.timing-list .mono { font-variant-numeric:tabular-nums; }.elimination { padding:5px 8px; border-left:3px solid var(--yellow); background:var(--bg); }
 @media (prefers-reduced-motion: reduce) { .track-marker { transition:none; } }
-@media (max-width:640px) { .live-qualifying,.player-cards,.driver-card { min-width:0; }.qualifying-ribbon { grid-template-columns:92px minmax(0,1fr); gap:7px; padding:9px 10px; }.clock { font-size:28px; }.clock-copy { align-self:center; }.clock-actions { grid-column:1/-1; justify-content:space-between; }.clock-actions > .pause { flex:1; min-height:44px; }.speed button { min-width:42px; min-height:44px; }.track-card { padding:10px; }.track-title > .tiny { display:none; }.progress-axis { height:162px; margin-inline:18px; }.axis-line { top:72px; }.sector-boundary { top:57px; bottom:37px; }.sector-boundary span { top:96px; }.endpoint { top:110px; }.track-marker.lane-0 { top:6px; }.track-marker.lane-1 { top:48px; }.track-marker.lane-2 { top:90px; }.selected-traffic { margin-top:2px; }.player-cards { grid-template-columns:1fr; gap:8px; }.driver-card { padding:10px; }.release-fields { display:grid; grid-template-columns:minmax(0,1fr) 102px; }.release { min-height:44px; }.run-status { align-items:start; flex-direction:column; }.timing-list > div { grid-template-columns:23px 3px 36px 79px minmax(0,1fr); gap:5px; }.timing-list > div > :last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.garage-items { gap:5px 8px; }.start-qualifying { align-items:start; flex-direction:column; }.start-qualifying .primary { width:100%; min-height:44px; } }
+@media (max-width:767px) { .live-qualifying,.player-cards,.driver-card { min-width:0; }.qualifying-ribbon { grid-template-columns:82px minmax(0,1fr); gap:7px; padding:9px 10px; }.clock { font-size:28px; }.clock-copy { align-self:center; }.clock-actions { grid-column:1/-1; display:grid; grid-template-columns:minmax(0,1fr) auto; }.clock-actions > .pause { min-height:44px; }.speed button { min-width:42px; min-height:44px; }.track-card { padding:10px; }.track-title > .tiny { display:none; }.progress-axis { height:92px; margin-inline:24px; }.axis-line { top:27px; }.sector-boundary { top:14px; bottom:29px; }.sector-boundary span { top:52px; }.endpoint { top:58px; }.desktop-marker { display:none; }.mobile-marker { display:block; top:6px; width:44px; height:44px; font-size:10px; }.mobile-marker.cluster { background:var(--bg3); }.mobile-cluster-picker { display:flex; flex-wrap:wrap; gap:6px; padding:7px; margin:0 0 6px; border:1px solid var(--line); background:var(--bg); }.mobile-cluster-picker button { min-width:44px; min-height:36px; border:2px solid var(--team-color); }.mobile-cluster-picker button.selected { outline:2px solid var(--cyan); }.mobile-cluster-picker button.mine { box-shadow:0 0 0 2px #fff inset; }.selected-traffic { margin-top:2px; }.player-cards { grid-template-columns:1fr; gap:8px; }.driver-card { padding:10px; }.release-fields { display:grid; grid-template-columns:minmax(0,1fr) 102px; }.release { min-height:44px; }.run-status { align-items:start; flex-direction:column; }.timing-list > div { grid-template-columns:23px 3px 36px 79px minmax(0,1fr); gap:5px; }.timing-list > div > :last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.garage-items { gap:5px 8px; }.start-qualifying { align-items:start; flex-direction:column; }.start-qualifying .row { width:100%; display:grid; grid-template-columns:1fr; }.start-qualifying button { min-height:44px; } }
 </style>
