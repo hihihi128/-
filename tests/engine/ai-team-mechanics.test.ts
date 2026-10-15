@@ -3,6 +3,7 @@ import { advanceWeeks } from '../../src/engine/development';
 import { normalizeDatabase } from '../../src/engine/data';
 import { ferrariAfterRace, ferrariMediaDelta } from '../../src/engine/ferrari';
 import { migrateState } from '../../src/engine/migrate';
+import { afterManagementRace } from '../../src/engine/managementSpecials';
 import { createGame } from '../../src/engine/newgame';
 import { maybeTriggerRacingBullsRecall } from '../../src/engine/nextTeamSpecials';
 import { Rng } from '../../src/engine/rng';
@@ -16,7 +17,7 @@ function game(playerTeamId: string, seed = 8128): GameState {
   return createGame(loaded.db, { playerTeamId, principalName: 'Scenario Tester', seed, gameId: `ai-${playerTeamId}-${seed}`, now: 1 });
 }
 
-describe('temporary AI team mechanics regression scenarios', () => {
+describe('AI team mechanics regression scenarios', () => {
   it('advances every AI special deterministically while keeping the player narrative isolated', () => {
     const first = game('cadillac');
     const second = game('cadillac');
@@ -69,6 +70,28 @@ describe('temporary AI team mechanics regression scenarios', () => {
     expect(state.racingBulls?.pendingRecall).toBeNull();
     expect(state.racingBulls?.activeRecall).toBeNull();
     expect(state.teams.racing_bulls.cars.map(car => car.driverId)).toEqual(beforeCars);
+  });
+
+  it('tolerates saves with a special state but no Haas team entry', () => {
+    const state = game('cadillac');
+    delete (state.teams as Partial<typeof state.teams>).haas;
+
+    expect(() => afterManagementRace(state)).not.toThrow();
+    expect(state.flags.fired).not.toBe(true);
+  });
+
+  it('does not recall drivers from missing or incomplete Racing Bulls team data', () => {
+    const missing = game('cadillac');
+    missing.rules.racingBulls.recallChance = 1;
+    delete (missing.teams as Partial<typeof missing.teams>).racing_bulls;
+    expect(() => maybeTriggerRacingBullsRecall(missing, new Rng(3))).not.toThrow();
+    expect(missing.racingBulls?.pendingRecall).toBeNull();
+
+    const incomplete = game('cadillac');
+    incomplete.rules.racingBulls.recallChance = 1;
+    incomplete.teams.racing_bulls.cars = [];
+    expect(() => maybeTriggerRacingBullsRecall(incomplete, new Rng(3))).not.toThrow();
+    expect(incomplete.racingBulls?.pendingRecall).toBeNull();
   });
 
   it('migrates a pre-special save once, preserves existing state, and is idempotent', () => {
