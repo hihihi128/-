@@ -446,7 +446,16 @@ export interface TrackDef {
   rainChance: number;
   /** 事故后出动安全车（而非虚拟安全车）的概率 0~1 */
   scChance: number;
+  /** 排位位置模拟使用的归一化赛道区段；不是官方计时段。 */
+  qualifyingSectors?: QualifyingSector[];
   description: string;
+}
+
+export interface QualifyingSector {
+  endProgress: number;
+  timeWeight: number;
+  trafficSensitivity: number;
+  yieldSeconds: number;
 }
 
 export interface RoundDef {
@@ -848,7 +857,7 @@ export interface QualiSession {
     time: number | null;
     eliminated: boolean;
     note?: string;
-    tyreRuns?: Array<{ compound: Compound; setId: string; startedNew: boolean; lapsBefore: number; lapsAdded: number; time: number | null }>;
+    tyreRuns?: Array<{ compound: Compound; setId: string; startedNew: boolean; lapsBefore: number; lapsAdded: number; time: number | null; cleanTime?: number | null; trafficLoss?: number; note?: string }>;
   }>;
 }
 
@@ -864,9 +873,52 @@ export interface QualiResult {
   events: RaceEvent[];
 }
 
-/** 可暂停并逐段推进的排位赛。 */
+export type LiveQualifyingCarPhase = 'garage' | 'pit_out' | 'out_lap' | 'flying_lap' | 'in_lap' | 'pit_in' | 'done';
+
+export interface LiveQualifyingRun {
+  setId: string;
+  compound: Compound;
+  startedNew: boolean;
+  lapsBefore: number;
+  lapsCharged: number;
+  cleanTime: number;
+  valid: boolean;
+  note?: string;
+  flyingStartedTick: number | null;
+  flyingElapsedTicks: number;
+  trafficLoss: number;
+  blockerId: string | null;
+  blockerTicks: number;
+}
+
+export interface LiveQualifyingCar {
+  driverId: string;
+  teamId: string;
+  player: boolean;
+  phase: LiveQualifyingCarPhase;
+  progress: number;
+  phaseElapsedTicks: number;
+  runCount: number;
+  runAllowance: number;
+  bestTime: number | null;
+  lastTime: number | null;
+  activeRun: LiveQualifyingRun | null;
+  completedRuns: NonNullable<QualiSession['entries'][number]['tyreRuns']>;
+  scheduledReleaseTicks: number[];
+  trafficStatus: 'clear' | 'slower_ahead' | 'yielding';
+  trafficDriverId: string | null;
+  sector: number;
+}
+
+/** 可暂停、可保存并逐时推进的排位赛。 */
 export interface LiveQualifyingState {
-  version: 1;
+  version: 2;
+  id: string;
+  revision: number;
+  physicsVersion: 1;
+  weekendKey: string;
+  controlMode: 'manual' | 'automatic';
+  rngState: number;
   kind: 'qualifying' | 'sprint_qualifying';
   segmentIndex: number;
   segmentCount: number;
@@ -874,6 +926,15 @@ export interface LiveQualifyingState {
   finalOrder: string[];
   sessions: QualiSession[];
   events: RaceEvent[];
+  stage: 'ready' | 'running' | 'finishing';
+  paused: boolean;
+  speed: 1 | 2 | 4 | 8;
+  elapsedTicks: number;
+  durationTicks: number;
+  wet: boolean;
+  runAllowance: number;
+  sectors: QualifyingSector[];
+  cars: Record<string, LiveQualifyingCar>;
 }
 
 export type RaceEventType =
@@ -1576,6 +1637,10 @@ export type Action =
   | { type: 'RUN_PRACTICE' }
   | { type: 'RETURN_PRACTICE_TYRES'; driverId: string; setIds: string[] }
   | { type: 'RUN_SPRINT_QUALIFYING'; tyreSetIds?: Record<string, string[]> }
+  | { type: 'START_QUALIFYING'; kind: 'qualifying' | 'sprint_qualifying' }
+  | { type: 'SET_QUALIFYING_CLOCK'; sessionId: string; expectedRevision: number; paused: boolean; speed: 1 | 2 | 4 | 8 }
+  | { type: 'RELEASE_QUALIFYING_CAR'; sessionId: string; expectedRevision: number; driverId: string; tyreSetId: string }
+  | { type: 'ADVANCE_QUALIFYING'; sessionId: string; expectedRevision: number; ticks: number }
   | { type: 'RUN_SPRINT' }
   | { type: 'RUN_QUALIFYING'; tyreSetIds?: Record<string, string[]> }
   | { type: 'RUN_RACE'; aiPlans?: Record<string, Partial<DriverPlan>> }

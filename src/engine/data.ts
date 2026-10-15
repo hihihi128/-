@@ -16,6 +16,7 @@ import type {
   FacilityType,
   PartDef,
   RoundDef,
+  QualifyingSector,
   Rules,
   StaffAbility,
   StaffMember,
@@ -126,6 +127,113 @@ class Ctx {
 
 function asObject(v: unknown): Record<string, unknown> {
   return isPlainObject(v) ? v : {};
+}
+
+const QUALIFYING_SECTOR_MAX_SENSITIVITY = 3;
+const QUALIFYING_SECTOR_MAX_YIELD_SECONDS = 10;
+
+function rounded(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+/**
+ * Build simulation-only sectors for old and custom tracks. These are relative
+ * lap sections, deliberately not a claim about official timing sectors.
+ */
+export function fallbackQualifyingSectors(track: Pick<TrackDef, 'weights' | 'overtaking'>): QualifyingSector[] {
+  const technical = clamp((track.weights.downforce + track.weights.mechanical) / 2, 0, 1);
+  const fast = clamp((track.weights.efficiency + track.weights.power) / 2, 0, 1);
+  const passingDifficulty = clamp((100 - track.overtaking) / 100, 0, 1);
+  const weights = [0.3 + technical * 0.1, 0.35, 0.3 + fast * 0.1];
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  return [
+    {
+      endProgress: 1 / 3,
+      timeWeight: rounded(weights[0] / total),
+      trafficSensitivity: rounded(1.05 + passingDifficulty * 0.75 + technical * 0.25),
+      yieldSeconds: rounded(1.5 + passingDifficulty * 1.2 + technical * 0.4),
+    },
+    {
+      endProgress: 2 / 3,
+      timeWeight: rounded(weights[1] / total),
+      trafficSensitivity: rounded(0.95 + passingDifficulty * 0.6),
+      yieldSeconds: rounded(1.1 + passingDifficulty * 0.8),
+    },
+    {
+      endProgress: 1,
+      timeWeight: rounded(weights[2] / total),
+      trafficSensitivity: rounded(0.65 + passingDifficulty * 0.45 + fast * 0.1),
+      yieldSeconds: rounded(0.65 + passingDifficulty * 0.55),
+    },
+  ];
+}
+
+/** Values already persisted in a save must meet the same coverage rules as authored YAML. */
+export function isValidQualifyingSectors(value: unknown): value is QualifyingSector[] {
+  if (!Array.isArray(value) || !value.length) return false;
+  let previous = 0;
+  for (const sector of value) {
+    if (!isPlainObject(sector)
+      || typeof sector.endProgress !== 'number' || !Number.isFinite(sector.endProgress)
+      || typeof sector.timeWeight !== 'number' || !Number.isFinite(sector.timeWeight)
+      || typeof sector.trafficSensitivity !== 'number' || !Number.isFinite(sector.trafficSensitivity)
+      || typeof sector.yieldSeconds !== 'number' || !Number.isFinite(sector.yieldSeconds)
+      || sector.endProgress <= previous
+      || sector.endProgress > 1
+      || sector.timeWeight <= 0
+      || sector.trafficSensitivity < 0
+      || sector.trafficSensitivity > QUALIFYING_SECTOR_MAX_SENSITIVITY
+      || sector.yieldSeconds < 0
+      || sector.yieldSeconds > QUALIFYING_SECTOR_MAX_YIELD_SECONDS) return false;
+    previous = sector.endProgress;
+  }
+  return previous === 1;
+}
+
+function normalizeQualifyingSectors(ctx: Ctx, raw: unknown, path: string, fallback: QualifyingSector[]): QualifyingSector[] {
+  if (raw === undefined || raw === null) return fallback;
+  if (!Array.isArray(raw) || !raw.length) {
+    ctx.err(`${path}.qualifyingSectors`, '排位模拟区段必须是非空数组');
+    return fallback;
+  }
+  const sectors: QualifyingSector[] = [];
+  let previous = 0;
+  for (let index = 0; index < raw.length; index++) {
+    const sectorPath = `${path}.qualifyingSectors[${index}]`;
+    if (!isPlainObject(raw[index])) {
+      ctx.err(sectorPath, '排位模拟区段必须是对象');
+      return fallback;
+    }
+    const sector = raw[index];
+    const endProgress = ctx.num(sector, 'endProgress', sectorPath, { required: true });
+    const timeWeight = ctx.num(sector, 'timeWeight', sectorPath, { required: true });
+    const trafficSensitivity = ctx.num(sector, 'trafficSensitivity', sectorPath, { required: true });
+    const yieldSeconds = ctx.num(sector, 'yieldSeconds', sectorPath, { required: true });
+    if (endProgress <= previous || endProgress > 1) {
+      ctx.err(`${sectorPath}.endProgress`, '区段终点必须严格递增且不大于 1');
+      return fallback;
+    }
+    if (timeWeight <= 0) {
+      ctx.err(`${sectorPath}.timeWeight`, '时间权重必须大于 0');
+      return fallback;
+    }
+    if (trafficSensitivity < 0 || trafficSensitivity > QUALIFYING_SECTOR_MAX_SENSITIVITY) {
+      ctx.err(`${sectorPath}.trafficSensitivity`, `交通敏感度必须在 0 到 ${QUALIFYING_SECTOR_MAX_SENSITIVITY} 之间`);
+      return fallback;
+    }
+    if (yieldSeconds < 0 || yieldSeconds > QUALIFYING_SECTOR_MAX_YIELD_SECONDS) {
+      ctx.err(`${sectorPath}.yieldSeconds`, `让车时间必须在 0 到 ${QUALIFYING_SECTOR_MAX_YIELD_SECONDS} 秒之间`);
+      return fallback;
+    }
+    sectors.push({ endProgress, timeWeight, trafficSensitivity, yieldSeconds });
+    previous = endProgress;
+  }
+  if (previous !== 1) {
+    ctx.err(`${path}.qualifyingSectors`, '最后一个区段终点必须为 1');
+    return fallback;
+  }
+  const total = sectors.reduce((sum, sector) => sum + sector.timeWeight, 0);
+  return sectors.map(sector => ({ ...sector, timeWeight: rounded(sector.timeWeight / total) }));
 }
 
 /** 深度合并：对象递归合并，数组与原始值直接替换，值为 null 表示删除该键 */
@@ -645,6 +753,8 @@ function normalizeTrack(ctx: Ctx, raw: unknown, index: number): TrackDef | null 
   }
   for (const k of TRACK_DEMANDS) weights[k] = Math.round((weights[k] / total) * 1000) / 1000;
   const name = ctx.str(raw, 'name', path, { def: id });
+  const overtaking = ctx.num(raw, 'overtaking', path, { def: 55, min: 0, max: 100 });
+  const qualifyingSectors = normalizeQualifyingSectors(ctx, raw.qualifyingSectors, path, fallbackQualifyingSectors({ weights, overtaking }));
   return {
     id,
     name,
@@ -654,12 +764,13 @@ function normalizeTrack(ctx: Ctx, raw: unknown, index: number): TrackDef | null 
     baseLap: ctx.num(raw, 'baseLap', path, { def: 85, min: 30, max: 300 }),
     pitLoss: ctx.num(raw, 'pitLoss', path, { def: 21, min: 5, max: 60 }),
     weights,
-    overtaking: ctx.num(raw, 'overtaking', path, { def: 55, min: 0, max: 100 }),
+    overtaking,
     tyreStress: ctx.num(raw, 'tyreStress', path, { def: 50, min: 0, max: 100 }),
     surfaceTemperature: ctx.num(raw, 'surfaceTemperature', path, { def: 32, min: 10, max: 65 }),
     thermalDemand: ctx.num(raw, 'thermalDemand', path, { def: ctx.num(raw, 'tyreStress', path, { def: 50, min: 0, max: 100 }), min: 0, max: 100 }),
     rainChance: ctx.num(raw, 'rainChance', path, { def: 0.15, min: 0, max: 1 }),
     scChance: ctx.num(raw, 'scChance', path, { def: 0.5, min: 0, max: 1 }),
+    qualifyingSectors,
     description: ctx.str(raw, 'description', path),
   };
 }

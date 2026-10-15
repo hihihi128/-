@@ -970,7 +970,10 @@ export class F1Controller {
       this.staleSpecialAction();
       this.invalidateStrategyReviews();
       this.notify('action');
-      if (this.settings.autoNarrate && isSimulation(action as Action) && res.state.narration.length) {
+      const completedLiveQualifying = action.type === 'ADVANCE_QUALIFYING'
+        && (cur.state.season.phase === 'qualifying' || cur.state.season.phase === 'sprint_qualifying')
+        && res.state.season.phase !== cur.state.season.phase;
+      if (this.settings.autoNarrate && (isSimulation(action as Action) || completedLiveQualifying) && res.state.narration.length) {
         void this.requestNarration();
       }
       return { ok: true, message: `${res.message}${strategySummary}` };

@@ -252,6 +252,59 @@ describe('旧存档升级', () => {
     expect(migrated.weekend!.practiceSessions).toEqual([oldResult]);
     expect(buildView(migrated).weekend!.practiceSessions).toEqual([oldResult]);
   });
+
+  it('把 v1 排位分段边界升级为暂停的 v2 自动检查点，不重放随机数或已完成赛段', () => {
+    let state = advanceUntil(newTestGame(818), value => value.season.phase === 'qualifying');
+    state = act(state, { type: 'RUN_QUALIFYING' });
+    const current = state.weekend!.liveQualifying!;
+    state.weekend!.liveQualifying = {
+      version: 1,
+      kind: current.kind,
+      segmentIndex: current.segmentIndex,
+      segmentCount: current.segmentCount,
+      alive: current.alive,
+      finalOrder: current.finalOrder,
+      sessions: current.sessions,
+      events: current.events,
+    } as never;
+    const rng = state.rng;
+
+    migrateState(state);
+    const migrated = state.weekend!.liveQualifying! as unknown as { sessions: unknown; cars: unknown };
+    expect(state.rng).toBe(rng);
+    expect(migrated).toMatchObject({ version: 2, controlMode: 'automatic', stage: 'ready', paused: true, segmentIndex: 1 });
+    expect(migrated.sessions).toEqual(current.sessions);
+    expect(migrated.cars).toEqual({});
+    const once = JSON.stringify(state);
+    migrateState(state);
+    expect(JSON.stringify(state)).toBe(once);
+  });
+
+  it('把无法验证的 v2 活跃私有状态清理到恢复边界，同时保留完成分段', () => {
+    let state = advanceUntil(newTestGame(819), value => value.season.phase === 'qualifying');
+    state = act(state, { type: 'RUN_QUALIFYING' });
+    const live = state.weekend!.liveQualifying! as unknown as Record<string, unknown>;
+    live.controlMode = 'manual';
+    live.stage = 'running';
+    live.paused = false;
+    live.cars = { c1: { driverId: 'c1' } };
+    const sessions = JSON.stringify(live.sessions);
+
+    migrateState(state);
+    const recovered = state.weekend!.liveQualifying!;
+    expect(recovered).toMatchObject({ version: 2, controlMode: 'automatic', stage: 'ready', paused: true, cars: {} });
+    expect(JSON.stringify(recovered.sessions)).toBe(sessions);
+    expect(recovered.events.at(-1)?.text).toContain('无法验证');
+  });
+
+  it('保持有效 v2 自动检查点（包括 RNG 种子 0）完全不变', () => {
+    let state = advanceUntil(newTestGame(820), value => value.season.phase === 'qualifying');
+    state = act(state, { type: 'RUN_QUALIFYING' });
+    state.weekend!.liveQualifying!.rngState = 0;
+    const before = JSON.stringify(state);
+    migrateState(state);
+    expect(JSON.stringify(state)).toBe(before);
+  });
 });
 
 describe('动力单元配额：边界情况', () => {

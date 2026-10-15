@@ -73,6 +73,39 @@ describe('数据解析（世界书 YAML）', () => {
     expect(a).toBe(b);
   });
 
+  it('验证作者提供的排位模拟区段，并为旧赛道补齐确定性后备区段', () => {
+    const fallback = normalizeDatabase(placeholderSources()).db!.tracks.find(track => track.id === 'melbourne')!.qualifyingSectors!;
+    expect(fallback.map(sector => sector.endProgress)).toEqual([1 / 3, 2 / 3, 1]);
+    expect(fallback.reduce((sum, sector) => sum + sector.timeWeight, 0)).toBeCloseTo(1, 2);
+    expect(fallback[0].trafficSensitivity).toBeGreaterThan(fallback[2].trafficSensitivity);
+    expect(fallback[0].yieldSeconds).toBeGreaterThan(fallback[2].yieldSeconds);
+
+    const valid = normalizeDatabase([...placeholderSources(), {
+      name: '排位区段',
+      data: { tracks: [{ id: 'sector-test', qualifyingSectors: [
+        { endProgress: .2, timeWeight: 2, trafficSensitivity: 1.5, yieldSeconds: 2 },
+        { endProgress: .7, timeWeight: 3, trafficSensitivity: .8, yieldSeconds: 1 },
+        { endProgress: 1, timeWeight: 1, trafficSensitivity: .4, yieldSeconds: .5 },
+      ] }] },
+    }]);
+    expect(valid.canStart).toBe(true);
+    expect(valid.db!.tracks.find(track => track.id === 'sector-test')!.qualifyingSectors).toEqual([
+      { endProgress: .2, timeWeight: 0.333, trafficSensitivity: 1.5, yieldSeconds: 2 },
+      { endProgress: .7, timeWeight: 0.5, trafficSensitivity: .8, yieldSeconds: 1 },
+      { endProgress: 1, timeWeight: 0.167, trafficSensitivity: .4, yieldSeconds: .5 },
+    ]);
+
+    const invalid = normalizeDatabase([...placeholderSources(), {
+      name: '错误排位区段',
+      data: { tracks: [{ id: 'bad-sector-test', qualifyingSectors: [
+        { endProgress: .6, timeWeight: 1, trafficSensitivity: 1, yieldSeconds: 1 },
+        { endProgress: .5, timeWeight: 1, trafficSensitivity: 1, yieldSeconds: 1 },
+      ] }] },
+    }]);
+    expect(invalid.canStart).toBe(false);
+    expect(invalid.issues.some(issue => issue.path.includes('qualifyingSectors[1].endProgress'))).toBe(true);
+  });
+
   it('支持中文顶层键与多条目合并（同 id 后者覆盖）', () => {
     const res = normalizeDatabase([
       ...placeholderSources(),

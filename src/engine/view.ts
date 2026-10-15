@@ -245,6 +245,58 @@ export interface LiveRaceView {
   teamOrders: import('./types').TeamOrders;
 }
 
+/**
+ * Public, render-safe live qualifying checkpoint.  The persisted checkpoint
+ * also contains RNG state, AI departure windows and sampled clean laps; none
+ * of those belong in a browser view.
+ */
+export interface LiveQualifyingView {
+  id: string;
+  revision: number;
+  kind: 'qualifying' | 'sprint_qualifying';
+  segmentIndex: number;
+  segmentCount: number;
+  alive: string[];
+  finalOrder: string[];
+  sessions: import('./types').QualiSession[];
+  events: import('./types').RaceEvent[];
+  stage: 'ready' | 'running' | 'finishing';
+  paused: boolean;
+  speed: 1 | 2 | 4 | 8;
+  elapsedTicks: number;
+  durationTicks: number;
+  remainingTicks: number;
+  wet: boolean;
+  runAllowance: number;
+  sectors: Array<{ endProgress: number }>;
+  cars: Array<{
+    driverId: string;
+    driverName: string;
+    driverShort: string;
+    teamId: string;
+    teamColor: string;
+    player: boolean;
+    phase: import('./types').LiveQualifyingCarPhase;
+    progress: number;
+    runCount: number;
+    runAllowance: number;
+    bestTime: number | null;
+    lastTime: number | null;
+    activeSetId: string | null;
+    activeCompound: string | null;
+    activeStartedNew: boolean | null;
+    trafficStatus: 'clear' | 'slower_ahead' | 'yielding';
+    trafficDriverId: string | null;
+    trafficDriverShort: string | null;
+    trafficLoss: number;
+    sector: number;
+    completedRuns: NonNullable<import('./types').QualiSession['entries'][number]['tyreRuns']>;
+    legalTyreSetIds: string[];
+    canRelease: boolean;
+    releaseReason: string | null;
+  }>;
+}
+
 export interface WeekendView {
   roundIndex: number;
   isCurrent: boolean;
@@ -262,7 +314,7 @@ export interface WeekendView {
   /** Latest practice result retained for consumers of the old view shape. */
   practice: PracticeResult | null;
   practiceReturn: { required: number; driverIds: string[] } | null;
-  liveQualifying: WeekendState['liveQualifying'];
+  liveQualifying: LiveQualifyingView | null;
   sprintQualifying: QualiResult | null;
   sprint: RaceResult | null;
   qualifying: QualiResult | null;
@@ -866,6 +918,71 @@ function buildWeekendView(state: GameState): WeekendView | null {
           } : null,
         };
       })();
+  const qualifyingByDriver = new Map(drivers.map(driver => [driver.driverId, driver]));
+  const liveQualifying: LiveQualifyingView | null = !w.liveQualifying || w.liveQualifying.version !== 2 || w.liveQualifying.controlMode !== 'manual'
+    ? null
+    : (() => {
+        const live = w.liveQualifying!;
+        return {
+          id: live.id,
+          revision: live.revision,
+          kind: live.kind,
+          segmentIndex: live.segmentIndex,
+          segmentCount: live.segmentCount,
+          alive: [...live.alive],
+          finalOrder: [...live.finalOrder],
+          sessions: live.sessions.map(session => ({ ...session, entries: session.entries.map(entry => ({ ...entry, tyreRuns: entry.tyreRuns?.map(run => ({ ...run })) })) })),
+          events: live.events.map(event => ({ ...event, drivers: [...event.drivers] })),
+          stage: live.stage,
+          paused: live.paused,
+          speed: live.speed,
+          elapsedTicks: live.elapsedTicks,
+          durationTicks: live.durationTicks,
+          remainingTicks: Math.max(0, live.durationTicks - live.elapsedTicks),
+          wet: live.wet,
+          runAllowance: live.runAllowance,
+          sectors: live.sectors.map(sector => ({ endProgress: sector.endProgress })),
+          cars: Object.values(live.cars).map(car => {
+            const driver = state.drivers[car.driverId];
+            const team = state.teams[car.teamId];
+            const publicDriver = qualifyingByDriver.get(car.driverId);
+            const eligible = live.alive.includes(car.driverId);
+            const legalTyreSetIds = publicDriver?.qualifyingTyreSetIds ?? [];
+            let releaseReason: string | null = null;
+            if (!eligible) releaseReason = '该车手已被淘汰';
+            else if (live.elapsedTicks >= live.durationTicks) releaseReason = '本分段计时已经结束';
+            else if (car.phase !== 'garage') releaseReason = '赛车正在赛道或维修区通道中';
+            else if (car.runCount >= car.runAllowance) releaseReason = '本分段出场次数已用完';
+            else if (!legalTyreSetIds.length) releaseReason = '无可用轮胎';
+            return {
+              driverId: car.driverId,
+              driverName: driver?.name ?? car.driverId,
+              driverShort: driver?.short ?? driver?.name ?? car.driverId,
+              teamId: car.teamId,
+              teamColor: team?.color ?? '#666',
+              player: car.player,
+              phase: car.phase,
+              progress: car.progress,
+              runCount: car.runCount,
+              runAllowance: car.runAllowance,
+              bestTime: car.bestTime,
+              lastTime: car.lastTime,
+              activeSetId: car.activeRun?.setId ?? null,
+              activeCompound: car.activeRun?.compound ?? null,
+              activeStartedNew: car.activeRun?.startedNew ?? null,
+              trafficStatus: car.trafficStatus,
+              trafficDriverId: car.trafficDriverId,
+              trafficDriverShort: car.trafficDriverId ? (state.drivers[car.trafficDriverId]?.short ?? car.trafficDriverId) : null,
+              trafficLoss: car.activeRun?.trafficLoss ?? 0,
+              sector: car.sector,
+              completedRuns: car.completedRuns.map(run => ({ ...run })),
+              legalTyreSetIds,
+              canRelease: car.player && !releaseReason,
+              releaseReason: car.player ? releaseReason : null,
+            };
+          }),
+        };
+      })();
   return {
     roundIndex: w.roundIndex,
     isCurrent,
@@ -880,7 +997,7 @@ function buildWeekendView(state: GameState): WeekendView | null {
     practiceSessionTotal: state.calendar[w.roundIndex]?.sprint ? 1 : 3,
     practice: w.practice,
     practiceReturn: w.practiceReturn ? { required: w.practiceReturn.required, driverIds: [...w.practiceReturn.driverIds] } : null,
-    liveQualifying: w.liveQualifying ?? null,
+    liveQualifying,
     sprintQualifying: w.sprintQualifying,
     sprint: w.sprint,
     qualifying: w.qualifying,

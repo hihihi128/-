@@ -5,6 +5,7 @@ import LapChart from '../components/LapChart.vue';
 import RainHistoryChart from '../components/RainHistoryChart.vue';
 import Tyre from '../components/Tyre.vue';
 import LiveRaceDesk from '../components/LiveRaceDesk.vue';
+import LiveQualifyingDesk from '../components/LiveQualifyingDesk.vue';
 import WeekendWeatherForecast from '../components/WeekendWeatherForecast.vue';
 import StrategyReviewDialog from '../components/StrategyReviewDialog.vue';
 import { act, call, lapTime, store } from '../bridge';
@@ -25,7 +26,6 @@ const practiceSessions = computed(() => {
 });
 const practiceSessionTotal = computed(() => w.value?.practiceSessionTotal ?? 0);
 const returnSelections = ref<Record<string, string[]>>({});
-const qualifyingTyreSelections = ref<Record<string, string[]>>({});
 function toggleReturnSet(driverId: string, setId: string) {
   const selected = returnSelections.value[driverId] ?? [];
   const required = w.value?.practiceReturn?.required ?? 0;
@@ -156,7 +156,6 @@ function percentChange(value: number | undefined): string {
 watch(() => w.value?.roundIndex, () => {
   customPlans.value = {};
   customSetPlans.value = {};
-  qualifyingTyreSelections.value = {};
   engineerSuggestions.value = {};
   perfectSuggestions.value = {};
   perfectOpen.value = false;
@@ -175,47 +174,6 @@ watch(
 );
 
 const qualifyingPhase = computed(() => phase.value === 'qualifying' || phase.value === 'sprint_qualifying');
-const qualifyingSegmentIndex = computed(() => w.value?.liveQualifying?.segmentIndex ?? 0);
-const qualifyingSegmentCount = computed(() => w.value?.liveQualifying?.segmentCount ?? 3);
-const qualifyingRuns = computed(() => phase.value === 'sprint_qualifying' ? 1 : qualifyingSegmentCount.value === 1 ? 3 : 2);
-const qualifyingSegmentLabel = computed(() => `${phase.value === 'sprint_qualifying' ? 'SQ' : 'Q'}${qualifyingSegmentCount.value === 1 ? '' : qualifyingSegmentIndex.value + 1}`);
-
-function qualifyingSetOptions(d: WeekendDriverView) {
-  const legal = new Set(d.qualifyingTyreSetIds);
-  return d.tyreSets.filter(set => legal.has(set.id));
-}
-
-function qualifyingSelection(d: WeekendDriverView): string[] {
-  return qualifyingTyreSelections.value[d.driverId] ?? [];
-}
-
-function qualifyingDriverActive(d: WeekendDriverView): boolean {
-  return !w.value?.liveQualifying || w.value.liveQualifying.alive.includes(d.driverId);
-}
-
-function syncQualifyingSelections() {
-  const next: Record<string, string[]> = {};
-  for (const d of w.value?.drivers ?? []) {
-    const options = qualifyingSetOptions(d);
-    const existing = qualifyingTyreSelections.value[d.driverId] ?? [];
-    next[d.driverId] = Array.from({ length: qualifyingRuns.value }, (_, index) => {
-      const selected = existing[index];
-      return options.some(option => option.id === selected) ? selected : options[index % Math.max(1, options.length)]?.id ?? '';
-    });
-  }
-  qualifyingTyreSelections.value = next;
-}
-
-watch(
-  () => [phase.value, qualifyingSegmentIndex.value, qualifyingRuns.value, ...(w.value?.drivers ?? []).flatMap(d => d.qualifyingTyreSetIds)],
-  syncQualifyingSelections,
-  { immediate: true },
-);
-
-function runQualifyingSegment() {
-  const tyreSetIds = Object.fromEntries((w.value?.drivers ?? []).map(d => [d.driverId, qualifyingSelection(d).filter(Boolean)]));
-  return act({ type: phase.value === 'sprint_qualifying' ? 'RUN_SPRINT_QUALIFYING' : 'RUN_QUALIFYING', tyreSetIds });
-}
 
 function customFor(d: WeekendDriverView): string[] {
   if (!customPlans.value[d.driverId]) {
@@ -387,6 +345,7 @@ const chartSeries = computed(() => {
       </section>
     </div>
     <LiveRaceDesk v-if="current && w && ['race', 'sprint'].includes(phase)" />
+    <LiveQualifyingDesk v-if="current && w && qualifyingPhase" />
     <div class="card">
       <div class="stepper">
         <div v-for="(s, i) in steps" :key="s.id" class="step" :class="{ done: stepIndex > i || (!current && !!w), on: stepIndex === i }">
@@ -402,7 +361,6 @@ const chartSeries = computed(() => {
         <div class="row">
           <button v-if="v.narration.length" class="small" :disabled="generating" @click="call(a => a.requestNarration())">{{ raceResultNarration ? '让 AI 叙述比赛结果' : `让 AI 叙述（${v.narration.length}）` }}</button>
           <button v-if="v.next && !qualifyingPhase" class="primary" :disabled="store.busy || generating" @click="act({ type: 'ADVANCE' })">▶ {{ v.next.label }}</button>
-          <button v-else-if="v.next && qualifyingPhase" class="primary" :disabled="store.busy || generating" @click="runQualifyingSegment">▶ 运行 {{ qualifyingSegmentLabel }}</button>
         </div>
       </div>
     </div>
@@ -492,21 +450,6 @@ const chartSeries = computed(() => {
             <div class="seg">
               <button v-for="[k, label, tip] in approaches" :key="k" :title="tip" :class="{ on: d.plan.qualiApproach === k }" :disabled="done.qualifying || store.busy" @click="setPlan(d, { qualiApproach: k })">{{ label }}</button>
             </div>
-          </div>
-          <div v-if="qualifyingPhase" class="block stack-s">
-            <div class="label">{{ qualifyingSegmentLabel }} 实体轮胎组</div>
-            <div v-if="!qualifyingDriverActive(d)" class="notice tiny">该车手已在本次排位中被淘汰，无需为 {{ qualifyingSegmentLabel }} 选择轮胎组。</div>
-            <div v-else-if="qualifyingSetOptions(d).length" class="row wrap">
-              <label v-for="run in qualifyingRuns" :key="run" class="small row">
-                第 {{ run }} 次出场
-                <select v-model="qualifyingSelection(d)[run - 1]" :disabled="store.busy">
-                  <option v-for="set in qualifyingSetOptions(d)" :key="set.id" :value="set.id">
-                    {{ v.labels.tyres[set.compound]?.name ?? set.compound }} · {{ set.id }} · {{ set.state === 'new' ? '新胎' : `${set.laps}L` }}
-                  </option>
-                </select>
-              </label>
-            </div>
-            <div v-else class="notice warn tiny">没有符合本分段规则的轮胎组。车手仍可参加，但本分段不会取得成绩。</div>
           </div>
           <div v-if="isSprint && d.sprintOptions.length" class="block">
             <div class="label">冲刺赛轮胎</div>

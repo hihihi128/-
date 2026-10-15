@@ -54,7 +54,7 @@ const advanceLabel = computed(() => {
   if (phase !== 'qualifying' && phase !== 'sprint_qualifying') return view.value.next.label;
   const live = view.value.weekend?.liveQualifying;
   const prefix = phase === 'sprint_qualifying' ? 'SQ' : 'Q';
-  return `选择 ${prefix}${live?.segmentCount === 1 ? '' : (live?.segmentIndex ?? 0) + 1} 轮胎`;
+  return `打开实时 ${prefix}${live?.segmentCount === 1 ? '' : (live?.segmentIndex ?? 0) + 1} 控制台`;
 });
 
 async function narrate() {
