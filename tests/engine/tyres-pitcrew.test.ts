@@ -98,6 +98,23 @@ describe('physical tyre sets and pit crew timing', () => {
     }
   });
 
+  it('protects two new medium sets for sprint qualifying', () => {
+    let state = newTestGame(46);
+    state.season.roundIndex = state.calendar.findIndex(round => round.sprint);
+    state.weekend = createWeekend(state, new Rng(46));
+    state.season.phase = 'practice';
+    const team = state.teams[state.meta.playerTeamId];
+    const driverId = team.cars[0].driverId!;
+    state.weekend.plans[driverId].practiceTyre = 'medium';
+    state.weekend.weather.practice = 'dry';
+    state = act(state, { type: 'RUN_PRACTICE' });
+    const request = state.weekend!.practiceReturn!;
+    const eligibleMediums = team.tyreInventory![driverId].filter(set => set.compound === 'medium' && request.eligibleSetIds[driverId].includes(set.id));
+    expect(eligibleMediums).toHaveLength(2);
+    const protectedNewMediums = team.tyreInventory![driverId].filter(set => set.compound === 'medium' && set.state === 'new' && !request.eligibleSetIds[driverId].includes(set.id));
+    expect(protectedNewMediums).toHaveLength(2);
+  });
+
   it('issues and wears the correct tyre allocation in round two', () => {
     let state = advanceUntil(newTestGame(48), s => s.season.roundIndex === 1 && s.season.phase === 'practice');
     const team = state.teams[state.meta.playerTeamId];

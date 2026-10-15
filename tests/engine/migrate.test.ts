@@ -13,6 +13,22 @@ import { legacyWeeklyEventState } from '../fixtures/weekly-random-events';
 const legacy = (): GameState => JSON.parse(readFileSync(resolve(__dirname, '../fixtures/legacy-save-2025.json'), 'utf8'));
 
 describe('旧存档升级', () => {
+  it('补齐练习赛轮胎与调校选择，但保留旧存档已有选择', () => {
+    const state = advanceUntil(newTestGame(93), value => value.season.phase === 'practice');
+    const plans = state.weekend!.plans;
+    const [first, second] = Object.keys(plans);
+    delete plans[first].practiceTyre;
+    delete plans[first].practiceSetupFocus;
+    plans[second].practiceTyre = 'hard';
+    plans[second].practiceSetupFocus = 'tyre_prep';
+    delete (state.rules as Partial<GameState['rules']>).practiceReturnSets;
+
+    const restored = migrateState(state);
+    expect(restored.weekend!.plans[first]).toMatchObject({ practiceTyre: 'auto', practiceSetupFocus: 'balanced' });
+    expect(restored.weekend!.plans[second]).toMatchObject({ practiceTyre: 'hard', practiceSetupFocus: 'tyre_prep' });
+    expect(restored.rules.practiceReturnSets).toBe(2);
+  });
+
   it('保留 v2 实时比赛的物理版本、上下文和低温起点', () => {
     let state = advanceUntil(newTestGame(94), value => value.season.phase === 'race');
     state = act(state, { type: 'START_RACE', kind: 'race' });

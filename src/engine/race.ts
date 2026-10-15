@@ -826,7 +826,7 @@ export function wetCompoundFor(rules: GameState['rules'], wetness: number): Comp
 }
 
 /** Fits grid equipment without recording a pit stop or consuming race time. */
-function fitInitialTyres(state: GameState, session: LiveRaceState, car: LiveRaceCar, compound: Compound): boolean {
+function fitInitialTyres(state: GameState, session: LiveRaceState, car: LiveRaceCar, compound: Compound, preserveDryStrategy = false): boolean {
   const team = state.teams[car.teamId];
   const set = team && takeTyreSet(team, car.driverId, compound, weekendTyreKey(state));
   if (!set) return false;
@@ -838,8 +838,8 @@ function fitInitialTyres(state: GameState, session: LiveRaceState, car: LiveRace
   car.tyreWearAge = set.wearAge ?? set.laps;
   car.tyreTemperature = (tyre?.temperatureWindow?.[0] ?? 80) - 18;
   car.usedCompounds = [compound];
-  car.plannedCompounds = [compound];
-  car.stints = optimizeStints(state.rules, track, [compound], session.totalLaps, car.tyreFactor, { context: car.performanceContext, paceMode: car.plan.paceMode });
+  car.plannedCompounds = preserveDryStrategy ? [compound, ...car.plannedCompounds.slice(1)] : [compound];
+  car.stints = optimizeStints(state.rules, track, car.plannedCompounds, session.totalLaps, car.tyreFactor, { context: car.performanceContext, paceMode: car.plan.paceMode });
   car.stintIndex = 0;
   car.pendingPit = null;
   car.pendingCompound = null;
@@ -1294,7 +1294,7 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
       if (!requiredIds.has(choice.driverId) || seen.has(choice.driverId) || choice.pit !== 'auto' || choice.compound !== undefined || choice.repairWing || !startCompound || !allowedStartCompounds.includes(startCompound) || !validRaceChoice(choice, state.rules.tyres)) return false;
       const car = session.cars[choice.driverId];
       const team = car && state.teams[car.teamId];
-      if (!car || !team || !takeTyreSet(team, car.driverId, startCompound, weekendTyreKey(state))) return false;
+      if (!car || !team || (startCompound !== car.tyre && !takeTyreSet(team, car.driverId, startCompound, weekendTyreKey(state)))) return false;
       seen.add(choice.driverId);
     }
     const relationship = teammateRelationship(state, state.meta.playerTeamId);
@@ -1315,7 +1315,11 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
         if (choice.energyMode) car.energyMode = choice.energyMode;
         if (choice.pitTiming) car.plan.pitTiming = choice.pitTiming;
       } else liveEvent(session, session.lap, 'order', `${car.driverId} 拒绝临场策略指令，但仍按领队选择安装起步轮胎`, [car.driverId], true);
-      if (!fitInitialTyres(state, session, car, choice.startCompound ?? car.tyre)) return false;
+      const startCompound = choice.startCompound ?? car.tyre;
+      if (startCompound !== car.tyre) {
+        const preserveDryStrategy = !requiresWetGridTyreChoice(session) && !state.rules.tyres[startCompound]?.wet;
+        if (!fitInitialTyres(state, session, car, startCompound, preserveDryStrategy)) return false;
+      }
     }
     if (orders) session.teamOrders = { ...orders };
     session.pendingDecision = null;

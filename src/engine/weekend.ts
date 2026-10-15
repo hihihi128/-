@@ -265,9 +265,9 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
   w.practiceSessions = [...completedPracticeSessions(w), result];
   w.practice = result;
   const playerDrivers = playerTeam(state).cars.map(car => car.driverId).filter((id): id is string => !!id);
-  const required = Math.max(0, rules.practiceReturnSets);
   const player = playerTeam(state);
   const eligibleSetIds = Object.fromEntries(playerDrivers.map(driverId => [driverId, returnEligibleTyreSets(state, player, driverId).map(set => set.id)]));
+  const required = playerDrivers.length ? Math.min(Math.max(0, rules.practiceReturnSets), ...playerDrivers.map(driverId => eligibleSetIds[driverId].length)) : 0;
   w.practiceReturn = playerDrivers.length && required ? { session, required, driverIds: playerDrivers, eligibleSetIds } : null;
   return result;
 }

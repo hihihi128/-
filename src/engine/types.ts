@@ -1252,6 +1252,7 @@ export interface MercedesState {
 export interface RedBullState {
   gpRetention: number;
   gpTransferred: boolean;
+  gpTransferBlocked?: boolean;
   summerChecked: boolean;
   verstappenExit: boolean;
   lastActionRound: string | null;

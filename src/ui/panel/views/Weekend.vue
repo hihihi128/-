@@ -545,7 +545,7 @@ const chartSeries = computed(() => {
                 <td v-for="s in qualiLike.sessions" :key="s.name" class="mono">
                   <template v-for="e in s.entries.filter(x => x.driverId === id)" :key="e.driverId">
                     {{ e.time ? lapTime(e.time) : e.note ?? '无成绩' }}<span v-if="e.eliminated" class="neg tiny"> ✗</span>
-                    <span v-if="e.tyreRuns?.length" class="tiny muted"><br /><span v-for="(run, runIndex) in e.tyreRuns" :key="run.setId"><Tyre :c="run.compound" />{{ run.startedNew ? '新' : `旧${run.lapsBefore}L` }}<template v-if="runIndex < e.tyreRuns.length - 1"> · </template></span></span>
+                    <span v-if="e.tyreRuns?.length" class="tiny muted"><br /><span v-for="(run, runIndex) in e.tyreRuns" :key="`${runIndex}-${run.setId}`"><Tyre :c="run.compound" />{{ run.startedNew ? '新' : `旧${run.lapsBefore}L` }}<template v-if="runIndex < e.tyreRuns.length - 1"> · </template></span></span>
                   </template>
                 </td>
               </tr>

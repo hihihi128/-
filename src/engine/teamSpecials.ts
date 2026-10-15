@@ -250,12 +250,12 @@ export function afterSpecialRace(state: GameState): void {
   if (state.redBull) {
     const r = state.redBull;
     r.gpRetention = round1(clamp(r.gpRetention - state.rules.redBull.gpLossPerRace, 0, 100));
-    if (r.gpRetention <= 0 && !r.gpTransferred) {
+    if (r.gpRetention <= 0 && !r.gpTransferred && !r.gpTransferBlocked) {
       if (transferGpToMcLaren(state)) {
         r.gpTransferred = true;
         addNews(state, '员工', 'GP 接受迈凯伦邀请并立即转会。红牛提拔二号车工程师接替他。');
       } else {
-        r.gpRetention = 10;
+        r.gpTransferBlocked = true;
         log(state, r, '迈凯伦由玩家管理，AI 红牛不能强制改动玩家员工阵容');
       }
     }

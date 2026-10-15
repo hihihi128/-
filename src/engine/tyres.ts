@@ -78,14 +78,17 @@ export function driverTyreSets(team: TeamState, driverId: string, key?: string):
   return (team.tyreInventory?.[driverId] ?? []).filter(set => key === undefined || set.weekendKey === key);
 }
 
-/** Keep one physical set of every compound available for the race. */
+/** Keep race reserves, plus the two new mediums required for SQ1 and SQ2. */
 export function returnEligibleTyreSets(state: GameState, team: TeamState, driverId: string): TyreSet[] {
   const dry = new Set(state.rules.dryCompounds);
   const available = ensureDriverWeekendTyres(state, team, driverId).filter(set => !set.returned && dry.has(set.compound));
   const protectedIds = new Set<string>();
   for (const compound of state.rules.dryCompounds) {
-    const reserve = available.filter(set => set.compound === compound).sort((a, b) => a.laps - b.laps || a.id.localeCompare(b.id))[0];
-    if (reserve) protectedIds.add(reserve.id);
+    const reserveCount = state.calendar[state.season.roundIndex]?.sprint && compound === state.rules.dryCompounds[1] ? 2 : 1;
+    const reserves = available.filter(set => set.compound === compound)
+      .sort((a, b) => Number(a.state === 'used') - Number(b.state === 'used') || a.laps - b.laps || a.id.localeCompare(b.id))
+      .slice(0, reserveCount);
+    for (const reserve of reserves) protectedIds.add(reserve.id);
   }
   return available.filter(set => !protectedIds.has(set.id));
 }

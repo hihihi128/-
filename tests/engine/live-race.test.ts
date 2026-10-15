@@ -467,6 +467,23 @@ describe('resumable live race', () => {
     expect(resolved.weekend!.liveRace!.wetness).toBeLessThan(.22);
   });
 
+  it('keeps the planned dry strategy when the grid tyre does not change', () => {
+    const started = act(raceReady(1011), { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    const before = Object.fromEntries(live.pendingDecision!.eligibleDriverIds.map(id => [id, {
+      compounds: [...live.cars[id].plannedCompounds],
+      stints: [...live.cars[id].stints],
+      setId: live.cars[id].tyreSetId,
+    }]));
+    const resolved = act(started, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
+      drivers: automaticChoices(started, live),
+    });
+    for (const [id, plan] of Object.entries(before)) {
+      expect(resolved.weekend!.liveRace!.cars[id]).toMatchObject({ plannedCompounds: plan.compounds, stints: plan.stints, tyreSetId: plan.setId });
+    }
+  });
+
   it('rejects malformed wet-grid submissions atomically and rejects start tyres later', () => {
     const ready = raceReady(1002);
     ready.weekend!.weather.race = 'wet';

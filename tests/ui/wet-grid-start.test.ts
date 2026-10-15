@@ -14,6 +14,13 @@ function wetGridView(): GameView {
   live.pendingDecision!.eligibleDriverIds = live.playerCars.map(car => car.driverId);
   return view;
 }
+function dryGridView(): GameView {
+  const view = narrationPauseView('grid');
+  const live = view.weekend!.liveRace!;
+  live.pendingDecision!.startTyreOptions = [...view.rules.dryCompounds, view.rules.wetCompound, view.rules.fullWetCompound];
+  live.pendingDecision!.eligibleDriverIds = live.playerCars.map(car => car.driverId);
+  return view;
+}
 function mount(view: GameView, dispatch = vi.fn(async () => ({ ok: true, message: '已确认' }))) {
   store.connected = true;
   store.view = view;
@@ -83,5 +90,22 @@ describe('wet-grid starting tyre choices', () => {
     await nextTick();
     expect(host.querySelector<HTMLFieldSetElement>('fieldset')!.disabled).toBe(true);
     expect(host.querySelector<HTMLButtonElement>('.confirm')!.disabled).toBe(true);
+  });
+
+  it('defaults dry-grid choices to the fitted tyres and keeps team orders available', async () => {
+    const view = dryGridView();
+    const { host, dispatch } = mount(view);
+    await nextTick();
+    expect(host.textContent).toContain('干地发车也可以主动选择半雨胎或全雨胎');
+    expect(host.textContent).toContain('车队指令');
+    const confirm = host.querySelector<HTMLButtonElement>('.confirm')!;
+    expect(confirm.disabled).toBe(false);
+    confirm.click();
+    await nextTick();
+    expect(dispatch).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'RESOLVE_RACE_DECISION',
+      drivers: expect.arrayContaining(view.weekend!.liveRace!.playerCars.map(car => expect.objectContaining({ driverId: car.driverId, startCompound: car.tyre }))),
+      orders: { mode: 'free', favorDriverId: null },
+    }));
   });
 });

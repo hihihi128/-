@@ -16,10 +16,11 @@ const orders = reactive<TeamOrders>({ mode: 'free', favorDriverId: null });
 const activeWindowId = computed(() => live.value?.pendingDecision?.id ?? '');
 const importantPause = computed(() => !!live.value?.pendingDecision);
 const gridTyreOptions = computed(() => live.value?.pendingDecision?.startTyreOptions ?? null);
-const wetGrid = computed(() => !!gridTyreOptions.value);
+const gridTyreChoice = computed(() => !!gridTyreOptions.value);
+const wetGrid = computed(() => !!gridTyreOptions.value?.length && gridTyreOptions.value.every(compound => v.value.labels.tyres[compound]?.wet));
 const gridEligible = computed(() => new Set(live.value?.pendingDecision?.eligibleDriverIds ?? []));
 const missingGridChoices = computed(() => drivers.value.filter(d => gridEligible.value.has(d.id) && !selections[d.id]?.startCompound).map(d => driverShort(d.id)));
-const canConfirmGrid = computed(() => wetGrid.value && !missingGridChoices.value.length && !store.busy);
+const canConfirmGrid = computed(() => gridTyreChoice.value && !missingGridChoices.value.length && !store.busy);
 const tyrePickerDriverId = ref('');
 const tyrePickerDialog = ref<HTMLElement | null>(null);
 let tyrePickerTrigger: HTMLElement | null = null;
@@ -32,7 +33,8 @@ watch(activeWindowId, resetDrafts, { immediate: true });
 
 function choice(id: string) {
   const current = carById.value.get(id);
-  if (!selections[id]) selections[id] = { pit: 'auto', compound: current?.tyre ?? v.value.rules.dryCompounds[0] ?? v.value.rules.wetCompound, repairWing: false, paceMode: (current?.paceMode ?? 'balanced') as PaceMode, energyMode: (current?.energyMode ?? 'balanced') as EnergyMode, pitTiming: (current?.pitTiming ?? 'standard') as PitTiming };
+  const currentStartCompound = current?.tyre && gridTyreOptions.value?.includes(current.tyre) ? current.tyre : undefined;
+  if (!selections[id]) selections[id] = { pit: 'auto', compound: current?.tyre ?? v.value.rules.dryCompounds[0] ?? v.value.rules.wetCompound, startCompound: gridTyreChoice.value ? currentStartCompound : undefined, repairWing: false, paceMode: (current?.paceMode ?? 'balanced') as PaceMode, energyMode: (current?.energyMode ?? 'balanced') as EnergyMode, pitTiming: (current?.pitTiming ?? 'standard') as PitTiming };
   return selections[id];
 }
 function weatherLabel() {
@@ -77,7 +79,7 @@ async function resolve() {
   const eligible = new Set(live.value.pendingDecision.eligibleDriverIds);
   const driversPayload = drivers.value.filter(d => eligible.has(d.id)).map(d => {
     const draft = choice(d.id);
-    return wetGrid.value
+    return gridTyreChoice.value
       ? { driverId: d.id, pit: 'auto' as const, startCompound: draft.startCompound!, paceMode: draft.paceMode, energyMode: draft.energyMode, pitTiming: draft.pitTiming }
       : { driverId: d.id, pit: draft.pit, ...(draft.pit === 'box' ? { compound: draft.compound } : {}), repairWing: draft.repairWing, paceMode: draft.paceMode, energyMode: draft.energyMode, pitTiming: draft.pitTiming };
   });
@@ -110,7 +112,7 @@ async function narratePause() {
           <article v-for="d in drivers" :key="d.id" class="card driver-card">
             <div class="spread"><div><h3>{{ driverShort(d.id) }} <span class="small muted">{{ d.name }}</span></h3><div class="tiny muted">{{ live.timing.find(t => t.driverId === d.id)?.gap ?? '—' }}</div></div><b class="position">P{{ live.timing.find(t => t.driverId === d.id)?.pos ?? 'DNF' }}</b></div>
             <div v-for="car in [carById.get(d.id)!]" :key="d.id" class="telemetry">
-              <div><span class="tiny muted">轮胎</span><b v-if="wetGrid">等待起步胎选择</b><b v-else><Tyre :c="car.tyre" /> {{ car.tyreAge }} 圈 · {{ car.tyreState === 'new' ? '新胎' : '已用' }}</b></div>
+              <div><span class="tiny muted">轮胎</span><b><Tyre :c="choice(d.id).startCompound ?? car.tyre" /> {{ car.tyreAge }} 圈 · {{ car.tyreState === 'new' ? '新胎' : '已用' }}</b></div>
               <div><span class="tiny muted">能量</span><b class="mono">{{ Math.round(car.energy) }}%</b><i class="energy"><i :style="{ width: `${car.energy}%` }"></i></i></div>
               <div><span class="tiny muted">动力单元</span><b :class="car.puStatus === 'protect' || car.puStatus === 'critical' ? 'neg' : car.puStatus === 'hot' ? 'warn' : 'pos'">{{ car.puStatus === 'critical' ? '临界降额' : car.puStatus === 'protect' ? '保护模式' : car.puStatus === 'hot' ? '温度偏高' : '正常' }} · {{ Math.round(car.puTemperature) }}°C</b><span class="tiny muted">最弱：{{ car.weakestPuName }} {{ Math.round(car.weakestPuHealth) }}% · ICE 平均 {{ Math.round(car.iceHealth) }}% · 电气平均 {{ Math.round(car.electricalHealth) }}%</span></div>
               <div><span class="tiny muted">进站静止</span><b class="mono">预计 {{ car.predictedStationary.toFixed(1) }}s<span v-if="car.lastPit"> · 实际 {{ car.lastPit.actualStationary.toFixed(1) }}s</span></b></div>
@@ -127,9 +129,9 @@ async function narratePause() {
 
       <aside class="stack">
         <section class="card weather"><RaceWeatherForecast :rain="live.weather.rain" :surface="live.weather.surface" :forecast="live.weather.forecast" :completed-laps="live.completedLaps" :total-laps="live.totalLaps" /></section>
-        <section v-if="live.pendingDecision" class="card decision"><h3>{{ live.pendingDecision.reasons.map(reasonLabel).join(' / ') }}决策</h3><p class="small muted">{{ wetGrid ? '互动比赛由你选择两车起步雨胎；自动完成比赛时由 AI 自动选择。' : live.pendingDecision.reasons.includes('red_flag') ? '红旗暂停期间换胎不计进站时间或进站次数；两车一起确认。' : `预计进站损失约 ${live.pendingDecision.expectedPitLoss.toFixed(1)} 秒；两车一起确认。` }}</p>
-          <template v-if="wetGrid">
-            <p class="grid-intro">湿地发车：请为每辆赛车选择起步轮胎。此为初始装备，不会产生进站时间或进站次数；其他车队由 AI 自动决定。</p>
+        <section v-if="live.pendingDecision" class="card decision"><h3>{{ live.pendingDecision.reasons.map(reasonLabel).join(' / ') }}决策</h3><p class="small muted">{{ gridTyreChoice ? wetGrid ? '湿地发车由你选择两车的半雨胎或全雨胎。' : '选择两车起步胎；保持当前配方不会改变原定进站策略。' : live.pendingDecision.reasons.includes('red_flag') ? '红旗暂停期间换胎不计进站时间或进站次数；两车一起确认。' : `预计进站损失约 ${live.pendingDecision.expectedPitLoss.toFixed(1)} 秒；两车一起确认。` }}</p>
+          <template v-if="gridTyreChoice">
+            <p class="grid-intro">{{ wetGrid ? '湿地发车只能选择半雨胎或全雨胎。' : '干地发车也可以主动选择半雨胎或全雨胎。' }}此为初始装备，不会产生进站时间或进站次数；其他车队由 AI 自动决定。</p>
             <fieldset v-for="d in drivers.filter(driver => gridEligible.has(driver.id))" :key="d.id" class="grid-tyre-choice" :disabled="store.busy">
               <legend>{{ driverShort(d.id) }} <span class="muted">{{ d.name }}</span> · 起步轮胎</legend>
               <label v-for="compound in gridTyreOptions" :key="compound" class="tyre-radio" :class="{ selected: choice(d.id).startCompound === compound }">
@@ -138,6 +140,10 @@ async function narratePause() {
               </label>
             </fieldset>
             <p v-if="missingGridChoices.length" class="missing-choice">仍需选择：{{ missingGridChoices.join('、') }} 的起步轮胎。</p>
+            <template v-if="!wetGrid">
+              <label class="field">车队指令<select v-model="orders.mode"><option value="free">自由比赛</option><option value="hold">保持位置</option><option value="favor">偏向车手</option></select></label>
+              <label v-if="orders.mode === 'favor'" class="field">优先车手<select v-model="orders.favorDriverId"><option v-for="d in drivers" :key="d.id" :value="d.id">{{ d.name }}</option></select></label>
+            </template>
             <button class="primary confirm" :disabled="!canConfirmGrid" @click="resolve">确认两车起步轮胎并准备发车</button>
           </template>
           <template v-else>
@@ -176,7 +182,7 @@ async function narratePause() {
       </div>
     </Teleport>
   </section>
-  <section v-else class="card start-race"><h3>实时正赛</h3><p class="small muted">互动比赛在湿地发车时要求你为两车选择雨胎；自动完成比赛会由 AI 代选。发车后引擎会在关键事件暂停。</p><button class="primary" :disabled="store.busy" @click="start">开始实时{{ v.season.phase === 'sprint' ? '冲刺赛' : '正赛' }}</button></section>
+  <section v-else class="card start-race"><h3>实时正赛</h3><p class="small muted">互动比赛允许你在发车前选择两车起步胎；湿地发车仅可选择雨胎。发车后引擎会在关键事件暂停。</p><button class="primary" :disabled="store.busy" @click="start">开始实时{{ v.season.phase === 'sprint' ? '冲刺赛' : '正赛' }}</button></section>
 </template>
 
 <style scoped>
