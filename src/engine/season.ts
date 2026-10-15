@@ -14,7 +14,7 @@ import { afterNextTeamRace, maybeTriggerRacingBullsRecall } from './nextTeamSpec
 import { afterManagementRace, completeAlpineDriverExit, completeWilliamsHandover } from './managementSpecials';
 import { closeUnansweredRandomEvent } from './randomEvents';
 import { isPowerUnitPart, PU_PART_TYPES, resetPuUsage, recordPuFit } from './powerunit';
-import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, requiresWetGridTyreChoice, wetCompoundFor, type RaceExtras } from './race';
+import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, wetCompoundFor, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
 import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, PracticeReturnRequest, RaceResult, TeamState } from './types';
@@ -201,7 +201,7 @@ export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint', aiPl
       const choices = live.pendingDecision.eligibleDriverIds.map(driverId => ({
         driverId,
         pit: 'auto' as const,
-        ...(requiresWetGridTyreChoice(live) ? { startCompound: wetCompoundFor(state.rules, live.wetness) } : {}),
+        ...(live.pendingDecision?.stage === 'grid' ? { startCompound: live.cars[driverId]?.tyre ?? wetCompoundFor(state.rules, live.wetness) } : {}),
       }));
       if (!applyRaceDecision(state, live, live.pendingDecision.id, choices)) return fail('自动策略无法处理当前决策窗口');
     } else advanceRaceSession(state, live, 'next_decision');

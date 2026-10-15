@@ -38,6 +38,11 @@ function restoreAlpinePuSpecs(state: GameState): void {
   alpine.penalizedPowerSpecs = {};
 }
 
+export function settleLegacyAlpinePenalty(state: GameState): void {
+  restoreAlpinePuSpecs(state);
+  if (state.alpine) state.alpine.integrationPenaltyActive = false;
+}
+
 export function initManagementSpecials(state: GameState, preserveExisting = false): void {
   const r = state.rules;
   const alpineTeam = Object.values(state.teams).find(value => value.special === 'alpine');

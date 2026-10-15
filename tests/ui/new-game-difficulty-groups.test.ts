@@ -50,8 +50,8 @@ describe('开局选队难度分组', () => {
     expect(sections.map(s => s.dataset.difficulty)).toEqual(['easy', 'medium', 'hard']);
     expect(sections.map(s => s.querySelector('.group-head b')?.textContent)).toEqual(['简单车队', '中等车队', '困难车队']);
     expect(sections.map(s => s.querySelector('.group-head .tiny')?.textContent)).toEqual([
-      '董事会期望与赛车实力接近，压力较小 · 3 支',
-      '有竞争力，但特殊机制或资源会带来压力 · 4 支',
+      '目标较宽松，容错空间较大 · 3 支',
+      '目标、资源或车队机制会持续施压 · 4 支',
       '目标远超当前实力或面临严重危机 · 4 支',
     ]);
     for (const section of sections) {
@@ -65,9 +65,9 @@ describe('开局选队难度分组', () => {
     const sources = cardSources();
     const teamSource = sources.find(s => Array.isArray((s.data as { teams?: unknown })?.teams))!;
     const teams = (teamSource.data as { teams: Array<Record<string, unknown>> }).teams;
-    teams.find(t => t.id === 'mercedes')!.selectionDifficulty = 'extreme';
+    teams.find(t => t.id === 'racing_bulls')!.selectionDifficulty = 'extreme';
     const loaded = normalizeDatabase(sources);
-    expect(loaded.db!.teams.find(t => t.id === 'mercedes')!.selectionDifficulty).toBe('medium');
+    expect(loaded.db!.teams.find(t => t.id === 'racing_bulls')!.selectionDifficulty).toBe('medium');
     expect(loaded.issues.some(i => i.path.endsWith('selectionDifficulty') && i.level === 'warning')).toBe(true);
   });
 });

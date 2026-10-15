@@ -49,6 +49,7 @@ export type Phase =
   | 'season_end';
 
 export type PracticeProgram = 'setup' | 'longrun' | 'quali_sim' | 'parts';
+export type PracticeSetupFocus = 'balanced' | 'aero_balance' | 'mechanical' | 'ride_height' | 'tyre_prep';
 export type QualiApproach = 'safe' | 'standard' | 'aggressive';
 export type PaceMode = 'conserve' | 'balanced' | 'push';
 export type PitTiming = 'early' | 'standard' | 'late';
@@ -765,6 +766,10 @@ export interface DriverPlan {
   strategySource?: 'player' | 'engineer' | 'perfect';
   strategyReview?: StrategyReviewMetadata;
   practiceProgram: PracticeProgram;
+  /** 本节练习赛使用的配方；auto 由项目和天气决定。 */
+  practiceTyre?: Compound | 'auto';
+  /** 本节练习赛的具体调校方向。 */
+  practiceSetupFocus?: PracticeSetupFocus;
   qualiApproach: QualiApproach;
   /** 轮胎策略：各段配方；'auto' 由策略组自动选择 */
   tyrePlan: Compound[] | 'auto';
@@ -801,6 +806,9 @@ export interface PracticeEntry {
   teamId: string;
   time: number;
   laps: number;
+  compound?: Compound;
+  tyreSetId?: string;
+  tyreStartedNew?: boolean;
 }
 
 export interface PracticeResult {
@@ -832,7 +840,14 @@ export interface PracticeReturnRequest {
 
 export interface QualiSession {
   name: string;
-  entries: Array<{ driverId: string; teamId: string; time: number | null; eliminated: boolean; note?: string }>;
+  entries: Array<{
+    driverId: string;
+    teamId: string;
+    time: number | null;
+    eliminated: boolean;
+    note?: string;
+    tyreRuns?: Array<{ compound: Compound; setId: string; startedNew: boolean; lapsBefore: number; lapsAdded: number; time: number | null }>;
+  }>;
 }
 
 export interface QualiResult {
@@ -1038,7 +1053,7 @@ export interface RaceDecisionWindow {
 export interface RaceDriverDecision {
   driverId: string;
   pit: 'auto' | 'stay_out' | 'box';
-  /** Only used for a wet grid start; `compound` remains a pit-stop choice. */
+  /** Only used for a grid start; `compound` remains a pit-stop choice. */
   startCompound?: Compound;
   compound?: Compound;
   repairWing?: boolean;

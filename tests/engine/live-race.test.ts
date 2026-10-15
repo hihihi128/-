@@ -447,6 +447,26 @@ describe('resumable live race', () => {
     expect(JSON.stringify(resolved.teams[resolved.meta.playerTeamId].tyreInventory)).toBe(inventoryBefore);
   });
 
+  it('allows intermediate and full-wet starts on a dry grid', () => {
+    const ready = raceReady(1010);
+    ready.weekend!.weather.race = 'dry';
+    const started = act(ready, { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    const options = buildView(started).weekend!.liveRace!.pendingDecision?.startTyreOptions;
+    expect(options).toEqual([...started.rules.dryCompounds, started.rules.wetCompound, started.rules.fullWetCompound]);
+    const [first, second] = live.pendingDecision!.eligibleDriverIds;
+    const resolved = act(started, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
+      drivers: [
+        { driverId: first, pit: 'auto', startCompound: started.rules.wetCompound },
+        { driverId: second, pit: 'auto', startCompound: started.rules.fullWetCompound },
+      ],
+    });
+    expect(resolved.weekend!.liveRace!.cars[first].tyre).toBe(resolved.rules.wetCompound);
+    expect(resolved.weekend!.liveRace!.cars[second].tyre).toBe(resolved.rules.fullWetCompound);
+    expect(resolved.weekend!.liveRace!.wetness).toBeLessThan(.22);
+  });
+
   it('rejects malformed wet-grid submissions atomically and rejects start tyres later', () => {
     const ready = raceReady(1002);
     ready.weekend!.weather.race = 'wet';

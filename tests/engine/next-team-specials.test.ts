@@ -116,7 +116,7 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     maybeTriggerRacingBullsRecall(state, new Rng(4));
     expect(state.racingBulls?.pendingRecall).toBeNull();
     expect(state.racingBulls?.activeRecall?.replacementId).toBeTruthy();
-    expect(state.drivers[state.racingBulls!.activeRecall!.replacementId].teamId).toBe('racing_bulls');
+    expect(state.racingBulls!.activeRecall!.replacementTeamId).not.toBe('red_bull');
   });
 
   it('小红牛在周末中途换上储备车手时补发该车手的本周末轮胎', () => {

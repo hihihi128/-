@@ -160,11 +160,11 @@ function driverPosition(state: GameState, id: string): number {
   }).indexOf(id) + 1;
 }
 
-function transferGpToMcLaren(state: GameState): void {
+function transferGpToMcLaren(state: GameState): boolean {
   const redBull = state.teams.red_bull;
   const mclaren = state.teams.mclaren;
   const gp = redBull?.staff.raceEngineer;
-  if (!redBull || !mclaren || !gp) return;
+  if (!redBull || !mclaren || !gp || (!redBull.isPlayer && mclaren.isPlayer)) return false;
   const displaced = mclaren.staff.raceEngineer;
   const promoted = redBull.staff.raceEngineer2;
   redBull.staff.raceEngineer = { ...deepClone(promoted), role: 'raceEngineer' };
@@ -176,6 +176,7 @@ function transferGpToMcLaren(state: GameState): void {
     window.projectedRosters.red_bull.staff.raceEngineer2 = redBull.staff.raceEngineer2.id ?? null;
     window.projectedRosters.mclaren.staff.raceEngineer = mclaren.staff.raceEngineer.id ?? null;
   }
+  return true;
 }
 
 function syncDriverPuToCar(state: GameState, driverId: string, car: TeamState['cars'][number]): void {
@@ -187,15 +188,15 @@ function syncDriverPuToCar(state: GameState, driverId: string, car: TeamState['c
   }
 }
 
-function transferVerstappenToMercedes(state: GameState): void {
+function transferVerstappenToMercedes(state: GameState): boolean {
   const redBull = state.teams.red_bull;
   const mercedes = state.teams.mercedes;
   const max = state.drivers.verstappen;
-  if (!redBull || !mercedes || !max) return;
+  if (!redBull || !mercedes || !max || (!redBull.isPlayer && mercedes.isPlayer)) return false;
   const maxCar = redBull.cars.find(car => car.driverId === max.id);
   const targetCar = mercedes.cars.find(car => car.slot === 1) ?? mercedes.cars[0];
   const displacedId = targetCar?.driverId;
-  if (!maxCar || !targetCar || !displacedId) return;
+  if (!maxCar || !targetCar || !displacedId) return false;
   const displaced = state.drivers[displacedId];
   maxCar.driverId = displacedId;
   targetCar.driverId = max.id;
@@ -212,6 +213,7 @@ function transferVerstappenToMercedes(state: GameState): void {
   if (state.weekend?.teamOrders.favorDriverId === max.id || state.weekend?.teamOrders.favorDriverId === displacedId) {
     state.weekend.teamOrders = { mode: 'free', favorDriverId: null };
   }
+  return true;
 }
 
 export function afterSpecialRace(state: GameState): void {
@@ -249,20 +251,25 @@ export function afterSpecialRace(state: GameState): void {
     const r = state.redBull;
     r.gpRetention = round1(clamp(r.gpRetention - state.rules.redBull.gpLossPerRace, 0, 100));
     if (r.gpRetention <= 0 && !r.gpTransferred) {
-      r.gpTransferred = true;
-      transferGpToMcLaren(state);
-      addNews(state, '员工', 'GP 接受迈凯伦邀请并立即转会。红牛提拔二号车工程师接替他。');
+      if (transferGpToMcLaren(state)) {
+        r.gpTransferred = true;
+        addNews(state, '员工', 'GP 接受迈凯伦邀请并立即转会。红牛提拔二号车工程师接替他。');
+      } else {
+        r.gpRetention = 10;
+        log(state, r, '迈凯伦由玩家管理，AI 红牛不能强制改动玩家员工阵容');
+      }
     }
     const midpoint = Math.ceil(state.calendar.length / 2);
     if (!r.summerChecked && state.season.roundIndex + 1 >= midpoint) {
       r.summerChecked = true;
       const pos = driverPosition(state, 'verstappen');
       if (pos < 1 || pos > 3) {
-        r.verstappenExit = true;
-        transferVerstappenToMercedes(state);
-        addNews(state, '车手', `夏休到来时维斯塔潘仅列车手榜第 ${pos}，其解约条款触发并转会梅赛德斯。`);
-        if (state.teams.red_bull?.isPlayer || state.teams.mercedes?.isPlayer) addNarration(state, 'verstappen_clause', '维斯塔潘触发解约条款', '维斯塔潘在夏休时未进入积分榜前三，合同解约条款生效。他立即转投梅赛德斯，梅赛德斯原一号车手转入红牛填补席位。');
-        else addNews(state, '车手市场', '维斯塔潘触发解约条款并转投梅赛德斯，红牛接收梅赛德斯原一号车手。');
+        if (transferVerstappenToMercedes(state)) {
+          r.verstappenExit = true;
+          addNews(state, '车手', `夏休到来时维斯塔潘仅列车手榜第 ${pos}，其解约条款触发并转会梅赛德斯。`);
+          if (state.teams.red_bull?.isPlayer || state.teams.mercedes?.isPlayer) addNarration(state, 'verstappen_clause', '维斯塔潘触发解约条款', '维斯塔潘在夏休时未进入积分榜前三，合同解约条款生效。他立即转投梅赛德斯，梅赛德斯原一号车手转入红牛填补席位。');
+          else addNews(state, '车手市场', '维斯塔潘触发解约条款并转投梅赛德斯，红牛接收梅赛德斯原一号车手。');
+        } else log(state, r, 'AI 红牛不能通过解约条款强制改动玩家梅赛德斯阵容');
       } else addNews(state, '车手', `夏休检查：维斯塔潘位列车手榜第 ${pos}，解约条款没有触发。`);
     }
   }

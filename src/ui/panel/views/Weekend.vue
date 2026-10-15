@@ -7,7 +7,7 @@ import LiveRaceDesk from '../components/LiveRaceDesk.vue';
 import WeekendWeatherForecast from '../components/WeekendWeatherForecast.vue';
 import StrategyReviewDialog from '../components/StrategyReviewDialog.vue';
 import { act, call, lapTime, store } from '../bridge';
-import type { DriverPlan, PaceMode, PitTiming, PracticeProgram, QualiApproach, RaceResult, QualiResult } from '../../../engine/types';
+import type { DriverPlan, PaceMode, PitTiming, PracticeProgram, PracticeSetupFocus, QualiApproach, RaceResult, QualiResult } from '../../../engine/types';
 import type { WeekendDriverView } from '../../../engine/view';
 import type { EngineerStrategyResult } from '../../../tavern/controller';
 
@@ -74,6 +74,13 @@ function showPracticeResult(index: number) {
 
 function setPlan(d: WeekendDriverView, patch: Partial<DriverPlan>) {
   return act({ type: 'SET_PLAN', driverId: d.driverId, plan: patch }, { silent: true });
+}
+
+function practiceTyreOptions(d: WeekendDriverView) {
+  return Object.keys(v.value.labels.tyres).map(compound => {
+    const available = d.tyreSets.filter(set => set.compound === compound && !set.returned);
+    return { compound, available: available.length, newSets: available.filter(set => set.state === 'new').length, leastLaps: Math.min(...available.map(set => set.laps)) };
+  }).filter(option => option.available > 0);
 }
 
 const customPlans = ref<Record<string, string[]>>({});
@@ -226,6 +233,13 @@ const programs: Array<[PracticeProgram, string, string]> = [
   ['quali_sim', '排位模拟', '直接提升排位单圈'],
   ['parts', '新件测试', '验证新零件的真实性能，发现问题可在排位前换回旧件'],
 ];
+const setupFocuses: Array<[PracticeSetupFocus, string, string]> = [
+  ['balanced', '综合基准', '平均积累各项调校数据'],
+  ['aero_balance', '空气动力平衡', '重点调整前后翼平衡，偏向排位表现'],
+  ['mechanical', '机械抓地', '重点调整悬挂和差速器，改善慢弯与轮胎使用'],
+  ['ride_height', '车高与底板', '重点寻找车高窗口和赛道适配'],
+  ['tyre_prep', '胎压与热身', '重点积累胎温、胎压和长距离数据'],
+];
 const approaches: Array<[QualiApproach, string, string]> = [
   ['safe', '稳妥', '失误少，略慢'],
   ['standard', '标准', ''],
@@ -377,6 +391,22 @@ const chartSeries = computed(() => {
             </div>
           </div>
           <div class="block">
+            <div class="label">练习赛轮胎</div>
+            <div class="seg wrap">
+              <button :class="{ on: (d.plan.practiceTyre ?? 'auto') === 'auto' }" :disabled="done.practice || store.busy" @click="setPlan(d, { practiceTyre: 'auto' })">自动</button>
+              <button v-for="option in practiceTyreOptions(d)" :key="option.compound" :class="{ on: d.plan.practiceTyre === option.compound }" :disabled="done.practice || store.busy || (v.labels.tyres[option.compound]?.wet && w.weather.practice !== 'wet')" @click="setPlan(d, { practiceTyre: option.compound })">
+                <Tyre :c="option.compound" /> {{ option.newSets ? `${option.newSets} 组新胎` : `旧胎，最少 ${option.leastLaps}L` }}
+              </button>
+            </div>
+            <div class="tiny muted">选择配方后，引擎优先使用该配方的新胎，再使用圈数最少的旧胎。干地练习不能使用半雨胎或全雨胎。</div>
+          </div>
+          <div class="block">
+            <div class="label">调校方向</div>
+            <div class="seg wrap">
+              <button v-for="[k, label, tip] in setupFocuses" :key="k" :title="tip" :class="{ on: (d.plan.practiceSetupFocus ?? 'balanced') === k }" :disabled="done.practice || store.busy" @click="setPlan(d, { practiceSetupFocus: k })">{{ label }}</button>
+            </div>
+          </div>
+          <div class="block">
             <div class="label">排位方案</div>
             <div class="seg">
               <button v-for="[k, label, tip] in approaches" :key="k" :title="tip" :class="{ on: d.plan.qualiApproach === k }" :disabled="done.qualifying || store.busy" @click="setPlan(d, { qualiApproach: k })">{{ label }}</button>
@@ -482,12 +512,13 @@ const chartSeries = computed(() => {
 
       <div v-if="shownResult === 'practice' && shownPractice" class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>车手</th><th>圈速</th><th>圈数</th><th>项目收益</th></tr></thead>
+          <thead><tr><th>#</th><th>车手</th><th>圈速</th><th>轮胎</th><th>圈数</th><th>项目收益</th></tr></thead>
           <tbody>
             <tr v-for="(e, i) in shownPractice.timesheet" :key="e.driverId" :class="{ me: teamOf(e.driverId).mine }">
               <td class="mono">{{ i + 1 }}</td>
               <td><span class="swatch" :style="{ background: teamOf(e.driverId).color }"></span>{{ name(e.driverId) }}</td>
               <td class="mono">{{ lapTime(e.time) }}</td>
+              <td><span v-if="e.compound" class="row" style="gap:4px"><Tyre :c="e.compound" />{{ e.tyreStartedNew ? '新胎' : '旧胎' }}</span></td>
               <td class="mono">{{ e.laps }}</td>
               <td class="tiny">
                 <template v-if="teamOf(e.driverId).mine && shownPractice.gains[e.driverId]">
@@ -514,6 +545,7 @@ const chartSeries = computed(() => {
                 <td v-for="s in qualiLike.sessions" :key="s.name" class="mono">
                   <template v-for="e in s.entries.filter(x => x.driverId === id)" :key="e.driverId">
                     {{ e.time ? lapTime(e.time) : e.note ?? '无成绩' }}<span v-if="e.eliminated" class="neg tiny"> ✗</span>
+                    <span v-if="e.tyreRuns?.length" class="tiny muted"><br /><span v-for="(run, runIndex) in e.tyreRuns" :key="run.setId"><Tyre :c="run.compound" />{{ run.startedNew ? '新' : `旧${run.lapsBefore}L` }}<template v-if="runIndex < e.tyreRuns.length - 1"> · </template></span></span>
                   </template>
                 </td>
               </tr>

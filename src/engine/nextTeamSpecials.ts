@@ -290,9 +290,9 @@ export function fiaDebate(state: GameState, stance: 'support' | 'oppose' | 'comp
   meeting.politicalCapital = round1(clamp(meeting.politicalCapital + delta, 0, 100));
   team.mediaReputation = round1(clamp(team.mediaReputation + (success ? 2 : -2), 0, 100));
   if (current.issue === 'aduo' && stance !== 'oppose' && success) {
-    if (state.astonMartin) { state.astonMartin.aduoProgress = Math.min(100, state.astonMartin.aduoProgress + 22); completeAstonAduo(state); }
-    if (state.mercedes && !state.mercedes.aduoApproved) state.mercedes.aduoProgress = Math.min(100, state.mercedes.aduoProgress + 20);
-    if (state.ferrari?.aduoAlliance && !state.ferrari.aduoLobbyGranted) {
+    if (state.teams.aston_martin?.isPlayer && state.astonMartin) { state.astonMartin.aduoProgress = Math.min(100, state.astonMartin.aduoProgress + 22); completeAstonAduo(state); }
+    if (state.teams.mercedes?.isPlayer && state.mercedes && !state.mercedes.aduoApproved) state.mercedes.aduoProgress = Math.min(100, state.mercedes.aduoProgress + 20);
+    if (state.teams.ferrari?.isPlayer && state.ferrari?.aduoAlliance && !state.ferrari.aduoLobbyGranted) {
       state.teams.ferrari.aduoUpgrades = (state.teams.ferrari.aduoUpgrades ?? 0) + 1;
       state.ferrari.aduoLobbyGranted = true;
       append(state, state.ferrari, 'FIA 游说成功：法拉利获得 1 次 ADUO 认证机会');

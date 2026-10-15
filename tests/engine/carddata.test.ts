@@ -13,12 +13,12 @@ function cardDb(): Database {
   return res.db!;
 }
 
-/** 2026 赛季实测：相对梅赛德斯的平均单圈差距（秒） */
+/** 2026 开局平衡值：包含开局特殊机制后，相对梅赛德斯的平均单圈差距（秒）。 */
 const REAL_GAPS: Record<string, number> = {
   ferrari: 0.422,
   mclaren: 0.502,
   red_bull: 0.676,
-      alpine: 1.717,
+  alpine: 1.717,
   audi: 1.866,
   racing_bulls: 1.877,
   haas: 2.242,
@@ -78,7 +78,7 @@ describe('角色卡数据：2026 真实阵容', () => {
     }
   });
 
-  it('平均单圈差距符合 2026 实测（误差 < 0.05 秒）', () => {
+  it('开局平均单圈差距符合 2026 平衡值（误差 < 0.05 秒）', () => {
     const state = createGame(cardDb(), { playerTeamId: 'ferrari', principalName: '测试', seed: 1, gameId: 'g', now: 1 });
     const r = (id: string) => carRatings(state.teams[id], state.teams[id].cars[0], state.rules);
     // 均衡赛道上的单圈损失：赛车综合分与车手正赛能力（两台车平均）

@@ -843,8 +843,8 @@ function buildWeekendView(state: GameState): WeekendView | null {
             reasons: live.pendingDecision.reasons,
             eligibleDriverIds: live.pendingDecision.eligibleDriverIds,
             expectedPitLoss: (track?.pitLoss ?? 0) * (live.scLeft > 0 ? .5 : live.vscLeft > 0 ? .7 : 1),
-            ...(requiresWetGridTyreChoice(live)
-              ? { startTyreOptions: [state.rules.wetCompound, state.rules.fullWetCompound] }
+            ...(live.stage === 'grid' && live.completedLaps === 0
+              ? { startTyreOptions: requiresWetGridTyreChoice(live) ? [state.rules.wetCompound, state.rules.fullWetCompound] : [...state.rules.dryCompounds, state.rules.wetCompound, state.rules.fullWetCompound] }
               : {}),
           } : null,
         };

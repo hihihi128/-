@@ -654,7 +654,7 @@ function playerControlledCars(session: LiveRaceState): LiveRaceCar[] {
   return playerCars(session).filter(c => c.plan.strategySource !== 'engineer' && c.plan.strategySource !== 'perfect');
 }
 
-/** A wet grid is the only point where starting-tyre choices are required. */
+/** Wetness controls the automatic wet-grid choice; players can choose any legal tyre on every grid. */
 export function requiresWetGridTyreChoice(session: Pick<LiveRaceState, 'stage' | 'completedLaps' | 'wetness'>): boolean {
   return session.stage === 'grid' && session.completedLaps === 0 && session.wetness >= .22;
 }
@@ -1280,17 +1280,21 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
   const window = session.pendingDecision;
   if (!window || window.id !== windowId) return false;
   const playerIds = playerCars(session).map(c => c.driverId);
-  const wetGrid = requiresWetGridTyreChoice(session) && window.stage === 'grid';
-  if (wetGrid) {
-    const required = playerCars(session);
+  const gridChoice = session.stage === 'grid' && session.completedLaps === 0 && window.stage === 'grid';
+  if (gridChoice) {
+    const required = window.eligibleDriverIds.map(id => session.cars[id]).filter((car): car is LiveRaceCar => !!car && car.player && car.status === 'running');
     const requiredIds = new Set(required.map(car => car.driverId));
+    const allowedStartCompounds = requiresWetGridTyreChoice(session)
+      ? [state.rules.wetCompound, state.rules.fullWetCompound]
+      : [...state.rules.dryCompounds, state.rules.wetCompound, state.rules.fullWetCompound];
     const seen = new Set<string>();
     if (drivers.length !== required.length || !validOrders(orders, playerIds)) return false;
     for (const choice of drivers) {
-      if (!requiredIds.has(choice.driverId) || seen.has(choice.driverId) || choice.pit !== 'auto' || choice.compound !== undefined || choice.repairWing || choice.startCompound === undefined || ![state.rules.wetCompound, state.rules.fullWetCompound].includes(choice.startCompound) || !validRaceChoice(choice, state.rules.tyres)) return false;
+      const startCompound = choice.startCompound ?? session.cars[choice.driverId]?.tyre;
+      if (!requiredIds.has(choice.driverId) || seen.has(choice.driverId) || choice.pit !== 'auto' || choice.compound !== undefined || choice.repairWing || !startCompound || !allowedStartCompounds.includes(startCompound) || !validRaceChoice(choice, state.rules.tyres)) return false;
       const car = session.cars[choice.driverId];
       const team = car && state.teams[car.teamId];
-      if (!car || !team || !takeTyreSet(team, car.driverId, choice.startCompound, weekendTyreKey(state))) return false;
+      if (!car || !team || !takeTyreSet(team, car.driverId, startCompound, weekendTyreKey(state))) return false;
       seen.add(choice.driverId);
     }
     const relationship = teammateRelationship(state, state.meta.playerTeamId);
@@ -1311,7 +1315,7 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
         if (choice.energyMode) car.energyMode = choice.energyMode;
         if (choice.pitTiming) car.plan.pitTiming = choice.pitTiming;
       } else liveEvent(session, session.lap, 'order', `${car.driverId} 拒绝临场策略指令，但仍按领队选择安装起步轮胎`, [car.driverId], true);
-      if (!fitInitialTyres(state, session, car, choice.startCompound!)) return false;
+      if (!fitInitialTyres(state, session, car, choice.startCompound ?? car.tyre)) return false;
     }
     if (orders) session.teamOrders = { ...orders };
     session.pendingDecision = null;
@@ -1419,7 +1423,7 @@ export function simulateRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'
       const choices = session.pendingDecision.eligibleDriverIds.map(driverId => ({
         driverId,
         pit: 'auto' as const,
-        ...(requiresWetGridTyreChoice(session) ? { startCompound: wetCompoundFor(state.rules, session.wetness) } : {}),
+        ...(session.pendingDecision?.stage === 'grid' ? { startCompound: session.cars[driverId]?.tyre ?? wetCompoundFor(state.rules, session.wetness) } : {}),
       }));
       if (!applyRaceDecision(state, session, session.pendingDecision.id, choices)) throw new Error('自动策略无法处理当前决策窗口');
     } else advanceRaceSession(state, session, 'next_decision');

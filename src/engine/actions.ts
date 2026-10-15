@@ -53,6 +53,7 @@ const ok = (message: string): Outcome => ({ ok: true, message });
 const fail = (message: string): Outcome => ({ ok: false, message });
 
 const PROGRAMS = ['setup', 'longrun', 'quali_sim', 'parts'];
+const SETUP_FOCUSES = ['balanced', 'aero_balance', 'mechanical', 'ride_height', 'tyre_prep'];
 const APPROACHES = ['safe', 'standard', 'aggressive'];
 const PACE = ['conserve', 'balanced', 'push'];
 const TIMING = ['early', 'standard', 'late'];
@@ -104,6 +105,17 @@ function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>,
     if (!PROGRAMS.includes(patch.practiceProgram)) return fail('未知练习赛项目');
     if (state.season.phase !== 'practice' || completedPracticeSessions(state.weekend).length >= practiceSessionCount(state)) return fail('练习赛已经结束');
     plan.practiceProgram = patch.practiceProgram;
+  }
+  if (patch.practiceTyre !== undefined) {
+    if (state.season.phase !== 'practice' || completedPracticeSessions(state.weekend).length >= practiceSessionCount(state)) return fail('练习赛已经结束');
+    if (patch.practiceTyre !== 'auto' && !rules.tyres[patch.practiceTyre]) return fail('未知练习赛轮胎');
+    if (patch.practiceTyre !== 'auto' && rules.tyres[patch.practiceTyre].wet && state.weekend.weather.practice !== 'wet') return fail('赛道未宣布为湿地，练习赛不能使用半雨胎或全雨胎');
+    plan.practiceTyre = patch.practiceTyre;
+  }
+  if (patch.practiceSetupFocus !== undefined) {
+    if (!SETUP_FOCUSES.includes(patch.practiceSetupFocus)) return fail('未知练习赛调校方向');
+    if (state.season.phase !== 'practice' || completedPracticeSessions(state.weekend).length >= practiceSessionCount(state)) return fail('练习赛已经结束');
+    plan.practiceSetupFocus = patch.practiceSetupFocus;
   }
   if (patch.qualiApproach !== undefined) {
     if (!APPROACHES.includes(patch.qualiApproach)) return fail('未知排位方案');

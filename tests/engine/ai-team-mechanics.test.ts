@@ -7,6 +7,7 @@ import { afterManagementRace } from '../../src/engine/managementSpecials';
 import { createGame } from '../../src/engine/newgame';
 import { maybeTriggerRacingBullsRecall } from '../../src/engine/nextTeamSpecials';
 import { Rng } from '../../src/engine/rng';
+import { afterSpecialRace } from '../../src/engine/teamSpecials';
 import { buildView } from '../../src/engine/view';
 import type { GameState } from '../../src/engine/types';
 import { advanceUntil, cardSources } from '../helpers';
@@ -106,5 +107,36 @@ describe('AI team mechanics regression scenarios', () => {
     advanceWeeks(migrated, 1, new Rng(74));
     const once = JSON.stringify(migrated);
     expect(JSON.stringify(migrateState(JSON.parse(once)))).toBe(once);
+  });
+
+  it('does not restart AI season-opening crises when migrating a progressed save', () => {
+    const legacy = game('cadillac', 8130);
+    legacy.season.roundIndex = 10;
+    legacy.season.week = 20;
+    legacy.teams.ferrari.mediaReputation = 44;
+    for (const key of ['ferrari', 'mclaren', 'mercedes', 'redBull', 'astonMartin', 'audi', 'alpine'] as const) delete (legacy as Partial<GameState>)[key];
+
+    const migrated = migrateState(legacy);
+    expect(migrated.teams.ferrari.mediaReputation).toBe(44);
+    expect(migrated.mclaren).toMatchObject({ softwareResolved: true, weeksLeft: 0 });
+    expect(migrated.mercedes).toMatchObject({ aduoApproved: true, aduoProgress: 100 });
+    expect(migrated.redBull).toMatchObject({ summerChecked: true, gpRetention: 100 });
+    expect(migrated.astonMartin).toMatchObject({ aduoEngineArrived: true, aduoProgress: 100 });
+    expect(migrated.audi).toMatchObject({ turboFixed: true, alliance: true });
+    expect(migrated.alpine?.integrationPenaltyActive).toBe(false);
+  });
+
+  it('does not let the AI Red Bull clause replace a Mercedes player driver', () => {
+    const state = game('mercedes', 8131);
+    const before = state.teams.mercedes.cars.map(car => car.driverId);
+    state.season.roundIndex = Math.ceil(state.calendar.length / 2) - 1;
+    state.redBull!.summerChecked = false;
+    state.redBull!.gpRetention = 100;
+    state.standings.drivers.verstappen.points = 0;
+    for (const id of ['russell', 'antonelli', 'leclerc']) if (state.standings.drivers[id]) state.standings.drivers[id].points = 100;
+
+    afterSpecialRace(state);
+    expect(state.teams.mercedes.cars.map(car => car.driverId)).toEqual(before);
+    expect(state.redBull?.verstappenExit).toBe(false);
   });
 });

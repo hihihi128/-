@@ -19,7 +19,7 @@ import { deepClone } from './util';
 import { initFerrari } from './ferrari';
 import { initTeamSpecials } from './teamSpecials';
 import { initNextTeamSpecials } from './nextTeamSpecials';
-import { initManagementSpecials } from './managementSpecials';
+import { initManagementSpecials, settleLegacyAlpinePenalty } from './managementSpecials';
 
 /** 玩家可以自由增删条目的规则表：不能按默认值回填，否则会恢复被有意删除的零件 / 轮胎 */
 const OPEN_MAPS = new Set(['parts', 'tyres']);
@@ -275,10 +275,30 @@ export function migrateState(state: GameState): GameState {
   fillMissing(state.rules.randomEvents as unknown as Record<string, unknown>, DEFAULT_RULES.randomEvents as unknown as Record<string, unknown>);
   const playerTeam = state.teams[state.meta?.playerTeamId];
   if (playerTeam) {
+    const missing = {
+      ferrari: !state.ferrari,
+      mclaren: !state.mclaren,
+      mercedes: !state.mercedes,
+      redBull: !state.redBull,
+      astonMartin: !state.astonMartin,
+      audi: !state.audi,
+      alpine: !state.alpine,
+    };
+    const ferrariMedia = state.teams.ferrari?.mediaReputation;
+    const progressedSave = state.season.number > 1 || state.season.roundIndex > 0 || state.season.week > 1;
     initFerrari(state, true);
     initTeamSpecials(state, true);
     initNextTeamSpecials(state, true);
     initManagementSpecials(state, true);
+    if (progressedSave) {
+      if (missing.ferrari && !state.teams.ferrari?.isPlayer && ferrariMedia !== undefined) state.teams.ferrari.mediaReputation = ferrariMedia;
+      if (missing.mclaren && !state.teams.mclaren?.isPlayer && state.mclaren) Object.assign(state.mclaren, { softwareResolved: true, route: 'independent', weeksLeft: 0, weeksTotal: 0 });
+      if (missing.mercedes && !state.teams.mercedes?.isPlayer && state.mercedes) Object.assign(state.mercedes, { aduoApproved: true, aduoProgress: 100 });
+      if (missing.redBull && !state.teams.red_bull?.isPlayer && state.redBull) Object.assign(state.redBull, { summerChecked: true, gpRetention: 100 });
+      if (missing.astonMartin && !state.teams.aston_martin?.isPlayer && state.astonMartin) Object.assign(state.astonMartin, { aduoEngineArrived: true, aduoProgress: 100 });
+      if (missing.audi && !state.teams.audi?.isPlayer && state.audi) Object.assign(state.audi, { turboFixed: true, alliance: true, aduoProgress: 100 });
+      if (missing.alpine && !state.teams.alpine?.isPlayer) settleLegacyAlpinePenalty(state);
+    }
   }
   if (legacyEventsDisabled || configuredEventsDisabled) {
     state.rules.randomEvents.routineWeight = 0;
@@ -321,6 +341,10 @@ export function migrateState(state: GameState): GameState {
       state.weekend.practice = state.weekend.practiceSessions[state.weekend.practiceSessions.length - 1];
     }
     state.weekend.practiceReturn ??= null;
+    for (const plan of Object.values(state.weekend.plans ?? {})) {
+      plan.practiceTyre ??= 'auto';
+      plan.practiceSetupFocus ??= 'balanced';
+    }
     const bias = state.weekend.supernaturalRainBias;
     if (bias !== undefined && (!Number.isFinite(bias) || bias < -0.2 || bias > 0.2)) delete state.weekend.supernaturalRainBias;
     const effects = state.weekend.supernaturalCarEffects;
