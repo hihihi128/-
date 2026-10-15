@@ -41,6 +41,10 @@ onMounted(() => connect());
 
 async function advance() {
   if (view.value?.season.phase === 'qualifying' || view.value?.season.phase === 'sprint_qualifying') {
+    if (qualifyingEndedForPlayer.value) {
+      await act({ type: 'SIMULATE_QUALIFYING', kind: view.value.season.phase });
+      return;
+    }
     store.tab = 'weekend';
     return;
   }
@@ -48,9 +52,17 @@ async function advance() {
   await act({ type: 'ADVANCE' });
 }
 
+const qualifyingEndedForPlayer = computed(() => {
+  const live = view.value?.weekend?.liveQualifying;
+  if (!live) return false;
+  const playerDriverIds = new Set(view.value?.weekend?.drivers.map(driver => driver.driverId) ?? []);
+  return !live.alive.some(driverId => playerDriverIds.has(driverId));
+});
+
 const advanceLabel = computed(() => {
   const phase = view.value?.season.phase;
   if (phase !== 'qualifying' && phase !== 'sprint_qualifying') return view.value?.next?.label ?? '';
+  if (qualifyingEndedForPlayer.value) return '结束排位赛';
   const live = view.value?.weekend?.liveQualifying;
   const prefix = phase === 'sprint_qualifying' ? 'SQ' : 'Q';
   return `打开实时 ${prefix}${live?.segmentCount === 1 ? '' : (live?.segmentIndex ?? 0) + 1} 控制台`;

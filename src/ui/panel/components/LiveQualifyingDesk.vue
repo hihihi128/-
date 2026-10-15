@@ -10,7 +10,7 @@ const phase = computed(() => v.value.season.phase as 'qualifying' | 'sprint_qual
 const live = computed<LiveQualifyingView | null>(() => weekend.value?.liveQualifying ?? null);
 const playerDrivers = computed(() => weekend.value?.drivers ?? []);
 const playerDriverById = computed(() => new Map(playerDrivers.value.map(driver => [driver.driverId, driver])));
-const playerCars = computed(() => live.value?.cars.filter(car => car.player) ?? []);
+const playerCars = computed(() => live.value?.cars.filter(car => car.player && live.value!.alive.includes(car.driverId)) ?? []);
 const onTrackCars = computed(() => live.value?.cars.filter(car => ['out_lap', 'flying_lap', 'in_lap'].includes(car.phase)) ?? []);
 const garageCars = computed(() => live.value?.cars.filter(car => car.phase === 'garage') ?? []);
 const selectedDriverId = ref('');
@@ -35,6 +35,7 @@ const remaining = computed(() => {
 const statusText = computed(() => {
   const session = live.value;
   if (!session) return '等待开始';
+  if (!playerCars.value.length) return '本队车手已全部淘汰';
   if (session.paused) return session.stage === 'ready' ? '准备放车' : '已暂停';
   if (!playbackArmed.value) return '已中断，点击继续';
   if (session.stage === 'finishing') return '计时结束，完成当前圈';
@@ -60,7 +61,7 @@ function syncSelections() {
     next[car.driverId] = selected && options.some(option => option.id === selected) ? selected : options[0]?.id ?? '';
   }
   selections.value = next;
-  if (!selectedDriverId.value || !live.value?.cars.some(car => car.driverId === selectedDriverId.value)) {
+  if (!selectedDriverId.value || ![...playerCars.value, ...onTrackCars.value].some(car => car.driverId === selectedDriverId.value)) {
     selectedDriverId.value = playerCars.value[0]?.driverId ?? onTrackCars.value[0]?.driverId ?? '';
   }
 }
@@ -69,6 +70,9 @@ watch(() => playerCars.value.map(car => `${car.driverId}:${car.legalTyreSetIds.j
 
 async function start() {
   await act({ type: 'START_QUALIFYING', kind: phase.value });
+}
+async function simulate() {
+  await act({ type: 'SIMULATE_QUALIFYING', kind: phase.value });
 }
 async function setClock(paused: boolean, speed = live.value?.speed ?? 1) {
   const session = live.value;
@@ -197,7 +201,10 @@ function formatGap(progress: number) { return `${(Math.max(0, progress) * 100).t
         <h3>{{ title }}</h3>
         <p class="small muted">选择实体轮胎后，分别放行两辆赛车。计时默认暂停，只有你恢复时钟后才会开始。</p>
       </div>
-      <button class="primary" :disabled="store.busy" @click="start">进入实时{{ phase === 'sprint_qualifying' ? '冲刺排位' : '排位' }}台</button>
+      <div class="row">
+        <button :disabled="store.busy" @click="start">进入实时{{ phase === 'sprint_qualifying' ? '冲刺排位' : '排位' }}台</button>
+        <button class="primary" :disabled="store.busy" @click="simulate">模拟{{ phase === 'sprint_qualifying' ? '冲刺排位赛' : '排位赛' }}</button>
+      </div>
     </section>
 
     <template v-else>
@@ -205,12 +212,13 @@ function formatGap(progress: number) { return `${(Math.max(0, progress) * 100).t
         <div class="session-name"><span class="tiny muted">当前分段</span><b>{{ segmentLabel }}</b></div>
         <div class="clock mono" aria-label="剩余时间">{{ remaining }}</div>
         <div class="clock-copy"><b>{{ statusText }}</b><span class="tiny muted">{{ live.wet ? '雨地' : '干地' }} · {{ live.runAllowance }} 次出场上限</span></div>
-        <div class="clock-actions">
+        <div v-if="playerCars.length" class="clock-actions">
           <button class="pause" :disabled="store.busy" @click="setClock(!live.paused)">{{ live.paused || !playbackArmed ? (live.stage === 'finishing' ? '继续完成当前圈' : '开始 / 继续') : '暂停' }}</button>
           <div class="speed" aria-label="播放速度">
             <button v-for="speed in [1, 2, 4, 8]" :key="speed" :class="{ on: live.speed === speed }" :aria-pressed="live.speed === speed" :disabled="store.busy" @click="setClock(live.paused, speed as 1 | 2 | 4 | 8)">{{ speed }}×</button>
           </div>
         </div>
+        <div v-else class="tiny muted">请使用顶部“结束排位赛”完成剩余分段</div>
       </section>
 
       <section class="card track-card">

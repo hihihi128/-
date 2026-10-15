@@ -32,6 +32,33 @@ describe('逐段排位与实体轮胎组', () => {
     expect(state.weekend!.qualifying!.sessions.map(session => session.name)).toEqual(['Q1', 'Q2', 'Q3']);
   });
 
+  it.each([
+    ['qualifying', 'race', ['Q1', 'Q2', 'Q3']],
+    ['sprint_qualifying', 'sprint', ['SQ1', 'SQ2', 'SQ3']],
+  ] as const)('一键模拟 %s，并让 AI 车手完成全部晋级分段', (kind, nextPhase, names) => {
+    let state = advanceUntil(newTestGame(kind === 'qualifying' ? 324 : 325), value => value.season.phase === kind, 1200);
+    const activeDriverIds = state.teamOrder.flatMap(teamId => state.teams[teamId].cars.flatMap(car => car.driverId ? [car.driverId] : []));
+
+    state = act(state, { type: 'SIMULATE_QUALIFYING', kind });
+
+    const result = kind === 'qualifying' ? state.weekend!.qualifying! : state.weekend!.sprintQualifying!;
+    expect(state.season.phase).toBe(nextPhase);
+    expect(state.weekend!.liveQualifying).toBeNull();
+    expect(result.sessions.map(session => session.name)).toEqual(names);
+    expect(result.order).toHaveLength(activeDriverIds.length);
+    expect(new Set(result.order)).toEqual(new Set(activeDriverIds));
+    expect(new Set(result.grid)).toEqual(new Set(activeDriverIds));
+
+    for (let index = 0; index < result.sessions.length - 1; index++) {
+      const eliminated = result.sessions[index].entries.filter(entry => entry.eliminated);
+      const nextDriverIds = new Set(result.sessions[index + 1].entries.map(entry => entry.driverId));
+      expect(eliminated.length).toBeGreaterThan(0);
+      expect(eliminated.some(entry => !state.teams[entry.teamId].isPlayer)).toBe(true);
+      expect(eliminated.every(entry => !nextDriverIds.has(entry.driverId))).toBe(true);
+    }
+    expect(result.sessions.slice(1).every(session => session.entries.some(entry => !state.teams[entry.teamId].isPlayer))).toBe(true);
+  });
+
   it('拒绝不可用轮胎组，并且不消耗随机数或推进分段', () => {
     const state = advanceUntil(newTestGame(315), value => value.season.phase === 'qualifying');
     const beforeRng = state.rng;

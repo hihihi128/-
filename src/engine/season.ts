@@ -208,6 +208,28 @@ export function doQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 's
   return ok(step.message);
 }
 
+/** Completes every remaining qualifying segment in one action. */
+export function simulateQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 'sprint_qualifying'): Outcome {
+  if (state.season.phase !== kind || !state.weekend) return fail(`当前不是${LABELS.phase[kind]}阶段`);
+  const live = state.weekend.liveQualifying;
+  if (live && live.kind !== kind) return fail('另一场排位赛已经开始');
+  if (live?.controlMode === 'manual') {
+    const playerDriverIds = new Set(playerTeam(state).cars.flatMap(car => car.driverId ? [car.driverId] : []));
+    if (live.alive.some(driverId => playerDriverIds.has(driverId))) return fail('本队仍有车手晋级，请继续实时排位赛');
+    live.controlMode = 'automatic';
+    live.paused = true;
+    live.cars = {};
+  }
+  let result: import('./types').QualiResult | null = null;
+  while (!result) {
+    const step = advanceQualifyingSegment(state, rng, kind);
+    if (!step.ok) return fail(step.message);
+    result = step.result;
+  }
+  state.season.phase = kind === 'qualifying' ? 'race' : 'sprint';
+  return ok(`${kind === 'qualifying' ? '排位赛' : '冲刺排位赛'}模拟完成，杆位：${driverName(state, result.order[0])}`);
+}
+
 /** Compatibility automatic finish. It resumes any paused matching session instead of rerolling it. */
 export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint', aiPlans?: Record<string, Partial<DriverPlan>>): Outcome {
   if (state.season.phase !== kind || !state.weekend) return fail(`当前不是${LABELS.phase[kind]}阶段`);

@@ -1637,6 +1637,7 @@ export type Action =
   | { type: 'RUN_PRACTICE' }
   | { type: 'RETURN_PRACTICE_TYRES'; driverId: string; setIds: string[] }
   | { type: 'RUN_SPRINT_QUALIFYING'; tyreSetIds?: Record<string, string[]> }
+  | { type: 'SIMULATE_QUALIFYING'; kind: 'qualifying' | 'sprint_qualifying' }
   | { type: 'START_QUALIFYING'; kind: 'qualifying' | 'sprint_qualifying' }
   | { type: 'SET_QUALIFYING_CLOCK'; sessionId: string; expectedRevision: number; paused: boolean; speed: 1 | 2 | 4 | 8 }
   | { type: 'RELEASE_QUALIFYING_CAR'; sessionId: string; expectedRevision: number; driverId: string; tyreSetId: string }

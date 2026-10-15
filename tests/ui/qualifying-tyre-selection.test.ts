@@ -8,14 +8,14 @@ import Weekend from '../../src/ui/panel/views/Weekend.vue';
 
 const mounted: App[] = [];
 
-function qualifyingView(kind: 'qualifying' | 'sprint_qualifying') {
+function qualifyingView(kind: 'qualifying' | 'sprint_qualifying', survivingPlayerCount = 1) {
   let state = advanceUntil(newTestGame(kind === 'qualifying' ? 314 : 322), value => value.season.phase === kind, 1200);
   state = act(state, { type: 'START_QUALIFYING', kind });
   const live = state.weekend!.liveQualifying!;
   const playerIds = state.teams[state.meta.playerTeamId].cars.map(car => car.driverId).filter((id): id is string => !!id);
   const survivor = playerIds[0];
   const eliminated = playerIds[1];
-  live.alive = [survivor, ...live.alive.filter(id => !playerIds.includes(id))];
+  live.alive = [...playerIds.slice(0, survivingPlayerCount), ...live.alive.filter(id => !playerIds.includes(id))];
   return { view: buildView(state), survivor, eliminated };
 }
 
@@ -51,7 +51,7 @@ describe('segmented qualifying tyre selection UI', () => {
   it.each([
     'qualifying',
     'sprint_qualifying',
-  ] as const)('keeps %s status visible for eliminated and surviving drivers', async kind => {
+  ] as const)('hides the eliminated %s driver and keeps the survivor tyre panel', async kind => {
     const { view, survivor, eliminated } = qualifyingView(kind);
     const host = mountWeekend(view);
     await nextTick();
@@ -59,10 +59,29 @@ describe('segmented qualifying tyre selection UI', () => {
     const survivorName = view.weekend!.drivers.find(driver => driver.driverId === survivor)!.driverName;
     const eliminatedName = view.weekend!.drivers.find(driver => driver.driverId === eliminated)!.driverName;
     const survivorCard = driverCard(host, survivorName);
-    const eliminatedCard = driverCard(host, eliminatedName);
     expect(survivorCard.querySelectorAll('select')).toHaveLength(1);
-    expect(eliminatedCard.textContent).toContain('该车手已被淘汰');
-    expect(eliminatedCard.querySelectorAll('select')).toHaveLength(0);
+    expect(driverCard(host, eliminatedName)).toBeUndefined();
+  });
+
+  it('hides both player tyre panels when both drivers are eliminated', async () => {
+    const { view } = qualifyingView('qualifying', 0);
+    const host = mountWeekend(view);
+    await nextTick();
+
+    expect(host.querySelectorAll('.live-qualifying .driver-card')).toHaveLength(0);
+    expect(host.textContent).toContain('本队车手已全部淘汰');
+    expect(host.textContent).toContain('结束排位赛');
+  });
+
+  it('offers one-click automatic qualifying before the live desk starts', async () => {
+    const state = advanceUntil(newTestGame(416), value => value.season.phase === 'qualifying', 1200);
+    const host = mountWeekend(buildView(state));
+    await nextTick();
+
+    const button = [...host.querySelectorAll<HTMLButtonElement>('button')].find(candidate => candidate.textContent?.trim() === '模拟排位赛')!;
+    button.click();
+    await Promise.resolve();
+    expect((window as any).F1Manager.dispatch).toHaveBeenCalledWith({ type: 'SIMULATE_QUALIFYING', kind: 'qualifying' });
   });
 
   it('stages a physical set without releasing, then sends one guarded release action', async () => {
