@@ -212,6 +212,7 @@ export function doQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 's
 export function simulateQualifying(state: GameState, rng: Rng, kind: 'qualifying' | 'sprint_qualifying'): Outcome {
   if (state.season.phase !== kind || !state.weekend) return fail(`当前不是${LABELS.phase[kind]}阶段`);
   const live = state.weekend.liveQualifying;
+  const ownsRngStream = live?.controlMode === 'manual';
   if (live && live.kind !== kind) return fail('另一场排位赛已经开始');
   if (live?.controlMode === 'manual') {
     const playerDriverIds = new Set(playerTeam(state).cars.flatMap(car => car.driverId ? [car.driverId] : []));
@@ -220,7 +221,7 @@ export function simulateQualifying(state: GameState, rng: Rng, kind: 'qualifying
     live.paused = true;
     live.cars = {};
   }
-  const simulationRng = live ? Rng.restore(live.rngState) : rng;
+  const simulationRng = ownsRngStream ? Rng.restore(live!.rngState) : rng;
   let result: import('./types').QualiResult | null = null;
   while (!result) {
     const step = advanceQualifyingSegment(state, simulationRng, kind);

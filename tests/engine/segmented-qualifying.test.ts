@@ -60,10 +60,14 @@ describe('逐段排位与实体轮胎组', () => {
   });
 
   it('只在两名玩家车手都淘汰后自动完成实时排位的剩余分段', () => {
-    let state = advanceUntil(newTestGame(326), value => value.season.phase === 'qualifying');
-    state = act(state, { type: 'RUN_QUALIFYING' });
+    const base = advanceUntil(newTestGame(326), value => value.season.phase === 'qualifying');
+    const automatic = act(deepClone(base), { type: 'RUN_QUALIFYING' }).weekend!.liveQualifying!;
+    let state = act(base, { type: 'START_QUALIFYING', kind: 'qualifying' });
     const live = state.weekend!.liveQualifying!;
-    live.controlMode = 'manual';
+    live.segmentIndex = automatic.segmentIndex;
+    live.alive = [...automatic.alive];
+    live.finalOrder = [...automatic.finalOrder];
+    live.sessions = deepClone(automatic.sessions);
     expect(tryAct(state, { type: 'SIMULATE_QUALIFYING', kind: 'qualifying' })).toMatchObject({
       ok: false,
       message: expect.stringContaining('本队仍有车手晋级'),
@@ -83,6 +87,17 @@ describe('逐段排位与实体轮胎组', () => {
     expect(new Set(state.weekend!.qualifying!.order).size).toBe(state.weekend!.qualifying!.order.length);
     expect(state.weekend!.qualifying!.sessions.slice(1).every(session => session.entries.every(entry => !playerIds.has(entry.driverId)))).toBe(true);
     expect(state.rng).toBe(globalRng);
+  });
+
+  it('从自动分段继续一键模拟时推进全局随机数流', () => {
+    let state = advanceUntil(newTestGame(327), value => value.season.phase === 'qualifying');
+    state = act(state, { type: 'RUN_QUALIFYING' });
+    const rngAfterQ1 = state.rng;
+
+    state = act(state, { type: 'SIMULATE_QUALIFYING', kind: 'qualifying' });
+
+    expect(state.season.phase).toBe('race');
+    expect(state.rng).not.toBe(rngAfterQ1);
   });
 
   it('拒绝不可用轮胎组，并且不消耗随机数或推进分段', () => {
