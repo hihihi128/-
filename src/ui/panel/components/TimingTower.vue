@@ -1,10 +1,22 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import type { GameView } from '../../../engine/view';
 
 const props = defineProps<{ view: GameView }>();
 const mode = ref<'drivers' | 'teams'>('drivers');
 const open = ref(false);
+const root = ref<HTMLElement | null>(null);
+const narrow = ref(false);
+let sizeObserver: ResizeObserver | null = null;
+
+onMounted(() => {
+  const shell = root.value?.parentElement;
+  if (!shell) return;
+  if (typeof ResizeObserver === 'undefined') { narrow.value = shell.clientWidth <= 767; return; }
+  sizeObserver = new ResizeObserver(entries => { narrow.value = (entries[0]?.contentRect.width ?? shell.clientWidth) <= 767; });
+  sizeObserver.observe(shell);
+});
+onBeforeUnmount(() => sizeObserver?.disconnect());
 
 const live = computed(() => props.view.weekend?.liveRace ?? null);
 const race = computed(() => props.view.weekend?.race ?? props.view.weekend?.sprint ?? null);
@@ -85,7 +97,7 @@ const stripRows = computed(() => {
 </script>
 
 <template>
-  <section class="timing" :class="{ open }" aria-label="计时塔">
+  <section ref="root" class="timing" :class="{ open, narrow }" aria-label="计时塔">
     <button class="tower-strip" type="button" :aria-expanded="open" @click="open = !open">
       <span class="strip-title">{{ title }}</span>
       <span v-for="row in stripRows" :key="row.key" class="strip-row" :style="{ '--c': row.color }">
@@ -139,5 +151,5 @@ const stripRows = computed(() => {
 .trow + .trow { border-top: 1px solid rgba(255,255,255,.04); }.t-pos { height: 100%; display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.06); font: italic 800 13px/1 var(--font-display); }.trow:nth-child(-n+3) .t-pos { background: #f3f4f7; color: #08090c; }.t-bar { width: 3px; height: 15px; background: var(--c); }.t-code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: italic 800 13px/1 var(--font-display); letter-spacing: .04em; }.t-gap { min-width: 38px; text-align: right; font: 600 11px/1 var(--font-num); color: #d9dce4; }.t-tyre { width: 16px; height: 16px; display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--line2); border-radius: 50%; font: 800 9px/1 var(--font-num); }.t-flag { margin-left: 2px; padding: 2px 3px; font: italic 800 9px/1 var(--font-display); background: var(--blue); color: #fff; }.t-flag.fl { background: var(--purple); }.t-flag.dnf { background: #3a3f4c; }.trow.me { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 34%, transparent), transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 50%, transparent); }.trow.me::after { content: ''; position: absolute; right: 0; top: 4px; bottom: 4px; width: 2px; background: var(--c); }.trow.dnf { opacity: .5; }.trow.dnf .t-pos { background: transparent; color: var(--muted); font-size: 10px; }.tower-foot { padding: 7px 8px; border-top: 1px solid var(--line); color: var(--muted); font-size: 11px; }
 @keyframes rowin { from { opacity: 0; transform: translateX(-10px); } } @keyframes blink { 50% { opacity: .2; } }
 @media (max-width: 767px) { .timing { width: 100%; flex: none; position: relative; z-index: 30; }.tower-strip { width: 100%; height: 40px; padding: 0; display: flex; align-items: center; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: #06070a; overflow: hidden; }.strip-title { display: flex; align-items: center; gap: 5px; height: 100%; padding: 0 9px; background: #11141b; color: var(--text); font: italic 800 12px/1 var(--font-display); white-space: nowrap; }.strip-title .live-dot { background: var(--red); }.strip-row { --c: #666; display: flex; align-items: center; gap: 4px; min-width: 0; height: 27px; padding: 0 6px; border-right: 1px solid rgba(255,255,255,.06); white-space: nowrap; }.strip-row i { width: 3px; height: 14px; background: var(--c); }.strip-row strong { overflow: hidden; text-overflow: ellipsis; font: italic 800 12px/1 var(--font-display); }.strip-row span { color: var(--muted); font: 600 11px/1 var(--font-num); }.strip-toggle { margin-left: auto; width: 42px; font-size: 18px; }.tower { position: fixed; top: 0; bottom: 0; left: 0; z-index: 41; width: min(320px, 88vw); min-height: 0; transform: translateX(-105%); transition: transform var(--t-med) var(--ease); box-shadow: 12px 0 32px rgba(0,0,0,.65); }.tower-open { transform: translateX(0); }.tower-backdrop { display: block; position: fixed; inset: 0; z-index: 40; border: 0; border-radius: 0; background: rgba(0,0,0,.42); }.tower-rows { overflow-y: auto; }.trow { min-height: 30px; font-size: 13px; } }
-@container broadcast-shell (max-width: 767px) { .timing { width: 100%; flex: none; position: relative; z-index: 30; }.tower-strip { width: 100%; height: 40px; padding: 0; display: flex; align-items: center; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: #06070a; overflow: hidden; }.strip-title { display: flex; align-items: center; gap: 5px; height: 100%; padding: 0 9px; background: #11141b; color: var(--text); font: italic 800 12px/1 var(--font-display); white-space: nowrap; }.strip-title .live-dot { background: var(--red); }.strip-row { --c: #666; display: flex; align-items: center; gap: 4px; min-width: 0; height: 27px; padding: 0 6px; border-right: 1px solid rgba(255,255,255,.06); white-space: nowrap; }.strip-row i { width: 3px; height: 14px; background: var(--c); }.strip-row strong { overflow: hidden; text-overflow: ellipsis; font: italic 800 12px/1 var(--font-display); }.strip-row span { color: var(--muted); font: 600 11px/1 var(--font-num); }.strip-toggle { margin-left: auto; width: 42px; font-size: 18px; }.tower { position: fixed; top: 0; bottom: 0; left: 0; z-index: 41; width: min(320px, 88vw); min-height: 0; transform: translateX(-105%); transition: transform var(--t-med) var(--ease); box-shadow: 12px 0 32px rgba(0,0,0,.65); }.tower-open { transform: translateX(0); }.tower-backdrop { display: block; position: fixed; inset: 0; z-index: 40; border: 0; border-radius: 0; background: rgba(0,0,0,.42); }.tower-rows { overflow-y: auto; }.trow { min-height: 30px; font-size: 13px; } }
+.timing.narrow { width: 100%; flex: none; position: relative; z-index: 30; }.timing.narrow .tower-strip { width: 100%; height: 40px; padding: 0; display: flex; align-items: center; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: #06070a; overflow: hidden; }.timing.narrow .strip-title { display: flex; align-items: center; gap: 5px; height: 100%; padding: 0 9px; background: #11141b; color: var(--text); font: italic 800 12px/1 var(--font-display); white-space: nowrap; }.timing.narrow .strip-title .live-dot { background: var(--red); }.timing.narrow .strip-row { --c: #666; display: flex; align-items: center; gap: 4px; min-width: 0; height: 27px; padding: 0 6px; border-right: 1px solid rgba(255,255,255,.06); white-space: nowrap; }.timing.narrow .strip-row i { width: 3px; height: 14px; background: var(--c); }.timing.narrow .strip-row strong { overflow: hidden; text-overflow: ellipsis; font: italic 800 12px/1 var(--font-display); }.timing.narrow .strip-row span { color: var(--muted); font: 600 11px/1 var(--font-num); }.timing.narrow .strip-toggle { margin-left: auto; width: 42px; font-size: 18px; }.timing.narrow .tower { position: fixed; top: 0; bottom: 0; left: 0; z-index: 41; width: min(320px, 88vw); min-height: 0; transform: translateX(-105%); transition: transform var(--t-med) var(--ease); box-shadow: 12px 0 32px rgba(0,0,0,.65); }.timing.narrow .tower-open { transform: translateX(0); }.timing.narrow .tower-backdrop { display: block; position: fixed; inset: 0; z-index: 40; border: 0; border-radius: 0; background: rgba(0,0,0,.42); }.timing.narrow .tower-rows { overflow-y: auto; }.timing.narrow .trow { min-height: 30px; font-size: 13px; }
 </style>
