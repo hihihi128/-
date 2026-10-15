@@ -149,6 +149,7 @@ function supernaturalSettings() {
   min-height: 0;
   flex: 1;
   display: flex;
+  container: broadcast-shell / inline-size;
 }
 .panel-main {
   min-width: 0;
