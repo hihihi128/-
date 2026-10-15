@@ -189,6 +189,10 @@ function qualifyingSelection(d: WeekendDriverView): string[] {
   return qualifyingTyreSelections.value[d.driverId] ?? [];
 }
 
+function qualifyingDriverActive(d: WeekendDriverView): boolean {
+  return !w.value?.liveQualifying || w.value.liveQualifying.alive.includes(d.driverId);
+}
+
 function syncQualifyingSelections() {
   const next: Record<string, string[]> = {};
   for (const d of w.value?.drivers ?? []) {
@@ -489,9 +493,10 @@ const chartSeries = computed(() => {
               <button v-for="[k, label, tip] in approaches" :key="k" :title="tip" :class="{ on: d.plan.qualiApproach === k }" :disabled="done.qualifying || store.busy" @click="setPlan(d, { qualiApproach: k })">{{ label }}</button>
             </div>
           </div>
-          <div v-if="qualifyingPhase && (!w.liveQualifying || w.liveQualifying.alive.includes(d.driverId))" class="block stack-s">
+          <div v-if="qualifyingPhase" class="block stack-s">
             <div class="label">{{ qualifyingSegmentLabel }} 实体轮胎组</div>
-            <div v-if="qualifyingSetOptions(d).length" class="row wrap">
+            <div v-if="!qualifyingDriverActive(d)" class="notice tiny">该车手已在上一分段被淘汰，无需为 {{ qualifyingSegmentLabel }} 选择轮胎组。</div>
+            <div v-else-if="qualifyingSetOptions(d).length" class="row wrap">
               <label v-for="run in qualifyingRuns" :key="run" class="small row">
                 第 {{ run }} 次出场
                 <select v-model="qualifyingSelection(d)[run - 1]" :disabled="store.busy">
