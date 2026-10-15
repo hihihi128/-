@@ -78,6 +78,20 @@ export function driverTyreSets(team: TeamState, driverId: string, key?: string):
   return (team.tyreInventory?.[driverId] ?? []).filter(set => key === undefined || set.weekendKey === key);
 }
 
+/** Check whether the remaining physical inventory can supply every planned stint. */
+export function canRunTyreStrategy(team: TeamState, driverId: string, key: string, compounds: Compound[]): boolean {
+  const available = driverTyreSets(team, driverId, key).filter(set => !set.returned);
+  let fittedSetId: string | undefined;
+  for (const compound of compounds) {
+    const next = available
+      .filter(set => set.compound === compound && set.id !== fittedSetId)
+      .sort((a, b) => Number(a.state === 'used') - Number(b.state === 'used') || a.laps - b.laps || a.id.localeCompare(b.id))[0];
+    if (!next) return false;
+    fittedSetId = next.id;
+  }
+  return true;
+}
+
 /** Keep race reserves, plus the two new mediums required for SQ1 and SQ2. */
 export function returnEligibleTyreSets(state: GameState, team: TeamState, driverId: string): TyreSet[] {
   const dry = new Set(state.rules.dryCompounds);

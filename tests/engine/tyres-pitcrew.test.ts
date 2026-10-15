@@ -4,7 +4,7 @@ import { previewPitTraining } from '../../src/engine/development';
 import { actualStationaryTime, adjustPitCrewTraining, predictedStationaryTime } from '../../src/engine/pitstop';
 import { createRaceSession } from '../../src/engine/race';
 import { Rng } from '../../src/engine/rng';
-import { provisionWeekendTyres, takeTyreSet, weekendTyreKey } from '../../src/engine/tyres';
+import { canRunTyreStrategy, provisionWeekendTyres, takeTyreSet, weekendTyreKey } from '../../src/engine/tyres';
 import { createWeekend } from '../../src/engine/weekend';
 import type { TyreSet } from '../../src/engine/types';
 import { advanceUntil, act, newTestGame, tryAct } from '../helpers';
@@ -170,5 +170,20 @@ describe('physical tyre sets and pit crew timing', () => {
     expect(car.tyreSetId).toBe(target.id);
     expect(car.tyreAge).toBe(9);
     expect(takeTyreSet(team, driverId, compound, key, target.id)).toBeNull();
+  });
+
+  it('rejects strategies that require returned or unavailable physical sets', () => {
+    const state = advanceUntil(newTestGame(49), s => s.season.phase === 'race');
+    const team = state.teams[state.meta.playerTeamId];
+    const driverId = team.cars[0].driverId!;
+    const key = weekendTyreKey(state);
+    const [soft, medium] = state.rules.dryCompounds;
+    expect(canRunTyreStrategy(team, driverId, key, [soft, medium])).toBe(true);
+    for (const set of team.tyreInventory![driverId]) if (set.compound === soft) set.returned = true;
+    expect(canRunTyreStrategy(team, driverId, key, [soft, medium])).toBe(false);
+    expect(canRunTyreStrategy(team, driverId, key, [medium, medium])).toBe(true);
+    const mediums = team.tyreInventory![driverId].filter(set => set.compound === medium);
+    for (const set of mediums.slice(1)) set.returned = true;
+    expect(canRunTyreStrategy(team, driverId, key, [medium, medium])).toBe(false);
   });
 });

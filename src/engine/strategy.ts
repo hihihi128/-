@@ -165,7 +165,7 @@ export function strategyOptions(
   track: TrackDef,
   laps: number,
   ctx: DegContext,
-  opts: { wet: boolean; sprint: boolean },
+  opts: { wet: boolean; sprint: boolean; isAvailable?: (compounds: Compound[]) => boolean },
 ): StrategyOption[] {
   const factor = degFactor(track, ctx);
   const model: StrategyModel = { context: ctx.performanceContext, paceMode: ctx.paceMode, lossCache: new Map() };
@@ -198,11 +198,12 @@ export function strategyOptions(
       }
     }
   }
-  candidates.sort((a, b) => a.cost - b.cost);
-  const bestCost = candidates[0]?.cost ?? 0;
+  const availableCandidates = opts.isAvailable ? candidates.filter(candidate => opts.isAvailable!(candidate.compounds)) : candidates;
+  availableCandidates.sort((a, b) => a.cost - b.cost);
+  const bestCost = availableCandidates[0]?.cost ?? 0;
   const perStops = new Map<number, number>();
   const out: StrategyOption[] = [];
-  for (const c of candidates) {
+  for (const c of availableCandidates) {
     const stops = c.compounds.length - 1;
     const n = perStops.get(stops) ?? 0;
     if (n >= 2) continue;

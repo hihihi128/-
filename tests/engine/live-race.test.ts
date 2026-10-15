@@ -54,6 +54,23 @@ describe('resumable live race', () => {
     expect(live.cars[invalidId].plan.strategySource).toBe('engineer');
   });
 
+  it('rejects an AI grid plan that requires tyres returned after practice', () => {
+    const ready = raceReady(703);
+    const aiTeam = Object.values(ready.teams).find(team => !team.isPlayer)!;
+    const driverId = aiTeam.cars[0].driverId!;
+    const [soft, medium] = ready.rules.dryCompounds;
+    for (const set of aiTeam.tyreInventory![driverId]) if (set.compound === soft) set.returned = true;
+    const state = act(ready, {
+      type: 'START_RACE',
+      kind: 'race',
+      aiPlans: { [driverId]: { tyrePlan: [soft, medium], paceMode: 'push', pitTiming: 'late', scReaction: false } },
+    });
+    const car = state.weekend!.liveRace!.cars[driverId];
+    expect(car.plan.tyrePlan).not.toContain(soft);
+    expect(car.plannedCompounds).not.toContain(soft);
+    expect(car.tyreSetId).toBeTruthy();
+  });
+
   it('uses the AI safety-car reaction for an opportunistic live-race stop', () => {
     const ready = raceReady();
     const aiIds = Object.values(ready.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));

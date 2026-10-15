@@ -30,6 +30,7 @@ import { applyRandomEventResolution, setRandomEventContent, triggerNextWeeklyRan
 import { Rng } from '../engine/rng';
 import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
 import { degFactor, optimizeStints, stintLoss, strategyOptions } from '../engine/strategy';
+import { canRunTyreStrategy, weekendTyreKey } from '../engine/tyres';
 import { applySupernaturalCommands, effectiveSetup, parseSupernaturalCommands, SUPERNATURAL_LIMITS } from '../engine/supernatural';
 import { dismissalReason } from '../engine/teamSpecials';
 import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, RandomEventRecord, StaffRole, TeamSelectionDifficulty } from '../engine/types';
@@ -1328,7 +1329,11 @@ export class F1Controller {
             paceMode: 'balanced',
             knowledge: setup.tyreKnowledge,
             performanceContext,
-          }, { wet: false, sprint: false }).slice(0, 5),
+          }, {
+            wet: false,
+            sprint: false,
+            isAvailable: compounds => canRunTyreStrategy(entry.team, entry.driver.id, weekendTyreKey(state), compounds),
+          }).slice(0, 5),
         };
       });
     const byDriver = new Map(candidates.map(candidate => [candidate.driverId, candidate]));
@@ -1462,7 +1467,11 @@ export class F1Controller {
         paceMode: 'balanced',
         knowledge: setup.tyreKnowledge,
         performanceContext,
-      }, { wet: false, sprint: false }).slice(0, 6);
+      }, {
+        wet: false,
+        sprint: false,
+        isAvailable: compounds => canRunTyreStrategy(team, driverId, weekendTyreKey(state), compounds),
+      }).slice(0, 6);
     }
     const availableOptions = perfectOptions ?? driverView.options;
     if (!availableOptions.length) return { ok: false, message: '当前没有可用的干地策略方案' };

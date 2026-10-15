@@ -17,7 +17,7 @@ import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from
 import { validOrders, validRaceChoice } from './raceDecisions';
 import { actualStationaryTime } from './pitstop';
 import { PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES } from './powerunit';
-import { ensureDriverWeekendTyres, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
+import { canRunTyreStrategy, ensureDriverWeekendTyres, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
 import {
   degFactor,
   predictedTyreLife,
@@ -711,7 +711,12 @@ export function createRaceSession(
       const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, thermalKnowledge: 30, trackKnowledge: 30, qualiBonus: 0 });
       const performanceContext = buildPerformanceContext({ driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
       const baseContext = { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: 'balanced' as const, knowledge: setup.tyreKnowledge, performanceContext };
-      const options = strategyOptions(rules, track, totalLaps, baseContext, { wet: false, sprint: kind === 'sprint' });
+      const tyreKey = weekendTyreKey(state);
+      const options = strategyOptions(rules, track, totalLaps, baseContext, {
+        wet: false,
+        sprint: kind === 'sprint',
+        isAvailable: compounds => canRunTyreStrategy(entry.team, id, tyreKey, compounds),
+      });
       const decision = strategyDecisionSkill(entry.team, entry.car.slot);
       const localIndex = decision >= 88 ? 0 : decision >= 74 ? Math.min(1, options.length - 1) : Math.min(2, options.length - 1);
       const gridPosition = index + 1;
@@ -725,7 +730,9 @@ export function createRaceSession(
         scReaction: decision >= 68,
       };
       const proposed = suppliedAiPlans[id];
-      const validTyres = Array.isArray(proposed?.tyrePlan) && !validatePlan(rules, proposed.tyrePlan, false);
+      const validTyres = Array.isArray(proposed?.tyrePlan)
+        && !validatePlan(rules, proposed.tyrePlan, false)
+        && canRunTyreStrategy(entry.team, id, tyreKey, proposed.tyrePlan);
       const validPace = proposed?.paceMode === 'conserve' || proposed?.paceMode === 'balanced' || proposed?.paceMode === 'push';
       const validTiming = proposed?.pitTiming === 'early' || proposed?.pitTiming === 'standard' || proposed?.pitTiming === 'late';
       const validReaction = typeof proposed?.scReaction === 'boolean';

@@ -34,6 +34,7 @@ import { describeLog } from './protocol';
 import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
 import { nextActionFor, sortedDrivers, sortedTeams, type NextAction } from './season';
 import { degFactor, predictedTyreLife, strategyOptions, type StrategyOption } from './strategy';
+import { canRunTyreStrategy, weekendTyreKey } from './tyres';
 import { buildPerformanceContext, practiceEffects } from './performance';
 import type {
   DriverState,
@@ -53,7 +54,6 @@ import type {
 } from './types';
 import { round1 } from './util';
 import { predictedStationaryTime } from './pitstop';
-import { weekendTyreKey } from './tyres';
 import { currentRound } from './weekend';
 import { marketCloseBlockers } from './market';
 
@@ -803,8 +803,18 @@ function buildWeekendView(state: GameState): WeekendView | null {
         } : undefined,
         supernaturalSetup: w.supernaturalCarEffects?.[d.id] ? { base: naturalSetup, offset: w.supernaturalCarEffects[d.id], expires: '本站周末结束后失效' } : undefined,
         // 玩家看到的是「干地」策略预测（雨战由引擎自动换雨胎）
-        options: strategyOptions(state.rules, track, track.laps, ctx, { wet: false, sprint: false }).slice(0, 6),
-        sprintOptions: roundDef?.sprint ? strategyOptions(state.rules, track, sprintLaps, ctx, { wet: false, sprint: true }) : [],
+        options: strategyOptions(state.rules, track, track.laps, ctx, {
+          wet: false,
+          sprint: false,
+          isAvailable: compounds => canRunTyreStrategy(team, d.id, weekendTyreKey(state, w.roundIndex), compounds),
+        }).slice(0, 6),
+        sprintOptions: roundDef?.sprint
+          ? strategyOptions(state.rules, track, sprintLaps, ctx, {
+            wet: false,
+            sprint: true,
+            isAvailable: compounds => canRunTyreStrategy(team, d.id, weekendTyreKey(state, w.roundIndex), compounds),
+          })
+          : [],
         tyreLife: Object.fromEntries(Object.entries(state.rules.tyres).map(([k, t]) => [k, round1(predictedTyreLife(t, factor, { context: performanceContext, paceMode: plan.paceMode, rules: state.rules }))])),
         tyreSets: (team.tyreInventory?.[d.id] ?? []).filter(set => set.weekendKey === weekendTyreKey(state, w.roundIndex)).map(set => ({ id: set.id, compound: set.compound, state: set.state, laps: set.laps, returned: set.returned, returnEligible: !!w.practiceReturn?.eligibleSetIds?.[d.id]?.includes(set.id) })),
       });
