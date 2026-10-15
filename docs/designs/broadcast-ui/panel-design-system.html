@@ -1,0 +1,533 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>面板设计系统 · F1 广播风格</title>
+<meta name="description" content="F1 领队模拟器面板设计系统：颜色、车队色、字体、按钮、徽章、数值条、轮胎、计时塔行状态、表格与赛车线稿零件状态。">
+<meta name="viewport" content="width=1440">
+<style>
+:root {
+  color-scheme: dark;
+
+  /* ---- surfaces ---- */
+  --bg: #07080b;              /* app background (under carbon texture) */
+  --bg2: #101218;             /* card body */
+  --bg3: #181b23;             /* raised: input, chip, seg */
+  --bg4: #222631;             /* hover */
+  --line: #232733;            /* hairline */
+  --line2: #333949;           /* stronger divider / focus ring base */
+  --glass: rgba(10, 12, 17, 0.88);
+
+  /* ---- carbon fibre texture (apply as background on .app / .hud) ---- */
+  --carbon:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.022) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.5) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #0c0e13, #07080b);
+  --carbon-card:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.016) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #12151c, #0d0f14);
+
+  /* ---- text ---- */
+  --text: #f3f4f7;
+  --muted: #8e95a5;
+  --dim: #5c6373;
+
+  /* ---- broadcast signal colours ---- */
+  --red: #e10600;             /* live dot, alerts, F1 red */
+  --green: #1fd17a;           /* personal best / gain / ok */
+  --purple: #b05cff;          /* overall fastest / best on grid */
+  --yellow: #ffd60a;          /* warning / yellow flag */
+  --orange: #ff8a1f;          /* caution, tyre stress */
+  --blue: #3d8bfd;            /* info / blue flag / PIT */
+  --cyan: #7fdcff;            /* blueprint line art */
+  --neg: #ff5a5f;             /* loss text */
+
+  /* ---- team (runtime) ---- */
+  --team: #e10600;
+  --team-soft: color-mix(in srgb, var(--team) 18%, transparent);
+  --team-glow: color-mix(in srgb, var(--team) 60%, transparent);
+  --team-ink: color-mix(in srgb, var(--team) 70%, #fff);   /* team colour readable as text */
+
+  /* ---- tyre compounds (Tyre.vue still reads labels.tyres[c].color) ---- */
+  --tyre-s: #ff2b2b;
+  --tyre-m: #ffd60a;
+  --tyre-h: #f3f4f7;
+  --tyre-i: #24c35a;
+  --tyre-w: #2f8cff;
+
+  /* ---- 2026 grid team colours (data-teams.yaml; runtime uses team.color) ---- */
+  --c-mercedes: #27f4d2;
+  --c-ferrari: #dc0000;
+  --c-mclaren: #ff8000;
+  --c-red_bull: #3671c6;
+  --c-alpine: #0093cc;
+  --c-audi: #bb0a30;
+  --c-racing_bulls: #6692ff;
+  --c-haas: #b6babd;
+  --c-williams: #64c4ff;
+  --c-cadillac: #c8a95b;
+  --c-aston_martin: #229971;
+
+  /* ---- part performance scale (R&D car drawing hotspots) ---- */
+  --perf-top: var(--purple);  /* best on the grid */
+  --perf-good: var(--green);  /* above grid average */
+  --perf-mid: var(--yellow);  /* below average */
+  --perf-low: var(--neg);     /* clear weakness */
+  --perf-locked: #4a5060;     /* customer PU parts (not developable) */
+
+  /* ---- type ---- */
+  --font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif;
+  --font-display: 'Bahnschrift SemiCondensed', 'Bahnschrift', 'DIN Condensed', 'Roboto Condensed', 'Arial Narrow', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-num: 'Bahnschrift', 'DIN Alternate', 'Roboto Condensed', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --fs-tiny: 12px;            /* minimum size; labels, hints */
+  --fs-s: 12.5px;
+  --fs-m: 13px;               /* desktop body (unchanged from current panel) */
+  --fs-phone: 14px;           /* phone body */
+  --fs-l: 15px;
+  --fs-xl: 18px;
+  --fs-kpi: 24px;
+
+  /* ---- shape / depth ---- */
+  --radius: 3px;              /* broadcast graphics are sharp */
+  --radius-l: 6px;
+  --skew: -12deg;             /* parallelogram tags, badges, active tab */
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  --glow: 0 0 0 1px var(--team-glow), 0 0 18px -4px var(--team-glow);
+
+  /* ---- layout ---- */
+  --tower-w: 212px;           /* desktop timing tower sidebar */
+  --header-h: 60px;
+  --tabbar-h: 64px;           /* phone bottom tab bar (+ safe-area inset) */
+
+  /* ---- motion ---- */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-fast: 0.15s;
+  --t-med: 0.35s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ===== base / reset ===== */
+* { box-sizing: border-box; }
+body { margin: 0; background: #000; color: var(--text); font: 13px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3, h4 { margin: 0; }
+.frame { position: relative; overflow: hidden; background: var(--carbon); }
+.muted { color: var(--muted); }
+.dim { color: var(--dim); }
+.small { font-size: 12.5px; }
+.tiny { font-size: 12px; }
+.mono, .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.spread { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.grow { flex: 1; min-width: 0; }
+.grid { display: grid; gap: 10px; }
+.g2 { grid-template-columns: 1fr 1fr; }
+.g3 { grid-template-columns: repeat(3, 1fr); }
+.g4 { grid-template-columns: repeat(4, 1fr); }
+.stack > * + * { margin-top: 10px; }
+.stack-s > * + * { margin-top: 7px; }
+.pos { color: var(--green); }
+.neg { color: var(--neg); }
+.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== display type ===== */
+.disp { font-family: var(--font-display); font-style: italic; font-weight: 800; letter-spacing: 0.01em; }
+.eyebrow { font-family: var(--font-display); font-style: italic; font-weight: 700; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+/* ===== buttons ===== */
+button { cursor: pointer; border: 1px solid var(--line2); background: var(--bg3); border-radius: var(--radius); padding: 6px 12px; transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast); }
+button:hover:not(:disabled) { background: var(--bg4); border-color: #4a5163; }
+button:focus-visible { outline: 2px solid var(--team-ink); outline-offset: 2px; }
+button:disabled { opacity: 0.42; cursor: not-allowed; }
+button.primary { position: relative; border: 0; color: #fff; font-family: var(--font-display); font-style: italic; font-weight: 800; letter-spacing: 0.02em; padding: 8px 18px; background: linear-gradient(100deg, var(--team), color-mix(in srgb, var(--team) 72%, #000)); clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+button.primary:hover:not(:disabled) { filter: brightness(1.12); }
+button.small { padding: 4px 9px; font-size: 12px; }
+button.ghost { background: transparent; }
+button.danger { border-color: #6b1f22; color: #ff8a8f; background: rgba(225, 6, 0, .06); }
+button.icon { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.count { display: inline-flex; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; align-items: center; justify-content: center; background: var(--yellow); color: #111; font: 800 11.5px/1 var(--font-num); }
+
+/* ===== inputs ===== */
+select, input[type='text'], input[type='number'], textarea { background: #05060a; border: 1px solid var(--line2); border-radius: var(--radius); padding: 6px 9px; }
+textarea { width: 100%; resize: vertical; line-height: 1.5; }
+label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+label.field > * { color: var(--text); }
+input[type='range'] { width: 100%; accent-color: var(--team); }
+
+/* ===== segmented control ===== */
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; background: #05060a; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 5px 11px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--team-soft); color: #fff; box-shadow: inset 0 -2px 0 var(--team); font-weight: 600; }
+.seg.wrap { flex-wrap: wrap; }
+
+/* ===== cards: lower-third ===== */
+.card { position: relative; background: var(--carbon-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: 0 1px 0 rgba(255,255,255,.03) inset; }
+.card::before { content: ''; position: absolute; left: -1px; top: -1px; bottom: -1px; width: 3px; background: linear-gradient(180deg, var(--team), color-mix(in srgb, var(--team) 25%, transparent)); border-radius: var(--radius) 0 0 var(--radius); }
+.card > h3, .card .h3 { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-style: italic; font-weight: 800; font-size: 14.5px; letter-spacing: .02em; margin: 0 0 8px; }
+.card > h3::after, .card .h3::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line2), transparent); }
+.card.flat::before { display: none; }
+/* chyron label (skewed tag) */
+.chyron { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; transform: skewX(var(--skew)); background: var(--team); color: #fff; font: italic 800 12px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; }
+.chyron > span { transform: skewX(12deg); }
+.chyron.dark { background: #fff; color: #08090c; }
+
+/* ===== KPI tiles ===== */
+.kpi { position: relative; background: var(--carbon-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 11px 9px; overflow: hidden; }
+.kpi .k-label { font-size: 12px; color: var(--muted); }
+.kpi .k-value { font: italic 800 22px/1.1 var(--font-display); letter-spacing: .01em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.kpi .k-sub { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--line2); }
+.kpi.ok .k-value { color: var(--green); } .kpi.ok::after { background: var(--green); }
+.kpi.warn .k-value { color: var(--yellow); } .kpi.warn::after { background: var(--yellow); }
+.kpi.bad .k-value { color: var(--neg); } .kpi.bad::after { background: var(--neg); }
+.kpi.team::after { background: var(--team); box-shadow: 0 0 10px var(--team-glow); }
+
+/* ===== badges ===== */
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 2px; border: 1px solid var(--line2); background: var(--bg3); font-size: 12px; white-space: nowrap; line-height: 1; }
+.badge.ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); background: color-mix(in srgb, var(--green) 9%, transparent); }
+.badge.warn { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 40%, transparent); background: color-mix(in srgb, var(--yellow) 8%, transparent); }
+.badge.bad { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 45%, transparent); background: color-mix(in srgb, var(--neg) 9%, transparent); }
+.badge.team { background: var(--team); border-color: transparent; color: #fff; font-weight: 700; }
+.badge.purple { color: #e4cbff; border-color: color-mix(in srgb, var(--purple) 55%, transparent); background: color-mix(in srgb, var(--purple) 18%, transparent); }
+.badge.info { color: #a9cdff; border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 12%, transparent); }
+
+/* ===== notices ===== */
+.notice { border: 1px solid var(--line2); border-left: 3px solid var(--blue); background: rgba(61,139,253,.06); padding: 7px 10px; border-radius: var(--radius); }
+.notice.warn { border-left-color: var(--yellow); background: rgba(255,214,10,.06); }
+.notice.bad { border-left-color: var(--neg); background: rgba(255,90,95,.07); }
+.notice.ok { border-left-color: var(--green); background: rgba(31,209,122,.06); }
+
+/* ===== bars (Bar.vue) ===== */
+.bar { display: grid; grid-template-columns: auto 1fr 38px; align-items: center; gap: 8px; font-size: 12px; }
+.bar.nolabel { grid-template-columns: 1fr 38px; }
+.bar-label { color: var(--muted); min-width: 52px; white-space: nowrap; }
+.bar-track { position: relative; height: 6px; background: #05060a; border: 1px solid var(--line); transform: skewX(var(--skew)); overflow: visible; }
+.bar-fill { height: 100%; background: var(--team); box-shadow: 0 0 8px -1px currentColor; transform-origin: left; animation: fill .9s var(--ease) both; }
+.bar-ref { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #fff; box-shadow: 0 0 4px #fff; }
+.bar-val { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; }
+@keyframes fill { from { transform: scaleX(0); } }
+
+/* ===== progress ===== */
+.progress { height: 5px; background: #05060a; border: 1px solid var(--line); overflow: hidden; transform: skewX(var(--skew)); }
+.progress > div { height: 100%; background: repeating-linear-gradient(-45deg, var(--team) 0 6px, color-mix(in srgb, var(--team) 70%, #000) 6px 12px); box-shadow: 0 0 10px var(--team-glow); animation: fill 1s var(--ease) both; }
+
+/* ===== tables ===== */
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { padding: 5px 7px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font: italic 700 12px var(--font-display); letter-spacing: .06em; color: var(--muted); text-transform: uppercase; background: rgba(255,255,255,.02); }
+tr.me td { background: linear-gradient(90deg, var(--team-soft), transparent 80%); }
+tr.me td:first-child { box-shadow: inset 3px 0 0 var(--team); }
+.swatch { display: inline-block; width: 3px; height: 13px; margin-right: 7px; vertical-align: -2px; transform: skewX(var(--skew)); }
+
+/* ===== tyre chip (Tyre.vue) ===== */
+.tyre { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid currentColor; background: #0b0b0d; font: 800 10px/1 var(--font-num); flex: 0 0 auto; }
+.tyre.s { color: var(--tyre-s); } .tyre.m { color: var(--tyre-m); } .tyre.h { color: var(--tyre-h); } .tyre.i { color: var(--tyre-i); } .tyre.w { color: var(--tyre-w); }
+.tyre.sm { width: 15px; height: 15px; border-width: 2px; font-size: 8.5px; }
+
+/* ===== timing tower ===== */
+.tower { display: flex; flex-direction: column; background: linear-gradient(180deg, rgba(5,6,9,.96), rgba(8,9,13,.96)); border-right: 1px solid var(--line); }
+.tower-head { padding: 8px 8px 6px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #14171f, #0b0d12); position: relative; }
+.tower-head::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--red); }
+.tower-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.tower-title .t1 { font: italic 800 14px/1.1 var(--font-display); letter-spacing: .04em; }
+.lap { font: italic 800 15px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.lap small { font-size: 11.5px; color: var(--muted); font-style: normal; margin-left: 2px; }
+.live { display: inline-flex; align-items: center; gap: 5px; font: italic 800 12px/1 var(--font-display); color: #fff; background: var(--red); padding: 3px 6px 3px 5px; letter-spacing: .08em; }
+.live i { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.tower .seg { width: 100%; margin-top: 6px; }
+.tower .seg button { flex: 1; padding: 3px 0; font-size: 12px; }
+.tower-rows { flex: 1; overflow: hidden; padding: 3px 0; }
+.trow { position: relative; display: grid; grid-template-columns: 24px 3px 1fr auto auto; align-items: center; column-gap: 6px; height: 24px; padding: 0 7px 0 0; font-size: 12.5px; animation: rowin .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 28ms); }
+.trow + .trow { border-top: 1px solid rgba(255,255,255,.035); }
+.trow .t-pos { height: 100%; display: flex; align-items: center; justify-content: center; font: italic 800 13px/1 var(--font-display); background: rgba(255,255,255,.06); color: #fff; }
+.trow:nth-child(-n+3) .t-pos { background: #f3f4f7; color: #08090c; }
+.trow .t-bar { width: 3px; height: 15px; background: var(--c); }
+.trow .t-code { font: italic 800 13.5px/1 var(--font-display); letter-spacing: .06em; display: flex; align-items: center; gap: 5px; }
+.trow .t-gap { font: 600 12px/1 var(--font-num); font-variant-numeric: tabular-nums; color: #d9dce4; text-align: right; min-width: 52px; }
+.trow .t-pts { font: italic 800 13px/1 var(--font-display); font-variant-numeric: tabular-nums; text-align: right; min-width: 30px; }
+.trow .t-flag { display: inline-flex; align-items: center; height: 15px; padding: 0 4px; font: italic 800 10.5px/1 var(--font-display); letter-spacing: .06em; border-radius: 1px; }
+.t-flag.pit { background: var(--blue); color: #fff; }
+.t-flag.fl { background: var(--purple); color: #fff; }
+.t-flag.pen { background: var(--yellow); color: #111; }
+.t-flag.dnf { background: #3a3f4c; color: #c7cbd6; }
+.t-flag.ot { background: var(--green); color: #052; }
+.trow.me { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 34%, transparent), color-mix(in srgb, var(--c) 6%, transparent)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent); }
+.trow.me .t-code { color: #fff; text-shadow: 0 0 10px color-mix(in srgb, var(--c) 80%, transparent); }
+.trow.me::after { content: ''; position: absolute; right: 0; top: 4px; bottom: 4px; width: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+.trow.fl .t-gap { color: #d9b8ff; }
+.trow.dnf { opacity: .5; }
+.trow.dnf .t-pos { background: transparent; color: var(--muted); font-size: 11px; }
+.trow.dnf .t-gap { color: var(--muted); }
+.trow.pit .t-gap { color: #a9cdff; }
+.trow.up .t-pos::after, .trow.down .t-pos::after { content: ''; position: absolute; left: 25px; width: 0; height: 0; border: 3px solid transparent; }
+.tower-foot { padding: 6px 8px; border-top: 1px solid var(--line); display: flex; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+@keyframes rowin { from { opacity: 0; transform: translateX(-14px); } }
+
+/* ===== app shell (desktop panel) ===== */
+.top { position: relative; display: flex; align-items: center; gap: 12px; height: var(--header-h); padding: 0 14px 0 0; background: linear-gradient(90deg, color-mix(in srgb, var(--team) 26%, #0b0c10) 0, #0d0f14 34%, #0b0c10); border-bottom: 1px solid var(--line); overflow: hidden; }
+.top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--team), transparent 60%); box-shadow: 0 0 12px var(--team-glow); }
+.top::before { content: ''; position: absolute; top: 0; bottom: 0; width: 120px; left: -140px; background: linear-gradient(100deg, transparent, rgba(255,255,255,.12), transparent); transform: skewX(-20deg); animation: sweep 1.6s .3s var(--ease) both; }
+@keyframes sweep { to { left: 110%; } }
+.team-badge { height: 100%; min-width: 74px; padding: 0 18px 0 14px; display: flex; align-items: center; justify-content: center; background: var(--team); color: #fff; font: italic 900 19px/1 var(--font-display); letter-spacing: .06em; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); text-shadow: 0 1px 3px rgba(0,0,0,.45); }
+.title { font: italic 800 17px/1.15 var(--font-display); letter-spacing: .01em; }
+.title .muted { font: 400 12.5px var(--font); margin-left: 6px; }
+.meta { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-top: 3px; white-space: nowrap; }
+.money { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; padding: 0 12px; border-right: 1px solid var(--line); }
+.money b { font: italic 800 16px/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.money span { font-size: 12px; color: var(--muted); }
+.tabs { display: flex; gap: 0; padding: 0 8px; height: 38px; align-items: stretch; border-bottom: 1px solid var(--line); background: rgba(5,6,9,.7); }
+.tabs button { position: relative; border: 0; border-radius: 0; background: transparent; padding: 0 13px; color: var(--muted); font: italic 700 13.5px var(--font-display); letter-spacing: .02em; white-space: nowrap; }
+.tabs button.on { color: #fff; }
+.tabs button.on::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: 0; height: 3px; background: var(--team); transform: skewX(var(--skew)); box-shadow: 0 0 10px var(--team-glow); }
+.content { padding: 12px 14px; }
+.scroll-hint { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, transparent, rgba(7,8,11,.95)); pointer-events: none; }
+
+/* ===== phone shell ===== */
+.p-top { position: relative; display: flex; align-items: center; gap: 8px; height: 56px; padding-right: 8px; background: linear-gradient(90deg, color-mix(in srgb, var(--team) 26%, #0b0c10), #0b0c10 60%); border-bottom: 1px solid var(--line); }
+.p-top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--team), transparent 70%); box-shadow: 0 0 10px var(--team-glow); }
+.p-top .team-badge { min-width: 60px; font-size: 17px; padding: 0 14px 0 10px; }
+.p-top .ttl { font: italic 800 15px/1.15 var(--font-display); }
+.p-top .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-top button.icon { width: 44px; height: 44px; position: relative; }
+.p-top button.icon .count { position: absolute; top: 3px; right: 2px; }
+.p-top button.primary { height: 44px; padding: 0 14px 0 16px; font-size: 14px; }
+.tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: grid; grid-template-columns: repeat(6, 1fr); background: rgba(6,7,10,.97); border-top: 1px solid var(--line); z-index: 20; }
+.tabbar button { position: relative; border: 0; border-radius: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); font-size: 11.5px; padding: 0; min-height: 44px; }
+.tabbar button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tabbar button.on { color: #fff; }
+.tabbar button.on::before { content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 3px; background: var(--team); transform: skewX(var(--skew)); box-shadow: 0 0 10px var(--team-glow); }
+.tabbar button.on svg { stroke: var(--team-ink); }
+.p-content { position: absolute; left: 0; right: 0; overflow: hidden; padding: 10px 12px 12px; }
+.strip { position: relative; display: flex; align-items: center; height: 40px; background: #06070a; border-bottom: 1px solid var(--line); overflow: hidden; }
+.strip .s-head { display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 10px 0 8px; background: #11141b; border-right: 1px solid var(--line); flex: 0 0 auto; }
+.strip .s-items { display: flex; align-items: center; gap: 0; overflow: hidden; flex: 1; mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.strip .s-item { display: flex; align-items: center; gap: 4px; padding: 0 6px; height: 26px; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.06); }
+.strip .s-item .p { font: italic 800 12.5px/1 var(--font-display); color: var(--muted); }
+.strip .s-item .bar3 { width: 3px; height: 14px; background: var(--c); }
+.strip .s-item .c { font: italic 800 13px/1 var(--font-display); letter-spacing: .05em; }
+.strip .s-item .g { font: 600 12px/1 var(--font-num); color: #cfd3dc; }
+.strip .s-item.me { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 32%, transparent), transparent); box-shadow: inset 2px 0 0 var(--c); }
+.strip .s-toggle { flex: 0 0 auto; width: 44px; height: 40px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: #11141b; display: flex; align-items: center; justify-content: center; }
+
+/* ===== misc ===== */
+.label-sm { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.divider { height: 1px; background: var(--line); margin: 8px 0; }
+.kv { display: grid; gap: 2px; }
+.kv span { font-size: 12px; color: var(--muted); }
+.kv b { font: italic 800 15px/1.15 var(--font-display); font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+.pips { display: inline-flex; gap: 3px; }
+.pips span { width: 14px; height: 6px; background: #05060a; border: 1px solid var(--line2); transform: skewX(var(--skew)); }
+.pips span.on { background: var(--team); border-color: transparent; box-shadow: 0 0 6px var(--team-glow); }
+
+:root { --team: #229971; }
+
+.ds { padding: 22px 26px; display: grid; grid-template-columns: 1fr 1fr; gap: 18px 22px; }
+.ds .full { grid-column: 1 / -1; }
+.ds-head { grid-column: 1 / -1; display: flex; align-items: flex-end; justify-content: space-between; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+.ds-head h1 { font: italic 900 30px/1 var(--font-display); margin: 0; letter-spacing: .02em; }
+.ds-head h1 em { font-style: inherit; color: var(--red); }
+.sw-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.sw { border: 1px solid var(--line); background: var(--bg2); }
+.sw i { display: block; height: 34px; }
+.sw div { padding: 5px 7px; font-size: 12px; } .sw div span { display: block; color: var(--muted); font-family: var(--font-num); }
+.teams { display: grid; grid-template-columns: repeat(11, 1fr); gap: 4px; }
+.teams .tm { height: 46px; display: flex; flex-direction: column; justify-content: flex-end; padding: 4px 5px; background: linear-gradient(180deg, var(--c), color-mix(in srgb, var(--c) 55%, #000)); font: italic 900 14px/1 var(--font-display); color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,.6); clip-path: polygon(0 0, 100% 0, calc(100% - 6px) 100%, 0 100%); }
+.teams .tm span { font: 600 10.5px/1.2 var(--font-num); font-style: normal; opacity: .9; }
+.type-row { display: grid; grid-template-columns: 120px 1fr; align-items: baseline; gap: 10px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.type-row:last-child { border: 0; }
+.type-row .tag { font: 12px var(--font-num); color: var(--muted); }
+.demo-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ds-tower { width: 236px; }
+.ds-tower .trow { position: relative; }
+.state-lab { font-size: 12px; color: var(--muted); padding-left: 10px; }
+.trow-wrap { display: grid; grid-template-columns: 236px 1fr; align-items: center; }
+.ds .card h3 { margin-bottom: 10px; }
+.ds { align-items: start; }
+.ds-car .swatch { margin-right: 8px; }
+
+</style>
+</head>
+<body>
+<div class="frame" style="width:1440px;height:1660px">
+
+<div class="ds">
+  <div class="ds-head"><div><div class="eyebrow">F1 领队模拟器 · 面板设计系统</div><h1>BROADCAST <em>/</em> 碳纤维</h1></div>
+    <div class="row"><span class="chyron">TEAM · AMR</span><span class="chyron dark">LIVE GFX</span><span class="small muted">--team 随玩家车队切换</span></div></div>
+
+  <section class="card full" data-component-id="ds-colors"><h3>颜色 · 信号色与表面</h3>
+    <div class="sw-grid"><div class="sw"><i style="background:var(--red)"></i><div>LIVE / 警报<span>--red #e10600</span></div></div><div class="sw"><i style="background:var(--purple)"></i><div>全场最快/最佳<span>--purple #b05cff</span></div></div><div class="sw"><i style="background:var(--green)"></i><div>个人最佳 / 提升<span>--green #1fd17a</span></div></div><div class="sw"><i style="background:var(--yellow)"></i><div>警告 / 黄旗<span>--yellow #ffd60a</span></div></div><div class="sw"><i style="background:var(--orange)"></i><div>注意 / ADUO<span>--orange #ff8a1f</span></div></div><div class="sw"><i style="background:var(--blue)"></i><div>信息 / PIT<span>--blue #3d8bfd</span></div></div><div class="sw"><i style="background:var(--cyan)"></i><div>线稿<span>--cyan #7fdcff</span></div></div><div class="sw"><i style="background:var(--neg)"></i><div>损失文字<span>--neg #ff5a5f</span></div></div><div class="sw"><i style="background:var(--bg)"></i><div>背景<span>--bg #07080b</span></div></div><div class="sw"><i style="background:var(--bg2)"></i><div>卡片<span>--bg2 #101218</span></div></div><div class="sw"><i style="background:var(--bg3)"></i><div>控件<span>--bg3 #181b23</span></div></div><div class="sw"><i style="background:var(--line2)"></i><div>分隔线<span>--line2 #333949</span></div></div></div>
+    <div class="label-sm" style="margin:12px 0 6px">车队色（--c-*，玩家车队写入 --team）</div>
+    <div class="teams"><div class="tm" style="--c:#27f4d2">MER<span>#27f4d2</span></div><div class="tm" style="--c:#ff8000">MCL<span>#ff8000</span></div><div class="tm" style="--c:#3671c6">RBR<span>#3671c6</span></div><div class="tm" style="--c:#dc0000">FER<span>#dc0000</span></div><div class="tm" style="--c:#64c4ff">WIL<span>#64c4ff</span></div><div class="tm" style="--c:#6692ff">RB<span>#6692ff</span></div><div class="tm" style="--c:#229971">AMR<span>#229971</span></div><div class="tm" style="--c:#b6babd">HAA<span>#b6babd</span></div><div class="tm" style="--c:#bb0a30">AUD<span>#bb0a30</span></div><div class="tm" style="--c:#0093cc">ALP<span>#0093cc</span></div><div class="tm" style="--c:#c8a95b">CAD<span>#c8a95b</span></div></div>
+  </section>
+
+  <section class="card" data-component-id="ds-type"><h3>字体</h3>
+    <div class="type-row"><span class="tag">显示 900 斜体 30</span><span style="font:italic 900 30px/1 var(--font-display)">摩纳哥大奖赛 P5</span></div>
+    <div class="type-row"><span class="tag">标题 800 斜体 15</span><span style="font:italic 800 15px var(--font-display)">启动新的零件研发</span></div>
+    <div class="type-row"><span class="tag">KPI 800 斜体 24</span><span style="font:italic 800 24px var(--font-display)">$128.6M</span></div>
+    <div class="type-row"><span class="tag">正文 13 / 手机 14</span><span>真实收益在开工时就已确定，要等上赛道验证后才揭晓。</span></div>
+    <div class="type-row"><span class="tag">计时数字 12</span><span class="mono">+14.326 · L52/78 · 1:12.904</span></div>
+    <div class="type-row"><span class="tag">最小 12</span><span class="tiny muted">提示文字不小于 12px</span></div>
+  </section>
+
+  <section class="card" data-component-id="ds-buttons"><h3>按钮与分段</h3>
+    <div class="stack-s">
+      <div class="demo-row"><button class="primary" data-component-id="ds-btn-primary">▶ 进入比赛周末</button><button data-component-id="ds-btn-default">重新读取</button><button class="ghost" data-component-id="ds-btn-ghost">返回</button><button class="small danger" data-component-id="ds-btn-danger">取消</button><button class="primary" disabled data-component-id="ds-btn-disabled">启动研发</button></div>
+      <div class="demo-row"><div class="seg"><button>保守</button><button class="on">标准</button><button>激进</button></div><div class="seg"><button class="on">领先差</button><button>前车差</button></div>
+        <button class="ghost" style="position:relative;padding:6px 10px" aria-label="让 AI 叙述（2 条）" data-component-id="ds-btn-narrate">让 AI 叙述 <span class="count">2</span></button></div>
+      <div class="tabs" style="margin:0 -14px;padding:0 14px" role="tablist"><button class="on">总览</button><button>比赛周末</button><button>车手</button><button>赛车</button><button>研发与设施</button></div>
+    </div>
+  </section>
+
+  <section class="card" data-component-id="ds-badges"><h3>徽章 · 提示 · KPI</h3>
+    <div class="stack-s">
+      <div class="demo-row"><span class="badge">工厂周</span><span class="badge team">优先</span><span class="badge ok">可以开局</span><span class="badge warn">特殊机制：过渡领队</span><span class="badge bad">有错误</span><span class="badge info">研发中</span><span class="badge purple">领先</span><span class="badge">1/4</span><span class="live"><i></i>LIVE</span></div>
+      <div class="notice warn small">本站罚退 5 格（超出能量回收系统配额）</div>
+      <div class="notice bad small">你已被撤职：媒体支持率过低。面板进入只读。</div>
+      <div class="grid g3" style="gap:8px"><div class="kpi team"><div class="k-label">车队积分榜</div><div class="k-value">P5</div><div class="k-sub">56 分</div></div><div class="kpi ok"><div class="k-label">媒体声誉</div><div class="k-value">61</div></div><div class="kpi bad"><div class="k-label">董事会信心</div><div class="k-value">38</div><div class="k-sub">低于 40 有风险</div></div></div>
+    </div>
+  </section>
+
+  <section class="card" data-component-id="ds-bars"><h3>数值条 · 进度</h3>
+    <div class="stack-s">
+      <div class="bar" title="白线 = 潜力上限"><span class="bar-label">综合</span><div class="bar-track"><div class="bar-fill" style="width:88%;background:var(--team);color:var(--team)"></div><div class="bar-ref" style="left:89%"></div></div><span class="bar-val">88</span></div>
+      <div class="bar" title=""><span class="bar-label">心态</span><div class="bar-track"><div class="bar-fill" style="width:64%;background:var(--green);color:var(--green)"></div></div><span class="bar-val">64</span></div>
+      <div class="bar" title=""><span class="bar-label">调校信心</span><div class="bar-track"><div class="bar-fill" style="width:72%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">72</span></div>
+      <div class="bar" title=""><span class="bar-label">轮胎负荷</span><div class="bar-track"><div class="bar-fill" style="width:30%;background:#ffb347;color:#ffb347"></div></div><span class="bar-val">30</span></div>
+      <div class="bar" title="红线 = 撤职线"><span class="bar-label">媒体支持率</span><div class="bar-track"><div class="bar-fill" style="width:34%;background:var(--neg);color:var(--neg)"></div><div class="bar-ref" style="left:30%"></div></div><span class="bar-val">34</span></div>
+      <div class="spread small"><span>内燃机 v2 · 剩余 4/7 周</span><span class="muted mono">43%</span></div><div class="progress"><div style="width:43%"></div></div>
+    </div>
+  </section>
+
+  <section class="card" data-component-id="ds-tyres"><h3>轮胎</h3>
+    <div class="demo-row" style="gap:14px">
+      <span class="row" style="gap:6px"><span class="tyre s">S</span><span class="small">软胎</span></span><span class="row" style="gap:6px"><span class="tyre m">M</span><span class="small">中性胎</span></span><span class="row" style="gap:6px"><span class="tyre h">H</span><span class="small">硬胎</span></span><span class="row" style="gap:6px"><span class="tyre i">I</span><span class="small">半雨胎</span></span><span class="row" style="gap:6px"><span class="tyre w">W</span><span class="small">全雨胎</span></span>
+    </div>
+    <div class="demo-row" style="margin-top:10px"><span class="tiny muted">小号（计时塔）</span><span class="tyre sm s">S</span><span class="tyre sm m">M</span><span class="tyre sm h">H</span><span class="tyre sm i">I</span><span class="tyre sm w">W</span>
+      <span class="tiny muted" style="margin-left:12px">策略</span><span class="tyre m">M</span><span class="tyre h">H</span><span class="small">1 停 · 分段 30/48 圈</span></div>
+  </section>
+
+  <section class="card" data-component-id="ds-table"><h3>表格</h3>
+    <table><thead><tr><th>名次</th><th>车手</th><th>发车</th><th>差距</th><th>进站</th><th>轮胎</th><th>积分</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">1</td><td><span class="swatch" style="background:#27f4d2"></span>乔治·拉塞尔</td><td class="mono">1</td><td class="mono">领先</td><td>1</td><td><span class="row" style="gap:3px"><span class="tyre sm m">M</span><span class="tyre sm h">H</span></span></td><td class="mono">25</td></tr>
+        <tr class="me"><td class="mono">5</td><td><span class="swatch" style="background:#229971"></span>费尔南多·阿隆索</td><td class="mono">4</td><td class="mono">+14.326</td><td>1</td><td><span class="row" style="gap:3px"><span class="tyre sm m">M</span><span class="tyre sm h">H</span></span></td><td class="mono">10</td></tr>
+        <tr><td class="mono dim">OUT</td><td class="dim"><span class="swatch" style="background:#bb0a30"></span>博尔托莱托</td><td class="mono">12</td><td class="dim">变速箱</td><td>0</td><td><span class="tyre sm m">M</span></td><td class="mono">0</td></tr>
+      </tbody></table>
+  </section>
+
+  <section class="card full" data-component-id="ds-tower-rows"><h3>计时塔行状态</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 30px">
+      <div class="trow-wrap"><div class="tower ds-tower" style="border:0;background:#06070a"><div class="trow " style="--c:#27f4d2;--i:0"><span class="t-pos">1</span><span class="t-bar"></span><span class="t-code">RUS</span><span class="t-gap">领先</span><span class="tyre sm h">H</span></div></div><span class="state-lab">领奖台（1–3）：名次白色</span></div><div class="trow-wrap"><div class="tower ds-tower" style="border:0;background:#06070a"><div class="trow me" style="--c:#229971;--i:0"><span class="t-pos">5</span><span class="t-bar"></span><span class="t-code">ALO</span><span class="t-gap">+14.326</span><span class="tyre sm h">H</span></div></div><span class="state-lab">你的车手：队色光晕 + 左侧色条</span></div><div class="trow-wrap"><div class="tower ds-tower" style="border:0;background:#06070a"><div class="trow pit" style="--c:#dc0000;--i:0"><span class="t-pos">6</span><span class="t-bar"></span><span class="t-code">LEC<span class="t-flag pit">PIT</span></span><span class="t-gap">+15.902</span><span class="tyre sm m">M</span></div></div><span class="state-lab">PIT：进站中</span></div><div class="trow-wrap"><div class="tower ds-tower" style="border:0;background:#06070a"><div class="trow fl" style="--c:#ff8000;--i:0"><span class="t-pos">4</span><span class="t-bar"></span><span class="t-code">NOR<span class="t-flag fl" title="最快圈">FL</span></span><span class="t-gap">+9.877</span><span class="tyre sm s">S</span></div></div><span class="state-lab">FL：最快圈（紫色）</span></div><div class="trow-wrap"><div class="tower ds-tower" style="border:0;background:#06070a"><div class="trow me pen" style="--c:#229971;--i:0"><span class="t-pos">9</span><span class="t-bar"></span><span class="t-code">STR<span class="t-flag pen" title="5 秒罚时">+5s</span></span><span class="t-gap">+27.118</span><span class="tyre sm m">M</span></div></div><span class="state-lab">+5s：罚时（黄色）</span></div><div class="trow-wrap"><div class="tower ds-tower" style="border:0;background:#06070a"><div class="trow dnf" style="--c:#bb0a30;--i:0"><span class="t-pos">OUT</span><span class="t-bar"></span><span class="t-code">BOR<span class="t-flag dnf">DNF</span></span><span class="t-gap">变速箱</span></div></div><span class="state-lab">DNF：退赛，降低透明度</span></div><div class="trow-wrap"><div class="tower ds-tower" style="border:0;background:#06070a"><div class="trow" style="--c:#27f4d2;--i:0"><span class="t-pos">1</span><span class="t-bar"></span><span class="t-code">RUS</span><span class="tiny dim">MER</span><span class="t-pts">136</span></div></div><span class="state-lab">积分榜行：代码 · 车队 · 积分</span></div>
+      <div class="trow-wrap"><div class="strip" style="width:236px;border:1px solid var(--line)"><div class="s-items" style="mask-image:none"><div class="s-item me" style="--c:#229971"><span class="p">5</span><span class="bar3"></span><span class="c">ALO</span><span class="g">+14.3</span></div><div class="s-item" style="--c:#dc0000"><span class="p">6</span><span class="bar3"></span><span class="c">LEC</span><span class="g">+15.9</span></div></div></div><span class="state-lab">手机折叠横条单元</span></div>
+    </div>
+  </section>
+
+  <section class="card full" data-component-id="ds-car-states"><h3>赛车线稿 · 零件状态</h3>
+    <div style="display:grid;grid-template-columns:180px 1fr;gap:20px;align-items:center">
+      <div style="background:#05080d;border:1px solid #12202c;padding:4px"><svg class="car-svg " viewBox="0 0 596 680" role="img" aria-label="2026 F1 赛车俯视线稿：点击零件选择研发目标">
+<style>
+.car-svg{--line:#7fdcff;font-family:system-ui,-apple-system,'PingFang SC','Microsoft YaHei','Noto Sans CJK SC',sans-serif}
+.car-svg .bp-grid line{stroke:#7fdcff;stroke-opacity:.07;stroke-width:1}
+.car-svg .bp-dim{stroke:#7fdcff;stroke-opacity:.35;stroke-width:1;fill:none}
+.car-svg .bp-dim-t{fill:#7fdcff;fill-opacity:.55;font-size:12px;letter-spacing:.08em}
+.car-svg .centre{stroke:#7fdcff;stroke-opacity:.22;stroke-width:1;stroke-dasharray:10 4 2 4}
+.car-svg .fixed .s{fill:#0b1016;stroke:#9aa6b8;stroke-opacity:.55;stroke-width:1.3}
+.car-svg .fixed .d{fill:none;stroke:#9aa6b8;stroke-opacity:.35;stroke-width:1}
+.car-svg .part{--pc:#7fdcff;cursor:pointer}
+.car-svg .part .s{fill:color-mix(in srgb,var(--pc) 9%,transparent);stroke:var(--pc);stroke-width:1.6;stroke-linejoin:round;transition:fill .2s,stroke-width .2s}
+.car-svg .part .d{fill:none;stroke:var(--pc);stroke-opacity:.75;stroke-width:1.1;stroke-linecap:round}
+.car-svg .part .f{fill:var(--pc);fill-opacity:.85;stroke:none}
+.car-svg .part:hover .s{fill:color-mix(in srgb,var(--pc) 22%,transparent)}
+.car-svg .perf-top{--pc:#b05cff}.car-svg .perf-good{--pc:#1fd17a}.car-svg .perf-mid{--pc:#ffd60a}.car-svg .perf-low{--pc:#ff5a5f}
+.car-svg .perf-locked{--pc:#4a5060;cursor:not-allowed}
+.car-svg .perf-locked .s{fill:url(#hatch)}
+.car-svg .is-rnd .s{stroke-dasharray:7 4;animation:car-march 1.1s linear infinite}
+.car-svg .is-new .s{animation:car-pulse 1.6s ease-in-out infinite}
+.car-svg .is-selected .s{stroke:#fff;stroke-width:2.6;fill:color-mix(in srgb,var(--pc) 28%,transparent);filter:drop-shadow(0 0 6px var(--pc))}
+.car-svg .callout{--pc:#7fdcff;cursor:pointer}
+.car-svg .callout .lead{fill:none;stroke:var(--pc);stroke-opacity:.6;stroke-width:1.2}
+.car-svg .callout .dot{fill:var(--pc)}
+.car-svg .callout .pill{fill:#0a0d13;stroke:var(--pc);stroke-opacity:.7;stroke-width:1.2}
+.car-svg .callout .tag{fill:var(--pc)}
+.car-svg .callout .nm{fill:#f3f4f7;font-size:20px;font-weight:700;font-style:italic}
+.car-svg .callout .val{fill:var(--pc);font-size:17px;font-weight:700;font-family:'Bahnschrift','Roboto Condensed',ui-monospace,monospace}
+.car-svg .callout.is-selected .pill{fill:color-mix(in srgb,var(--pc) 26%,#0a0d13);stroke:#fff;stroke-opacity:1;stroke-width:1.8}
+.car-svg .callout.perf-locked .nm{fill:#8e95a5}
+@keyframes car-march{to{stroke-dashoffset:-22}}
+@keyframes car-pulse{50%{fill:color-mix(in srgb,var(--pc) 34%,transparent);filter:drop-shadow(0 0 8px var(--pc))}}
+@media (prefers-reduced-motion:reduce){.car-svg .part .s{animation:none!important}}
+</style>
+<defs><pattern id="hatch" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="6" stroke="#4a5060" stroke-width="2" stroke-opacity=".5"/></pattern></defs>
+<line class="centre" x1="280" y1="20" x2="280" y2="664"/>
+
+  <g class="fixed" id="wheels">
+    <rect class="s" x="168" y="92" width="40" height="86" rx="8"/><rect class="s" x="352" y="92" width="40" height="86" rx="8"/>
+    <rect class="s" x="160" y="488" width="50" height="104" rx="9"/><rect class="s" x="350" y="488" width="50" height="104" rx="9"/>
+    <path class="d" d="M174,100 L174,170 M202,100 L202,170 M358,100 L358,170 M386,100 L386,170 M167,496 L167,584 M203,496 L203,584 M357,496 L357,584 M393,496 L393,584"/>
+    <path class="d" d="M228,214 Q216,206 210,214 M332,214 Q344,206 350,214"/>
+  </g>
+<g id="part-floor" class="part perf-mid is-new" data-part="floor" tabindex="0" role="button" aria-label="底板">
+    <path class="s" d="M232,206 L198,226 L188,246 L188,456 Q190,476 214,486 L214,566 L346,566 L346,486 Q370,476 372,456 L372,246 L362,226 L328,206 Z"/>
+    <path class="d" d="M196,262 L196,446 M364,262 L364,446 M222,548 L338,548 M232,566 L228,588 L332,588 L328,566 M252,550 L250,586 M280,550 L280,588 M308,550 L310,586"/>
+    <path class="d" d="M204,230 L200,250 M356,230 L360,250" /></g>
+<g id="part-sidepods" class="part perf-mid" data-part="sidepods" tabindex="0" role="button" aria-label="侧箱">
+    <path class="s" d="M248,240 L226,240 Q208,242 208,264 L208,360 Q210,420 256,458 L256,338 L248,330 Z"/>
+    <path class="s" d="M312,240 L334,240 Q352,242 352,264 L352,360 Q350,420 304,458 L304,338 L312,330 Z"/>
+    <path class="d" d="M211,252 L246,252 M349,252 L314,252 M216,300 Q222,380 252,430 M344,300 Q338,380 308,430"/></g>
+<g id="part-chassis" class="part perf-good" data-part="chassis" tabindex="0" role="button" aria-label="底盘">
+    <path class="s" d="M273,32 Q280,27 287,32 L298,148 L312,214 L312,330 L248,330 L248,214 L262,148 Z"/>
+    <rect class="d" x="263" y="226" width="34" height="62" rx="15"/>
+    <path class="d" d="M280,204 L280,222 M262,236 C262,212 298,212 298,236 L298,282 M262,236 L262,282 M270,248 L290,248"/>
+    <path class="d" d="M268,90 L292,90 M265,130 L295,130"/></g>
+<g id="part-ers" class="part perf-locked is-selected" data-part="ers" tabindex="0" role="button" aria-label="能量回收系统">
+    <rect class="s" x="261" y="296" width="38" height="34" rx="3"/>
+    <path class="f" d="M282,300 L271,315 L279,315 L276,327 L289,310 L281,310 L284,300 Z"/>
+    <path class="d" d="M266,330 L266,338 M294,330 L294,338"/></g>
+<g id="part-power_unit" class="part perf-locked" data-part="power_unit" tabindex="0" role="button" aria-label="内燃机">
+    <path class="s" d="M258,338 L302,338 L300,446 L260,446 Z"/>
+    <circle class="d" cx="269" cy="360" r="6"/><circle class="d" cx="269" cy="382" r="6"/><circle class="d" cx="269" cy="404" r="6"/>
+    <circle class="d" cx="291" cy="360" r="6"/><circle class="d" cx="291" cy="382" r="6"/><circle class="d" cx="291" cy="404" r="6"/>
+    <circle class="s" cx="280" cy="430" r="9"/><path class="d" d="M280,421 L280,439 M271,430 L289,430"/></g>
+<g id="part-gearbox" class="part perf-good" data-part="gearbox" tabindex="0" role="button" aria-label="变速箱">
+    <path class="s" d="M265,452 L295,452 L292,536 L268,536 Z"/>
+    <circle class="d" cx="280" cy="474" r="7"/><circle class="d" cx="280" cy="500" r="7"/><circle class="d" cx="280" cy="522" r="5"/>
+    <path class="s" d="M272,536 L288,536 L286,564 L274,564 Z"/></g>
+<g id="part-suspension" class="part perf-low" data-part="suspension" tabindex="0" role="button" aria-label="悬挂">
+    <path class="d" d="M262,112 L208,130 L262,148 M264,124 L208,142 L266,166 M298,112 L352,130 L298,148 M296,124 L352,142 L294,166"/>
+    <path class="d" d="M268,500 L210,516 L270,530 M268,536 L210,552 L272,560 M292,500 L350,516 L290,530 M292,536 L350,552 L288,560"/>
+    <circle class="f" cx="208" cy="136" r="3.2"/><circle class="f" cx="352" cy="136" r="3.2"/>
+    <circle class="f" cx="210" cy="534" r="3.2"/><circle class="f" cx="350" cy="534" r="3.2"/>
+    <path class="s" style="fill:none" d="M214,128 L214,144 M346,128 L346,144 M216,512 L216,556 M344,512 L344,556"/></g>
+<g id="part-front_wing" class="part perf-top" data-part="front_wing" tabindex="0" role="button" aria-label="前翼">
+    <path class="s" d="M184,60 C232,51 328,51 376,60 L376,73 C328,66 232,66 184,73 Z"/>
+    <path class="s" d="M190,44 C236,37 324,37 370,44 L370,53 C324,47 236,47 190,53 Z"/>
+    <rect class="s" x="176" y="32" width="8" height="48" rx="2"/>
+    <rect class="s" x="376" y="32" width="8" height="48" rx="2"/></g>
+<g id="part-rear_wing" class="part perf-good is-rnd" data-part="rear_wing" tabindex="0" role="button" aria-label="尾翼">
+    <path class="s" d="M206,604 L354,604 L354,620 L206,620 Z"/>
+    <path class="s" d="M210,626 L350,626 L350,638 L210,638 Z"/>
+    <rect class="s" x="198" y="596" width="8" height="50" rx="2"/>
+    <rect class="s" x="354" y="596" width="8" height="50" rx="2"/>
+    <path class="d" d="M276,566 L276,604 M284,566 L284,604 M216,632 L344,632" style="stroke-dasharray:3 3"/></g>
+</svg></div>
+      <div class="small" style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px">
+        <span><i class="swatch" style="background:var(--perf-top)"></i>全场最佳（紫）</span>
+        <span><i class="swatch" style="background:var(--perf-good)"></i>高于平均（绿）</span>
+        <span><i class="swatch" style="background:var(--perf-mid)"></i>低于平均（黄）</span>
+        <span><i class="swatch" style="background:var(--perf-low)"></i>明显短板（红）</span>
+        <span><i class="swatch" style="background:var(--perf-locked)"></i>客户动力单元，锁定（灰斜纹）</span>
+        <span class="muted" style="grid-column:1/-1">虚线流动 = 研发中 · 脉冲 = 新件待装车 · 白描边 = 已选中</span>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+
+</body>
+</html>

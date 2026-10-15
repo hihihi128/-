@@ -1,0 +1,212 @@
+# ═══════════════ [F1M数据] 规则 ═══════════════
+# 这里可以覆盖引擎的默认规则（深度合并：只写想改的字段即可；写 null 可删除某个默认项）。
+# 下面注释里列出的是默认值，取消注释并修改即可生效。
+rules:
+  seasonYear: 2026          # 起始赛季年份
+
+  # 统一性能模型（仅为游戏平衡参考值，并非真实 F1 测量数据）
+  performance:
+    qualiSetupMax: 0.65
+    raceSetupMax: 0.50
+    qualiBonusMax: 0.20
+    practiceWearKnowledgeMax: 0.12
+    temperatureLapMax: 0.80
+    overheatWearMax: 0.28
+    trackFitMax: 0.12
+
+  # ── 积分（2026 规则：与 2025 相同，最快圈不加分）──
+  # pointsRace: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]   # 正赛积分
+  # pointsSprint: [8, 7, 6, 5, 4, 3, 2, 1]            # 冲刺赛积分
+  # fastestLapPoint: 0        # 最快圈加分（0 = 不加分）
+  # fastestLapTopN: 10        # 最快圈加分需完赛名次在前 N
+
+  # ── 财务（单位：百万美元 M$）──
+  # costCap: 215              # 预算帽（2026 规则）：研发、生产、维修、运营支出计入
+  # costCapIncludesSalaries: false
+  # costCapIncludesFacilities: false
+  # prizeMoney: [140, 125, 112, 100, 90, 80, 72, 64, 56, 50, 45]   # 赛季末按车队排名发奖金（每支车队一档；不够时用最后一档）
+  # pointBonus: 0.05          # 每得 1 分的赞助奖金
+
+  # ── 速度换算 ──
+  # secPerCarPoint: 0.08      # 赛车性能每差 1 分 ≈ 每圈差多少秒
+  # secPerDriverPoint: 0.035  # 车手能力每差 1 分 ≈ 每圈差多少秒
+
+  # ── 研发 ──
+  # aeroAllowanceBase: 40     # 每个比赛间隔的基础风洞/CFD 时长
+  # aeroAllowanceByPosition: [0.7, 0.75, 0.8, 0.85, 0.9, 0.95, 1, 1.05, 1.1, 1.15, 1.15]  # 排名越靠后时长越多（2026：第 10 名及新车队 115%）
+  # rndSlotsBase: 2           # 同时进行的设计项目数（工厂等级还会增加）
+  # partCap: 100              # 零件性能软上限（越接近越难提升）
+  # carryOver: 0.6            # 新赛季保留多少研发成果
+  # ambition:                 # 研发方案：gain 预期收益 / spread 波动 / costMul 花费倍率 / weeksMul 周期倍率 / relDelta 可靠性变化 / units 首批件数
+  #   conservative: { name: 保守, gain: 1.8, spread: 0.25, costMul: 0.75, weeksMul: 0.8, hoursMul: 0.8, relDelta: 3, units: 2 }
+  #   standard:     { name: 标准, gain: 3.2, spread: 0.45, costMul: 1, weeksMul: 1, hoursMul: 1, relDelta: 0, units: 2 }
+  #   aggressive:   { name: 激进, gain: 5.2, spread: 0.85, costMul: 1.6, weeksMul: 1.35, hoursMul: 1.4, relDelta: -6, units: 1 }
+
+  # ── 零件（可修改名称、权重、成本，也可新增零件类型）──
+  # parts:
+  #   floor:
+  #     name: 底板
+  #     aero: true               # 是否消耗风洞时长
+  #     developable: true        # 是否允许研发
+  #     weights: { downforce: 0.4, efficiency: 0.25, tyre: 0.15 }   # 对赛车属性的贡献
+  #     reliabilityWeight: 0.5
+  #     baseCost: 3              # 研发基础花费
+  #     baseWeeks: 5             # 研发基础周期（周）
+  #     aeroHours: 24            # 风洞时长消耗
+  #     unitCost: 0.8            # 额外生产一件的成本
+  #     crashDamage: 0.3         # 撞车退赛时损毁概率
+  #   ice: { name: 内燃机（ICE）, weights: { power: 0.24 } }
+  #   turbocharger: { name: 涡轮增压器（TC）, weights: { power: 0.16 } }
+  #   mgu_k: { name: 动能回收电机（MGU-K）, weights: { power: 0.22, efficiency: 0.03 } }
+  #   energy_store: { name: 储能系统（ES）, weights: { power: 0.12, efficiency: 0.01 } }
+  #   control_electronics: { name: 控制电子（CE）, weights: { power: 0.06, efficiency: 0.01 } }
+  #   exhaust: { name: 排气系统（EXH）, weights: { power: 0.1 } }
+
+  # ── 2026 赛事规则 ──
+  # qualiFinalists: 10        # Q3 保留几台车；其余平均分到 Q1/Q2 淘汰（22 台车 → 6/6/10）
+  # overtakeModeGap: 1        # 超车模式（取代 DRS）：落后前车不足该秒数时可获得额外电能
+  # overtakeModeBonus: 0.3    # 超车模式的基础优势（秒/次判定，随能量回收系统性能浮动）
+  # boostAttack: 0.12         # 「进攻」驾驶模式（Boost 按钮）进攻时的额外优势
+  # boostDefence: 0.1         # 前车同样处于「进攻」模式时可抵消的优势
+  # puAllocation:             # 每位车手每赛季可用的动力单元元件数（超出罚退）
+  #   ice: 4                  # 内燃机
+  #   turbocharger: 4         # 涡轮增压器
+  #   mgu_k: 3                # 动能回收电机
+  #   energy_store: 3         # 储能系统
+  #   control_electronics: 3  # 控制电子
+  #   exhaust: 4              # 排气系统总成
+  # puPenaltyFirst: 10        # 第一次超出配额罚退位数
+  # puPenaltyNext: 5          # 之后每次超出罚退位数
+  # aduo:                     # ADUO 动力单元追赶机制（车队数据中 worksTeam 标记厂商车队）
+  #   enabled: true
+  #   parts: [ice, turbocharger, mgu_k, energy_store, control_electronics, exhaust]
+  #   measurePart: ice         # ADUO 评估基准
+  #   baseUpgrades: 0          # 赛季开始没有基础机会；研发和生产不受限，首次装车时消耗 ADUO 认证机会
+  #   evalRounds: [6, 12, 18]  # 第几站正赛后评估（最后一站不评估：之后进入赛季结束，补偿重置）
+  #   pctPerPoint: 0.5         # 1 点零件性能差距折合的百分比
+  #   tier1Deficit: 2          # 落后 >= 2% 为一档
+  #   tier2Deficit: 4          # 落后 >= 4% 为二档
+  #   tier1Upgrades: 1         # 每次评估追加的认证升级次数
+  #   tier2Upgrades: 2
+  #   tier1CapBonus: 3         # 每次评估追加的本赛季预算帽额度（M$）
+  #   tier2CapBonus: 5
+  #   tier1WeeksMul: 0.9       # 动力单元研发周期倍率（额外台架时间）
+  #   tier2WeeksMul: 0.8
+
+  # ── 轮胎 ──
+  # tyres:
+  #   soft:   { name: 软胎, short: S, pace: -0.65, deg: 0.095, cliff: 17, wet: false, color: '#e10600', temperatureWindow: [80, 100], warmupRate: 0.42 }
+  #   medium: { name: 中性胎, short: M, pace: 0, deg: 0.06, cliff: 27, wet: false, color: '#ffd400', temperatureWindow: [85, 105], warmupRate: 0.34 }
+  #   hard:   { name: 硬胎, short: H, pace: 0.5, deg: 0.04, cliff: 40, wet: false, color: '#f2f2f2', temperatureWindow: [90, 110], warmupRate: 0.27 }
+  #   inter:  { name: 半雨胎, short: I, pace: 0.15, deg: 0.055, cliff: 34, wet: true, color: '#3fb950', temperatureWindow: [62, 82], warmupRate: 0.38 }
+  #   wet:    { name: 全雨胎, short: W, pace: 0.75, deg: 0.04, cliff: 42, wet: true, color: '#2387d9', temperatureWindow: [58, 78], warmupRate: 0.40 }
+  # dryCompounds: [soft, medium, hard]
+  # wetCompound: inter
+  # fullWetCompound: wet
+  # mandatoryCompounds: 2     # 干地正赛至少使用几种配方
+
+  # ── 其他 ──
+  # sprintLapsFactor: 0.33    # 冲刺赛圈数 = 正赛圈数 × 该比例
+  # maxGridPenalty: 10
+  # boardFireThreshold: 10    # 赛季末董事会信心低于该值 → 解雇剧情
+  # aiLimits:                 # AI 叙事指令的单次幅度上限
+  #   maxCommands: 8
+  #   morale: 10
+  #   trust: 10
+  #   board: 8
+  #   media: 10
+  #   staff: 10
+  #   funds: 3
+  #   fitness: 20
+  #   penalty: 5
+  #   fans: 6                 # 法拉利粉丝意见（只在法拉利存档生效）
+
+  # ── 法拉利「过渡领队」特殊机制（只对 special: ferrari 的玩家车队生效）──
+  # ferrari:
+  #   startMedia: 45          # 开局媒体支持率
+  #   startFans: 50           # 开局两位车手的粉丝意见
+  #   minMedia: 20            # 媒体支持率低于该值 → 撤职
+  #   warnMedia: 30           # 媒体支持率低于该值 → 警告
+  #   maxFanGap: 35           # 两边粉丝意见差距超过该值 → 撤职
+  #   warnFanGap: 25          # 差距超过该值 → 警告
+  #   mediaPerRace: 1         # 每站正赛后媒体支持率固定下降（意大利媒体的耐心）
+  #   mediaResultMul: 1.5     # 成绩对媒体支持率的影响倍率
+  #   allocationFans: 3       # 升级件分配：两车差距每 1 分，吃亏一方粉丝 -3，另一方 +1.5
+  #   priorityFans: 6         # 指定优先车手：被选中一方 +6，另一方 -7.2
+  #   orderFans: 5            # 车队指令让车：让车一方粉丝 -5，受益一方 +2
+  #   resultFans: 1.5         # 正赛成绩（队内名次、领奖台、机械故障）对粉丝意见的影响单位
+  #   graceRounds: 2          # 首个赛季前几站是适应期：只警告、不撤职
+
+  # ── 迈凯伦、梅赛德斯与红牛特殊机制 ──
+  # mclaren:
+  #   failureChance: 0.2       # 软件适配完成前，每场正赛触发动力单元异常的概率
+  #   independentWeeks: 8      # 自主适配周期
+  #   cooperationWeeks: 5      # 与梅赛德斯联合适配周期
+  #   mercedesDevelopmentBuff: 3 # 合作后梅赛德斯技术总监与气动主管能力增益
+  # mercedes:
+  #   failureChance: 0.142857  # 获得 ADUO 前，每场正赛动力单元故障概率
+  #   startTotoSatisfaction: 65
+  #   dismissTotoSatisfaction: 20
+  #   startPoliticalPressure: 35
+  #   banPoliticalPressure: 100
+  #   pressurePerRace: 8
+  #   aduoProgressPerLobby: 34
+  # redBull:
+  #   mistakeMultiplier: 1.65  # RB22 准备不足造成的车手失误概率倍率
+  #   startGpRetention: 58
+  #   gpLossPerRace: 12
+  #   gpNegotiationGain: 25
+  #   gpNegotiationCost: 1
+
+  # ── 马丁、小红牛、奥迪与 FIA 座谈会 ──
+  # astonMartin:
+  #   vibrationInterval: 10
+  #   vibrationRetireChance: 0.25
+  #   startHondaConflict: 78
+  #   startMediaPressure: 62
+  #   mediaConfidenceLoss: 3
+  #   aduoPressureGain: 28
+  #   mediationGain: 20
+  #   neweyProgressGain: 25
+  #   aduoPuBuff: 4.2
+  #   chassisBuff: 2
+  # racingBulls:
+  #   recallChance: 0.05
+  # audi:
+  #   startDropMin: 2
+  #   startDropMax: 3
+  #   allianceProgress: 34
+  #   progressPerRace: 10
+  # fiaMeeting:
+  #   interval: 3
+  #   startPoliticalCapital: 50
+  # alpine:                    # 布里亚托利接班人、车手平衡与梅奔动力匹配
+  #   startBriatoreSatisfaction: 65
+  #   dismissBriatoreSatisfaction: 20
+  #   startFanPressure: 42
+  #   startGaslyCommitment: 72
+  #   startPuIntegration: 20
+  #   integrationGain: 24
+  # haas:                      # 吉恩·哈斯与丰田之间的权力平衡
+  #   startGeneSupport: 62
+  #   startToyotaSupport: 52
+  #   startToyotaInfluence: 20
+  #   influencePerRace: 5
+  #   interferenceThreshold: 60
+  #   dismissGeneSupport: 15
+  # williams:                  # 2026 全年接班培养与预算取舍
+  #   startVowlesConfidence: 65
+  #   startSuccessionReadiness: 25
+  #   successionThreshold: 55
+  #   dismissVowlesConfidence: 20
+  # randomEvents:              # 每周最多 1 次；约 80% 是日常小事；每次持续 2–3 轮对话
+  #   minPerWeek: 1
+  #   maxPerWeek: 1
+  #   routineWeight: 80
+  #   noneWeight: 0            # 仅保留旧存档兼容
+  #   driverInjuryWeight: 7
+  #   windTunnelWeight: 6
+  #   partIssueWeight: 7
+  #   minDialogueTurns: 2
+  #   maxDialogueTurns: 3
+  # 随机事件每周最多一次。若要关闭，请同时把 minPerWeek 与 maxPerWeek 设为 0。

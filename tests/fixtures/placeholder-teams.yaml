@@ -1,0 +1,308 @@
+# ═══════════════ [F1M数据] 车队 ═══════════════
+# ⚠ 测试夹具：固定的占位车队数据，只给引擎测试使用。角色卡实际数据在 src/card/worldbook/data-teams.yaml。
+# ⚠ 除「法拉利车队」（id: ferrari，2026 真实资料）外，其余都是「虚构的占位测试数据」，
+#   只用来验证框架能否运行。正式游玩前，请把它们替换成你自己的车队资料。
+#
+# 字段说明（除 id 外都可省略，省略时使用默认值）：
+#   id              唯一标识（英文/数字），车手与赛历都用它引用车队
+#   name / short    全称 / 三字母简称
+#   color           车队主色（#RRGGBB），用于界面
+#   principal       AI 车队的领队名字（玩家车队会被替换成玩家）
+#   special         特殊机制（可省略）。目前只有 ferrari：玩家作为过渡领队，
+#                   需要维持媒体支持率并平衡两位车手的粉丝意见，否则会被撤职
+#   engine / base   动力单元供应商 / 车队基地（仅供叙事）
+#   funds           初始资金（百万美元 M$）
+#   sponsorIncome   每站赞助收入（M$）
+#   operatingCost   每站运营成本（M$，计入预算帽）
+#   targetPosition  董事会期望的车队排名
+#   facilities      设施等级 1~5：windTunnel 风洞 / cfd CFD / simulator 模拟器 / factory 工厂
+#   staff           关键员工：technicalDirector 技术总监 / aeroChief 空气动力学主管 /
+#                   raceEngineer 比赛工程师 / pitCrew 维修组 / strategist 策略师
+#                   每项可写 {name, skill(1~100), salary(年薪 M$)}，也可只写一个数字表示 skill
+#   carBase         未单独填写的零件默认 {perf 性能, rel 可靠性}
+#   parts           各零件初始 {perf, rel}，键为零件类型：
+#                   ice 内燃机 / turbocharger 涡轮 / mgu_k 动能回收电机 / energy_store 储能系统 /
+#                   control_electronics 控制电子 / exhaust 排气系统（2026：取消 MGU-H）/
+#                   gearbox 变速箱 / chassis 底盘 / front_wing 前翼（主动空力）/
+#                   rear_wing 尾翼（主动空力）/ floor 底板 / sidepods 侧箱 / suspension 悬挂
+#   description     车队简介（会显示在面板上）
+teams:
+  - id: team_a
+    name: 测试车队A
+    short: TSA
+    color: '#e10600'
+    principal: 占位领队A
+    engine: 测试动力甲
+    base: 测试基地A
+    funds: 70
+    sponsorIncome: 5
+    operatingCost: 2.4
+    targetPosition: 1
+    facilities: { windTunnel: 4, cfd: 4, simulator: 4, factory: 4 }
+    staff:
+      technicalDirector: { name: 技术总监A, skill: 84, salary: 3 }
+      aeroChief: { name: 空动主管A, skill: 80, salary: 2 }
+      raceEngineer: { name: 工程师A, skill: 78, salary: 1 }
+      pitCrew: { skill: 82, salary: 1.5 }
+      strategist: { name: 策略师A, skill: 76, salary: 1 }
+    carBase: { perf: 83, rel: 84 }
+    parts:
+      ice: { perf: 88, rel: 83 }
+      turbocharger: { perf: 88, rel: 83 }
+      exhaust: { perf: 88, rel: 83 }
+      floor: { perf: 84, rel: 85 }
+    description: 占位数据：动力强劲的老牌强队，直道速度出众。
+
+  - id: team_b
+    name: 测试车队B
+    short: TSB
+    color: '#1e90ff'
+    principal: 占位领队B
+    engine: 测试动力乙
+    base: 测试基地B
+    funds: 65
+    sponsorIncome: 4.6
+    operatingCost: 2.3
+    targetPosition: 2
+    facilities: { windTunnel: 4, cfd: 3, simulator: 4, factory: 4 }
+    staff:
+      technicalDirector: { name: 技术总监B, skill: 80, salary: 2.6 }
+      aeroChief: { name: 空动主管B, skill: 84, salary: 2.2 }
+      raceEngineer: { name: 工程师B, skill: 80, salary: 1 }
+      pitCrew: { skill: 86, salary: 1.5 }
+      strategist: { name: 策略师B, skill: 80, salary: 1 }
+    carBase: { perf: 81, rel: 88 }
+    parts:
+      floor: { perf: 86, rel: 88 }
+      front_wing: { perf: 85, rel: 90 }
+      ice: { perf: 80, rel: 90 }
+      turbocharger: { perf: 80, rel: 90 }
+      exhaust: { perf: 80, rel: 90 }
+    description: 占位数据：下压力出色、可靠性极高的稳健车队。
+
+  - id: team_c
+    name: 测试车队C
+    short: TSC
+    color: '#ff8700'
+    principal: 占位领队C
+    engine: 测试动力甲
+    base: 测试基地C
+    funds: 50
+    sponsorIncome: 3.8
+    operatingCost: 2
+    targetPosition: 5
+    facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 3 }
+    staff:
+      technicalDirector: { name: 技术总监C, skill: 74, salary: 1.8 }
+      aeroChief: { name: 空动主管C, skill: 72, salary: 1.4 }
+      raceEngineer: { name: 工程师C, skill: 72, salary: 0.8 }
+      pitCrew: { skill: 75, salary: 1 }
+      strategist: { name: 策略师C, skill: 70, salary: 0.8 }
+    carBase: { perf: 78, rel: 82 }
+    parts:
+      suspension: { perf: 82, rel: 84 }
+      chassis: { perf: 80, rel: 84 }
+    description: 占位数据：机械抓地扎实的中游车队，慢速弯表现好。
+
+  - id: team_d
+    name: 测试车队D
+    short: TSD
+    color: '#2fbf71'
+    principal: 占位领队D
+    engine: 测试动力乙
+    base: 测试基地D
+    funds: 40
+    sponsorIncome: 3
+    operatingCost: 1.8
+    targetPosition: 10
+    facilities: { windTunnel: 2, cfd: 3, simulator: 2, factory: 2 }
+    staff:
+      technicalDirector: { name: 技术总监D, skill: 68, salary: 1.2 }
+      aeroChief: { name: 空动主管D, skill: 66, salary: 1 }
+      raceEngineer: { name: 工程师D, skill: 68, salary: 0.6 }
+      pitCrew: { skill: 70, salary: 0.8 }
+      strategist: { name: 策略师D, skill: 66, salary: 0.6 }
+    carBase: { perf: 74, rel: 78 }
+    description: 占位数据：预算有限的尾部车队。
+
+  - id: team_e
+    name: 测试车队E
+    short: TSE
+    color: '#00d2be'
+    principal: 占位领队E
+    engine: 测试动力丙
+    base: 测试基地E
+    funds: 62
+    sponsorIncome: 4.4
+    operatingCost: 2.2
+    targetPosition: 3
+    facilities: { windTunnel: 4, cfd: 4, simulator: 3, factory: 4 }
+    staff:
+      technicalDirector: { name: 技术总监E, skill: 79, salary: 2.4 }
+      aeroChief: { name: 空动主管E, skill: 78, salary: 1.8 }
+      raceEngineer: { name: 工程师E, skill: 77, salary: 0.9 }
+      pitCrew: { skill: 80, salary: 1.3 }
+      strategist: { name: 策略师E, skill: 75, salary: 0.9 }
+    carBase: { perf: 80, rel: 83 }
+    parts:
+      chassis: { perf: 82, rel: 84 }
+      rear_wing: { perf: 82, rel: 85 }
+    description: 占位数据：资源充足的厂商车队，正在冲击冠军。
+
+  # ── 法拉利：真实车队（2026 赛季），带「过渡领队」特殊机制 ──
+  # 选择法拉利开局时：玩家是埃尔坎从外部请来的过渡领队，需要稳住媒体支持率，
+  # 并平衡汉密尔顿与勒克莱尔两边的粉丝意见（阈值见 [F1M数据] 规则中的 ferrari 段）。
+  - id: ferrari
+    name: 法拉利车队
+    short: FER
+    color: '#dc0000'
+    special: ferrari
+    principal: 空缺（过渡领队）
+    engine: 法拉利
+    base: 意大利·马拉内罗
+    funds: 120
+    sponsorIncome: 7.5
+    operatingCost: 2.6
+    targetPosition: 4
+    facilities: { windTunnel: 4, cfd: 4, simulator: 5, factory: 5 }
+    staff:
+      technicalDirector: { name: 洛伊克·塞拉（底盘技术总监）, skill: 84, salary: 3 }
+      aeroChief: { name: 迭戈·通迪, skill: 80, salary: 2 }
+      raceEngineer: { name: 布莱恩·博齐, skill: 79, salary: 1 }
+      pitCrew: { name: 法拉利维修组, skill: 87, salary: 1.6 }
+      strategist: { name: 拉文·贾恩, skill: 77, salary: 1 }
+    carBase: { perf: 81, rel: 82 }
+    parts:
+      # 钢制气缸盖方案失败，只能退回保守方案：内燃机功率与可靠性都吃亏
+      ice: { perf: 77, rel: 76 }
+      turbocharger: { perf: 77, rel: 76 }
+      exhaust: { perf: 77, rel: 76 }
+      mgu_k: { perf: 80, rel: 80 }
+      energy_store: { perf: 80, rel: 80 }
+      control_electronics: { perf: 80, rel: 80 }
+      chassis: { perf: 82, rel: 84 }
+      front_wing: { perf: 83, rel: 85 }
+      rear_wing: { perf: 82, rel: 85 }
+      floor: { perf: 80, rel: 82 }
+      suspension: { perf: 82, rel: 84 }
+    description: >-
+      SF-26 · 法拉利动力单元。2025 年 SF-25 的底板与后悬挂问题迫使赛车抬高车身，全年无大奖赛胜利，
+      车队积分榜第 4（398 分）。年底，恩里科·瓜尔蒂耶里主导的钢制气缸盖发动机方案宣告失败，
+      埃尔坎随即解除了弗雷德·瓦塞尔的领队职务。2026 是过渡年，你将作为外聘的过渡领队接手：
+      稳住媒体、平衡汉密尔顿与勒克莱尔两边的粉丝，否则会被撤职。
+
+  - id: team_g
+    name: 测试车队G
+    short: TSG
+    color: '#6a5acd'
+    principal: 占位领队G
+    engine: 测试动力乙
+    base: 测试基地G
+    funds: 52
+    sponsorIncome: 3.8
+    operatingCost: 2.0
+    targetPosition: 6
+    facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 4 }
+    staff:
+      technicalDirector: { name: 技术总监G, skill: 73, salary: 1.6 }
+      aeroChief: { name: 空动主管G, skill: 71, salary: 1.3 }
+      raceEngineer: { name: 工程师G, skill: 74, salary: 0.8 }
+      pitCrew: { skill: 76, salary: 1.0 }
+      strategist: { name: 策略师G, skill: 72, salary: 0.8 }
+    carBase: { perf: 77, rel: 84 }
+    parts:
+      floor: { perf: 79, rel: 85 }
+    description: 占位数据：工厂设施完善的稳健中游车队。
+
+  - id: team_h
+    name: 测试车队H
+    short: TSH
+    color: '#ffd400'
+    principal: 占位领队H
+    engine: 测试动力丙
+    base: 测试基地H
+    funds: 48
+    sponsorIncome: 3.5
+    operatingCost: 1.9
+    targetPosition: 7
+    facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 3 }
+    staff:
+      technicalDirector: { name: 技术总监H, skill: 72, salary: 1.5 }
+      aeroChief: { name: 空动主管H, skill: 73, salary: 1.3 }
+      raceEngineer: { name: 工程师H, skill: 71, salary: 0.7 }
+      pitCrew: { skill: 74, salary: 1.0 }
+      strategist: { name: 策略师H, skill: 70, salary: 0.7 }
+    carBase: { perf: 76, rel: 79 }
+    parts:
+      front_wing: { perf: 79, rel: 80 }
+      sidepods: { perf: 78, rel: 80 }
+    description: 占位数据：空气动力学见长、预算紧张的中游车队。
+
+  - id: team_i
+    name: 测试车队I
+    short: TSI
+    color: '#8b4513'
+    principal: 占位领队I
+    engine: 测试动力丁
+    base: 测试基地I
+    funds: 45
+    sponsorIncome: 3.3
+    operatingCost: 1.9
+    targetPosition: 8
+    facilities: { windTunnel: 2, cfd: 3, simulator: 3, factory: 3 }
+    staff:
+      technicalDirector: { name: 技术总监I, skill: 70, salary: 1.3 }
+      aeroChief: { name: 空动主管I, skill: 69, salary: 1.1 }
+      raceEngineer: { name: 工程师I, skill: 72, salary: 0.7 }
+      pitCrew: { skill: 73, salary: 0.9 }
+      strategist: { name: 策略师I, skill: 71, salary: 0.7 }
+    carBase: { perf: 75, rel: 81 }
+    parts:
+      suspension: { perf: 78, rel: 82 }
+    description: 占位数据：机械设计扎实但空动落后的车队。
+
+  - id: team_j
+    name: 测试车队J
+    short: TSJ
+    color: '#a0a0a0'
+    principal: 占位领队J
+    engine: 测试动力甲
+    base: 测试基地J
+    funds: 42
+    sponsorIncome: 3.1
+    operatingCost: 1.8
+    targetPosition: 9
+    facilities: { windTunnel: 2, cfd: 2, simulator: 3, factory: 2 }
+    staff:
+      technicalDirector: { name: 技术总监J, skill: 69, salary: 1.2 }
+      aeroChief: { name: 空动主管J, skill: 68, salary: 1.0 }
+      raceEngineer: { name: 工程师J, skill: 70, salary: 0.6 }
+      pitCrew: { skill: 71, salary: 0.8 }
+      strategist: { name: 策略师J, skill: 68, salary: 0.6 }
+    carBase: { perf: 74, rel: 77 }
+    parts:
+      ice: { perf: 86, rel: 80 }
+      turbocharger: { perf: 86, rel: 80 }
+      exhaust: { perf: 86, rel: 80 }
+    description: 占位数据：依靠客户引擎的小车队。
+
+  - id: team_k
+    name: 测试车队K
+    short: TSK
+    color: '#c8102e'
+    principal: 占位领队K
+    engine: 测试动力丁
+    base: 测试基地K
+    funds: 60
+    sponsorIncome: 3.6
+    operatingCost: 2.0
+    targetPosition: 11
+    facilities: { windTunnel: 3, cfd: 3, simulator: 2, factory: 3 }
+    staff:
+      technicalDirector: { name: 技术总监K, skill: 72, salary: 2.2 }
+      aeroChief: { name: 空动主管K, skill: 70, salary: 1.6 }
+      raceEngineer: { name: 工程师K, skill: 68, salary: 0.8 }
+      pitCrew: { skill: 68, salary: 1.2 }
+      strategist: { name: 策略师K, skill: 66, salary: 0.8 }
+    carBase: { perf: 72, rel: 75 }
+    description: 占位数据：刚刚加入的新车队，资金充裕但经验不足。

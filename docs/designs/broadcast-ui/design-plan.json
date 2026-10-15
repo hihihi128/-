@@ -1,0 +1,96 @@
+{
+  "title": "F1 领队模拟器 · F1 电视转播风格 UI 重设计",
+  "summary": "Single direction: an F1 TV broadcast-graphics look with a dark carbon-fibre surface, glowing player-team colour (--team), bold italic condensed headings, skewed lower-third tags and short CSS motion that honours reduced motion. The desktop panel (980×720) adds a left timing tower: standings on non-race screens, live race order during a weekend. Phones (390×844) use a collapsed header, a 40px collapsible timing-tower strip that slides the full tower out when opened, and a 6-tab bottom bar (总览/比赛周末/车手/赛车/研发/更多; 更多 holds 积分榜 and 存档与设置). R&D is built around a clickable top-down car drawing coloured by part performance, plus the new ADUO card; a customer-team phone variant shows PU/ERS locked. The in-chat HUD keeps every current field in a compact carbon strip with a team-colour edge. Shared assets not linked as variations: tokens.css (all tokens, same variable names as the current panel) and car-topdown.svg (standalone drawing with part ids and state classes). The product is dark-only, so there are no light-theme files. Sample data is illustrative (Aston Martin, Honda ADUO tier 2, Monaco round 8).",
+  "sections": [
+    {
+      "title": "面板设计系统",
+      "key": "design-system",
+      "description": "Colours, team colours, type, buttons, badges, bars, tyres, timing-tower row states, tables and car part states.",
+      "variations": [
+        { "title": "广播风格组件库", "key": "broadcast", "html_link": "panel-design-system.html", "is_recommended": true }
+      ]
+    },
+    {
+      "title": "总览 · 桌面",
+      "key": "overview-desktop",
+      "description": "Overview with the standings timing tower on the left and KPIs, next round, rankings, drivers and narration.",
+      "variations": [
+        { "title": "侧边计时塔", "key": "tower", "html_link": "desktop-overview-tower.html", "is_recommended": true }
+      ]
+    },
+    {
+      "title": "比赛周末 · 桌面",
+      "key": "weekend-desktop",
+      "description": "Live race: tower with gaps, tyres and PIT/FL/+5s/DNF flags, plus stepper, team orders and both drivers' strategy.",
+      "variations": [
+        { "title": "正赛实时", "key": "live", "html_link": "desktop-weekend-live.html", "is_recommended": true }
+      ]
+    },
+    {
+      "title": "研发与设施 · 桌面",
+      "key": "rnd-desktop",
+      "description": "Top-down car drawing for part selection, development preview, projects, ADUO card, facilities and staff.",
+      "variations": [
+        { "title": "赛车线稿 + ADUO", "key": "car-aduo", "html_link": "desktop-rnd-car-aduo.html", "is_recommended": true }
+      ]
+    },
+    {
+      "title": "新赛季 · 桌面",
+      "key": "newgame-desktop",
+      "description": "Grid of broadcast-style team cards with a setup sidebar, Ferrari interim-principal notice and start button.",
+      "variations": [
+        { "title": "队卡选择", "key": "picker", "html_link": "desktop-newgame-picker.html", "is_recommended": true }
+      ]
+    },
+    {
+      "title": "总览 · 手机",
+      "key": "overview-phone",
+      "description": "Collapsed header, collapsed standings strip, KPIs, next round, drivers and bottom tab bar.",
+      "variations": [
+        { "title": "折叠计时横条", "key": "strip", "html_link": "phone-overview-strip.html", "is_recommended": true }
+      ]
+    },
+    {
+      "title": "比赛周末 · 手机",
+      "key": "weekend-phone",
+      "description": "Live race on phone with the collapsed strip, and the strip opened into a slide-out tower.",
+      "variations": [
+        { "title": "正赛实时（横条折叠）", "key": "live", "html_link": "phone-weekend-live.html", "is_recommended": true },
+        { "title": "展开计时塔", "key": "tower-open", "html_link": "phone-weekend-tower-open.html", "is_recommended": false }
+      ]
+    },
+    {
+      "title": "研发 · 手机",
+      "key": "rnd-phone",
+      "description": "Full-width car drawing, development form and ADUO, for works and customer teams.",
+      "variations": [
+        { "title": "厂商车队 + ADUO", "key": "works", "html_link": "phone-rnd-car-aduo.html", "is_recommended": true },
+        { "title": "客户车队（动力单元锁定）", "key": "customer", "html_link": "phone-rnd-customer.html", "is_recommended": false }
+      ]
+    },
+    {
+      "title": "新赛季 · 手机",
+      "key": "newgame-phone",
+      "description": "Stacked team cards with the selected card expanded, setup fields and a fixed start button.",
+      "variations": [
+        { "title": "竖排队卡", "key": "picker", "html_link": "phone-newgame-picker.html", "is_recommended": true }
+      ]
+    },
+    {
+      "title": "聊天 HUD · 桌面",
+      "key": "hud-desktop",
+      "description": "760px chat-column HUD: normal, Ferrari, race weekend change log, dimmed old message and no game.",
+      "variations": [
+        { "title": "五种状态", "key": "states", "html_link": "hud-desktop.html", "is_recommended": true }
+      ]
+    },
+    {
+      "title": "聊天 HUD · 手机",
+      "key": "hud-phone",
+      "description": "390px HUD with stats wrapped to a second line and the same five states.",
+      "variations": [
+        { "title": "五种状态", "key": "states", "html_link": "hud-phone.html", "is_recommended": true }
+      ]
+    }
+  ]
+}

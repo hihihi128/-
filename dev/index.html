@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>F1 领队模拟器 · 本地开发页（模拟酒馆）</title>
+    <style>
+      body { margin: 0; background: #0b0c0f; color: #e8eaef; font: 13px/1.6 system-ui, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif; }
+      header { display: flex; gap: 10px; align-items: center; padding: 10px 14px; background: #15171c; border-bottom: 1px solid #2a2f3b; position: sticky; top: 0; z-index: 5; flex-wrap: wrap; }
+      header b { font-size: 15px; }
+      button { font: inherit; color: #e8eaef; background: #1d212b; border: 1px solid #2f3542; border-radius: 8px; padding: 5px 12px; cursor: pointer; }
+      button.primary { background: #e10600; border-color: transparent; color: #fff; font-weight: 600; }
+      main { max-width: 920px; margin: 0 auto; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
+      .mes { background: #14161b; border: 1px solid #262a34; border-radius: 10px; padding: 10px 12px; }
+      .mes.user { background: #191c24; border-color: #2f3542; }
+      .mes .who { font-size: 12px; color: #8d93a3; display: flex; justify-content: space-between; gap: 8px; }
+      .mes .text { white-space: pre-wrap; word-break: break-word; }
+      .mes iframe { width: 100%; border: 0; display: block; margin-top: 6px; min-height: 60px; }
+      .upd { background: #0f1115; border: 1px dashed #3a4050; border-radius: 6px; padding: 4px 8px; color: #9aa3b5; font-size: 12px; white-space: pre-wrap; margin-top: 6px; }
+      .composer { position: sticky; bottom: 0; background: #0b0c0f; padding: 10px 0; display: flex; flex-direction: column; gap: 6px; }
+      textarea { width: 100%; box-sizing: border-box; background: #0f1115; color: #e8eaef; border: 1px solid #2f3542; border-radius: 8px; padding: 8px; font: inherit; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      .muted { color: #8d93a3; }
+      .swipe { display: inline-flex; gap: 4px; align-items: center; }
+      .swipe button { padding: 0 8px; }
+      #prompt { white-space: pre-wrap; background: #0f1115; border: 1px solid #2a2f3b; border-radius: 8px; padding: 8px; font-size: 11px; max-height: 300px; overflow: auto; display: none; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <b>F1 领队模拟器</b>
+      <span class="muted">本地开发页 · 模拟酒馆助手环境（无需 SillyTavern）</span>
+      <span style="flex: 1"></span>
+      <button id="btn-panel" class="primary">F1管理面板</button>
+      <button id="btn-narrate">AI叙述</button>
+      <button id="btn-prompt">查看注入提示词</button>
+    </header>
+    <main>
+      <div id="chat"></div>
+      <pre id="prompt"></pre>
+      <div class="composer">
+        <textarea id="input" rows="3" placeholder="输入用户消息；或输入 AI 回复（可包含 <F1M_UPDATE> 指令块）"></textarea>
+        <div class="row">
+          <button id="btn-user" class="primary">以用户身份发送</button>
+          <button id="btn-ai">以 AI 身份回复</button>
+          <button id="btn-ai-auto">模拟 AI 自动回复</button>
+          <button id="btn-swipe">重 roll 最后一楼（新 swipe）</button>
+          <button id="btn-del">删除最后一楼</button>
+          <span class="muted" id="status"></span>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>

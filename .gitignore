@@ -1,5 +1,10 @@
-node_modules/
+node_modules
 .DS_Store
 *.log
 coverage/
 .tmp/
+
+# 本地开发页的中文字体（仅用于无中文字体的 Linux 截图环境）
+dev/public/cjk.ttf
+dist/.panel/
+dist/.dev/

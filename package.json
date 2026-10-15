@@ -1,0 +1,30 @@
+{
+  "name": "f1-principal-sillytavern",
+  "version": "0.1.0",
+  "private": true,
+  "description": "F1 领队模拟器：基于酒馆助手 (Tavern Helper) 的 SillyTavern 角色卡框架——独立数值引擎 + 悬浮管理面板 + 楼层状态条",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "build:panel": "vite build --config vite.panel.config.ts",
+    "dev": "vite --config vite.dev.config.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "vue-tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^24.0.0",
+    "@vitejs/plugin-vue": "^6.0.10",
+    "esbuild": "^0.28.2",
+    "jsdom": "^27.0.0",
+    "lz-string": "^1.5.0",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.4",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^5.0.3",
+    "vue": "^3.5.43",
+    "vue-tsc": "^3.3.13",
+    "yaml": "^2.9.1"
+  }
+}

@@ -1,0 +1,27 @@
+# ═══════════════ [F1M数据] 2026 世界一级方程式锦标赛赛历 ═══════════════
+# 24 站正式赛历；马德里站在 FIA / F1 公布时仍标记为待赛道认证。
+calendar:
+  - { track: melbourne, name: 澳大利亚大奖赛, sprint: false, weeksGap: 4, date: 3月6–8日 }
+  - { track: shanghai, name: 中国大奖赛, sprint: true, weeksGap: 1, date: 3月13–15日 }
+  - { track: suzuka, name: 日本大奖赛, sprint: false, weeksGap: 2, date: 3月27–29日 }
+  - { track: bahrain, name: 巴林大奖赛, sprint: false, weeksGap: 2, date: 4月10–12日 }
+  - { track: jeddah, name: 沙特阿拉伯大奖赛, sprint: false, weeksGap: 1, date: 4月17–19日 }
+  - { track: miami, name: 迈阿密大奖赛, sprint: true, weeksGap: 2, date: 5月1–3日 }
+  - { track: montreal, name: 加拿大大奖赛, sprint: true, weeksGap: 3, date: 5月22–24日 }
+  - { track: monaco, name: 摩纳哥大奖赛, sprint: false, weeksGap: 2, date: 6月5–7日 }
+  - { track: barcelona, name: 巴塞罗那-加泰罗尼亚大奖赛, sprint: false, weeksGap: 1, date: 6月12–14日 }
+  - { track: spielberg, name: 奥地利大奖赛, sprint: false, weeksGap: 2, date: 6月26–28日 }
+  - { track: silverstone, name: 英国大奖赛, sprint: true, weeksGap: 1, date: 7月3–5日 }
+  - { track: spa, name: 比利时大奖赛, sprint: false, weeksGap: 2, date: 7月17–19日 }
+  - { track: hungaroring, name: 匈牙利大奖赛, sprint: false, weeksGap: 1, date: 7月24–26日 }
+  - { track: zandvoort, name: 荷兰大奖赛, sprint: true, weeksGap: 4, date: 8月21–23日 }
+  - { track: monza, name: 意大利大奖赛, sprint: false, weeksGap: 2, date: 9月4–6日 }
+  - { track: madrid, name: 西班牙大奖赛（马德里）, sprint: false, weeksGap: 1, date: 9月11–13日 }
+  - { track: baku, name: 阿塞拜疆大奖赛, sprint: false, weeksGap: 2, date: 9月24–26日 }
+  - { track: singapore, name: 新加坡大奖赛, sprint: true, weeksGap: 2, date: 10月9–11日 }
+  - { track: cota, name: 美国大奖赛, sprint: false, weeksGap: 2, date: 10月23–25日 }
+  - { track: mexico, name: 墨西哥城大奖赛, sprint: false, weeksGap: 1, date: 10月30日–11月1日 }
+  - { track: interlagos, name: 圣保罗大奖赛, sprint: false, weeksGap: 1, date: 11月6–8日 }
+  - { track: las_vegas, name: 拉斯维加斯大奖赛, sprint: false, weeksGap: 2, date: 11月19–21日 }
+  - { track: lusail, name: 卡塔尔大奖赛, sprint: false, weeksGap: 1, date: 11月27–29日 }
+  - { track: yas_marina, name: 阿布扎比大奖赛, sprint: false, weeksGap: 1, date: 12月4–6日 }

@@ -1,0 +1,1070 @@
+import { beforeEach, describe, expect, it } from 'vitest';
+import { continuationSuffix, F1Controller, HUD_TAG, INJECT_ID, LEADERSHIP_PREFIX, PLAYER_REPLACED_LEADERSHIP, principalRole } from '../../src/tavern/controller';
+import { PTR, STORE_KEY } from '../../src/tavern/store';
+import { cardWorldbook, FakeTavern } from './fakeEnv';
+
+const update = (lines: string[]) => `\n<F1M_UPDATE>\n${lines.join('\n')}\n</F1M_UPDATE>`;
+
+async function setup() {
+  const env = new FakeTavern();
+  const ctrl = new F1Controller(env);
+  ctrl.init();
+  const res = await ctrl.newGame({ playerTeamId: 'team_c', seed: 2024 });
+  expect(res.ok).toBe(true);
+  return { env, ctrl };
+}
+
+async function prepareRace(ctrl: F1Controller) {
+  for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
+  const state = ctrl.stateAt()!;
+  const grid = Object.values(state.teams).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+  state.season.phase = 'race';
+  state.weekend!.qualifying = { kind: 'qualifying', weather: 'dry', sessions: [], order: [...grid], grid: [...grid], pole: null, events: [] };
+  expect((await ctrl.importSave(JSON.stringify(state))).ok).toBe(true);
+  return { state: ctrl.stateAt()!, grid };
+}
+
+describe('后端控制器（模拟酒馆环境）', () => {
+  let env: FakeTavern;
+  let ctrl: F1Controller;
+  beforeEach(async () => {
+    ({ env, ctrl } = await setup());
+  });
+
+  it('开局后存档挂在最新楼层，并能生成视图与状态条', () => {
+    expect(env.messages[0].variables[0][PTR]).toBeTruthy();
+    expect(env.chatVars[STORE_KEY].revisions).toBeTruthy();
+    const st = ctrl.status();
+    expect(st.hasGame).toBe(true);
+    expect(st.revisions).toBe(1);
+    const v = ctrl.view()!;
+    expect(v.player.team.name).toBe('测试车队C');
+    const hud = ctrl.hud(0);
+    expect(hud.hasGame).toBe(true);
+    expect(hud.team?.name).toBe('测试车队C');
+    expect(hud.ownRevision).toBe(true);
+  });
+
+  it('同一楼层上的连续面板操作合并为一个版本', async () => {
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'suspension', ambition: 'conservative' })).ok).toBe(true);
+    expect(ctrl.status().revisions).toBe(2); // 开局 + 一个合并的面板版本
+    expect(ctrl.stateAt()!.teams.team_c.projects).toHaveLength(2);
+    // 新楼层的操作生成新版本
+    await env.userSays('开始赛季吧');
+    expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
+    expect(ctrl.status().revisions).toBe(3);
+    expect(env.messages[1].variables[0][PTR]).toBeTruthy();
+  });
+
+  it('车队工程师默认走主 API，也可使用设置中的副 API', async () => {
+    for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) {
+      const result = await ctrl.dispatch({ type: 'ADVANCE' });
+      expect(result.ok).toBe(true);
+    }
+    expect(ctrl.stateAt()!.weekend).toBeTruthy();
+    const main = await ctrl.requestEngineerStrategy('c1');
+    expect(main.ok).toBe(true);
+    expect(main.api).toBe('main');
+    expect(main.plan?.tyrePlan).toBeTruthy();
+    expect(env.generated.at(-1)?.options).toBeUndefined();
+
+    ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: '策略副线', engineerModel: 'test-model' });
+    const secondary = await ctrl.requestEngineerStrategy('c1');
+    expect(secondary.ok).toBe(true);
+    expect(secondary.api).toBe('secondary');
+    expect(env.generated.at(-1)?.options).toEqual({ proxyPreset: '策略副线', model: 'test-model' });
+
+    ctrl.updateSettings({ engineerProxyPreset: '', engineerApiUrl: 'https://api.example.com/v1', engineerApiKey: 'secret-key', engineerModel: 'direct-model' });
+    const direct = await ctrl.requestEngineerStrategy('c1');
+    expect(direct.ok).toBe(true);
+    expect(env.generated.at(-1)?.options).toEqual({ apiUrl: 'https://api.example.com/v1', apiKey: 'secret-key', model: 'direct-model' });
+    expect(ctrl.status().settings.engineerApiKey).toBe('');
+    expect(ctrl.settingsView()).toMatchObject({ engineerApiKey: '', hasEngineerApiKey: true });
+    expect(env.localSecrets['secondary-api-key']).toBe('secret-key');
+    expect(JSON.stringify(env.scriptVars)).not.toContain('secret-key');
+    expect(ctrl.exportSave()).not.toContain('secret-key');
+
+    const contextual = ctrl.stateAt()!;
+    contextual.weekend!.forecast.race = 0.72;
+    contextual.weekend!.forecast.raceRainWindow = [10, 14];
+    contextual.weekend!.weather.race = 'dry';
+    contextual.weekend!.qualifying = {
+      kind: 'qualifying',
+      weather: 'dry',
+      sessions: [],
+      order: ['a1', 'c1'],
+      grid: ['a1', 'c1'],
+      pole: null,
+      events: [],
+    };
+    expect((await ctrl.importSave(JSON.stringify(contextual))).ok).toBe(true);
+    const weatherAware = await ctrl.requestEngineerStrategy('c1', 'main');
+    expect(weatherAware.ok).toBe(true);
+    expect(weatherAware.gridPosition).toBe(2);
+    expect(weatherAware.weatherResponse).toContain('第 10–14 圈可能降雨');
+    expect(weatherAware.explanation).toContain('天气预案');
+    expect(weatherAware.explanation).toContain('半雨胎或全雨胎');
+    expect(env.generated.at(-1)?.prompt).toContain('从 P2 发车');
+    expect(env.generated.at(-1)?.prompt).toContain('正赛降雨概率 72%');
+    expect(env.generated.at(-1)?.prompt).toContain('半雨胎或全雨胎');
+
+    contextual.weekend!.forecast.raceRainWindow = [1, 4];
+    contextual.weekend!.weather.race = 'wet';
+    expect((await ctrl.importSave(JSON.stringify(contextual))).ok).toBe(true);
+    const earlyRain = await ctrl.requestEngineerStrategy('c1', 'main');
+    expect(earlyRain.weatherResponse).toContain('发车前确认赛道');
+    expect(earlyRain.weatherResponse).toContain('潮湿时使用半雨胎，严重积水时使用全雨胎');
+
+    delete contextual.weekend!.forecast.raceRainWindow;
+    contextual.weekend!.forecast.race = 0.2;
+    contextual.weekend!.weather.race = 'wet';
+    expect((await ctrl.importSave(JSON.stringify(contextual))).ok).toBe(true);
+    const legacyForecast = await ctrl.requestEngineerStrategy('c1', 'main');
+    expect(legacyForecast.weatherResponse).toBe('目前没有明确降雨窗口，按干地基础方案执行');
+  });
+
+  it('特殊事件通过副 API 完成至少两轮谈判后才提交白名单动作', async () => {
+    const specialEnv = new FakeTavern(cardWorldbook());
+    const specialCtrl = new F1Controller(specialEnv);
+    specialCtrl.init();
+    await specialCtrl.loadData();
+    expect((await specialCtrl.newGame({ playerTeamId: 'audi', seed: 88 })).ok).toBe(true);
+    specialCtrl.updateSettings({ engineerProxyPreset: '政治谈判副线', engineerModel: 'roleplay-model' });
+    let callCount = 0;
+    specialEnv.generateText = async (_prompt, options) => {
+      callCount++;
+      expect(options).toEqual({ proxyPreset: '政治谈判副线', model: 'roleplay-model' });
+      return callCount === 1
+        ? '{"speaker":"ADUO 联盟协调代表","reply":"先明确各队共享哪些技术资料。","status":"continue","choice":null}'
+        : '{"speaker":"梅赛德斯代表","reply":"四队接受共同游说方案，但各自保留技术边界。","status":"agreement","choice":"alliance"}';
+    };
+
+    const started = specialCtrl.startSpecialNegotiation({ kind: 'aduo_alliance', api: 'secondary' });
+    expect(started).toMatchObject({ ok: true, session: { round: 0, status: 'active', api: 'secondary' } });
+    const first = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '奥迪只共享法规论据，不共享核心设计。' });
+    expect(first).toMatchObject({ ok: true, session: { round: 1, status: 'active' } });
+    expect(specialCtrl.stateAt()!.audi?.alliance).toBe(false);
+
+    const second = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '四队共同签署游说文件，并各自保留知识产权。' });
+    expect(second).toMatchObject({ ok: true, session: { round: 2, status: 'agreement' } });
+    expect(specialCtrl.stateAt()!.audi?.alliance).toBe(true);
+    expect(specialCtrl.listRevisions()[0].label).toContain('ADUO 四队联盟谈判');
+    expect(specialEnv.triggered).toBe(0);
+    expect(specialEnv.created).toHaveLength(0);
+    expect(specialCtrl.stateAt()!.narration.at(-1)).toMatchObject({ kind: 'special_negotiation', title: 'ADUO 四队联盟谈判达成协议' });
+    expect(specialCtrl.stateAt()!.narration.at(-1)?.detail).toContain('谈判结果：达成四队联盟');
+    expect((await specialCtrl.requestNarration()).ok).toBe(true);
+    expect(specialEnv.triggered).toBe(1);
+    expect(specialEnv.created.at(-1)).toContain('待叙述事件');
+  });
+
+  it('谈判破裂、取消或等待期间换档都不会修改事件状态', async () => {
+    const specialEnv = new FakeTavern(cardWorldbook());
+    const specialCtrl = new F1Controller(specialEnv);
+    specialCtrl.init();
+    await specialCtrl.loadData();
+    expect((await specialCtrl.newGame({ playerTeamId: 'audi', seed: 89 })).ok).toBe(true);
+
+    let replies = 0;
+    specialEnv.generateText = async () => ++replies === 1
+      ? '{"speaker":"ADUO 联盟协调代表","reply":"还需要更明确的边界。","status":"continue","choice":null}'
+      : '{"speaker":"梅赛德斯代表","reply":"条件无法统一，本轮谈判结束。","status":"breakdown","choice":null}';
+    const started = specialCtrl.startSpecialNegotiation({ kind: 'aduo_alliance', api: 'main' });
+    await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '先讨论联盟边界。' });
+    const breakdown = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '奥迪不能再让步。' });
+    expect(breakdown).toMatchObject({ ok: true, session: { status: 'breakdown', round: 2 } });
+    expect(specialCtrl.stateAt()!.audi?.alliance).toBe(false);
+    expect(specialEnv.triggered).toBe(0);
+    expect(specialCtrl.stateAt()!.narration.at(-1)).toMatchObject({ kind: 'special_negotiation', title: 'ADUO 四队联盟谈判破裂' });
+    expect(specialCtrl.cancelSpecialNegotiation()).toMatchObject({ ok: true, session: null });
+
+    let release!: (value: string) => void;
+    specialEnv.generateText = async () => new Promise<string>(resolve => { release = resolve; });
+    const pendingStart = specialCtrl.startSpecialNegotiation({ kind: 'aduo_alliance', api: 'main' });
+    const pending = specialCtrl.sendSpecialNegotiationTurn({ sessionId: pendingStart.session!.id, text: '等待各队答复。' });
+    await Promise.resolve();
+    const replacement = JSON.parse(specialCtrl.exportSave()!);
+    replacement.state.gameId = 'replacement-negotiation-game';
+    expect((await specialCtrl.importSave(JSON.stringify(replacement))).ok).toBe(true);
+    release('{"speaker":"ADUO 联盟协调代表","reply":"继续讨论。","status":"continue","choice":null}');
+    const stale = await pending;
+    expect(stale.ok).toBe(false);
+    expect(stale.message).toContain('安全丢弃');
+    expect(specialCtrl.stateAt()!.gameId).toBe('replacement-negotiation-game');
+    expect(specialCtrl.getSpecialNegotiation()).toBeNull();
+  });
+
+  it('谈判达成的动作被引擎拒绝时会结束为破裂状态', async () => {
+    const specialEnv = new FakeTavern(cardWorldbook());
+    const specialCtrl = new F1Controller(specialEnv);
+    specialCtrl.init();
+    await specialCtrl.loadData();
+    expect((await specialCtrl.newGame({ playerTeamId: 'mercedes', seed: 90 })).ok).toBe(true);
+    const blocked = JSON.parse(specialCtrl.exportSave()!);
+    blocked.state.fiaMeeting.current = { index: 1, issue: 'cost_cap', opponents: ['ferrari', 'audi'] };
+    expect((await specialCtrl.importSave(JSON.stringify(blocked))).ok).toBe(true);
+    let replies = 0;
+    specialEnv.generateText = async () => ++replies === 1
+      ? '{"speaker":"FIA 技术代表","reply":"请继续说明技术依据。","status":"continue","choice":null}'
+      : '{"speaker":"Toto Wolff","reply":"我们接受先做技术辩护。","status":"agreement","choice":"defend"}';
+
+    const started = specialCtrl.startSpecialNegotiation({ kind: 'mercedes_politics', api: 'main' });
+    await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '先提交完整数据。' });
+    const result = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '现在采用技术辩护路线。' });
+    expect(result).toMatchObject({ ok: true, session: { status: 'breakdown', round: 2 } });
+    expect(result.message).toContain('请先完成辩论');
+    expect(specialCtrl.stateAt()!.mercedes?.lastActionRound).toBeNull();
+  });
+
+  it('随机事件通过正常聊天叙述，再将实际剧情交给副 API 白名单结算一次', async () => {
+    const eventEnv = new FakeTavern(cardWorldbook());
+    const eventCtrl = new F1Controller(eventEnv);
+    eventCtrl.init();
+    await eventCtrl.loadData();
+    expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 91 })).ok).toBe(true);
+    const save = JSON.parse(eventCtrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 3, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    eventCtrl.updateSettings({ engineerProxyPreset: '随机事件副线', engineerModel: 'event-model' });
+    const optionsSeen: unknown[] = [];
+    let call = 0;
+    let resolutionPrompt = '';
+    eventEnv.generateText = async (prompt, options) => {
+      optionsSeen.push(options);
+      call++;
+      if (call === 1) return '{"title":"车手训练冲突","prompt":"车手感到不适，但工程组希望继续长距离训练。你如何决定？","answerOptions":["降低负荷","先复查"]}';
+      resolutionPrompt = prompt;
+      return '{"eventId":"' + eventCtrl.stateAt()!.randomEvents!.current!.id + '","outcome":"resolved","summary":"医疗复查及时完成，赞助商认可车队的处理。","effects":[{"op":"funds","targetId":null,"delta":2,"reason":"赞助商提供健康计划支持"}]}';
+    };
+
+    await eventEnv.userSays('聊聊本周安排。');
+    await eventEnv.aiReplies('车队开始普通的一周。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const event = eventCtrl.stateAt()!.randomEvents!.current!;
+    expect(event).toMatchObject({ status: 'awaiting_player', title: '车手训练冲突' });
+    const funds = eventCtrl.stateAt()!.teams.haas.funds;
+    const result = await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '先复查，再按医疗建议降低负荷。', expectedRevisionId: eventCtrl.status().revisionId! });
+    expect(result).toMatchObject({ ok: true, event: { status: 'awaiting_narration', playerAnswer: '先复查，再按医疗建议降低负荷。' } });
+    expect(eventEnv.created).toHaveLength(1);
+    expect(eventEnv.created[0]).toContain('车手训练冲突');
+    expect(eventEnv.triggered).toBe(1);
+    expect(call).toBe(1); // 主 API 不走 generateText / generateRaw
+    await eventEnv.aiReplies('医疗主管立即安排复查，并把训练强度降到安全范围。\n' + update(['{"op":"funds","delta":5,"reason":"不应送入随机事件判定"}']));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ status: 'awaiting_player', completedDialogueTurns: 1 });
+    const second = await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '我再与车手确认恢复感受。', expectedRevisionId: eventCtrl.status().revisionId! });
+    expect(second.ok).toBe(true);
+    await eventEnv.aiReplies('车手确认状态稳定，医疗主管完成最后记录。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ status: 'resolved', mainReply: '车手确认状态稳定，医疗主管完成最后记录。', completedDialogueTurns: 2 });
+    expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds + 2);
+    expect(resolutionPrompt).toContain('医疗主管立即安排复查，并把训练强度降到安全范围。');
+    expect(resolutionPrompt).toContain('车手确认状态稳定，医疗主管完成最后记录。');
+    expect(resolutionPrompt).not.toContain('不应送入随机事件判定');
+    await eventEnv.fire(eventEnv.events.MESSAGE_RECEIVED, eventEnv.lastMessageId(), 'normal');
+    expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds + 2);
+    expect(optionsSeen[0]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
+    expect(optionsSeen[1]).toEqual({ proxyPreset: '随机事件副线', model: 'event-model' });
+    await eventEnv.deleteFrom(eventEnv.lastMessageId());
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ id: event.id, status: 'awaiting_player' });
+  });
+
+  it('过期的聊天消息不会结算另一条随机事件', async () => {
+    const eventEnv = new FakeTavern(cardWorldbook());
+    const eventCtrl = new F1Controller(eventEnv);
+    eventCtrl.init();
+    await eventCtrl.loadData();
+    expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 93 })).ok).toBe(true);
+    const save = JSON.parse(eventCtrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 3, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    eventCtrl.updateSettings({ engineerProxyPreset: '随机事件副线', engineerModel: 'event-model' });
+    let calls = 0;
+    eventEnv.generateText = async () => {
+      calls++;
+      return calls === 1
+        ? '{"title":"训练冲突","prompt":"车手需要降低训练负荷。","answerOptions":["安排复查","继续训练"]}'
+        : '{"eventId":"unexpected","outcome":"resolved","summary":"不应结算","effects":[]}';
+    };
+    await eventEnv.userSays('开始普通对话。');
+    await eventEnv.aiReplies('车队正在准备。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const event = eventCtrl.stateAt()!.randomEvents!.current!;
+    expect((await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '安排复查。', expectedRevisionId: eventCtrl.status().revisionId! })).ok).toBe(true);
+    await eventEnv.userSays('这是一条与随机事件无关的新消息。');
+    await eventEnv.aiReplies('迟到的医疗叙述。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(calls).toBe(1);
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ id: event.id, status: 'awaiting_player' });
+  });
+
+  it('副 API 判定期间拒绝游戏动作，避免旧快照回滚新状态', async () => {
+    const eventEnv = new FakeTavern(cardWorldbook());
+    const eventCtrl = new F1Controller(eventEnv);
+    eventCtrl.init();
+    await eventCtrl.loadData();
+    expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 94 })).ok).toBe(true);
+    const save = JSON.parse(eventCtrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 3, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 1, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 1, maxDialogueTurns: 1 };
+    expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    eventCtrl.updateSettings({ engineerProxyPreset: '随机事件副线', engineerModel: 'event-model' });
+    let releaseJudgment!: (value: string) => void;
+    let calls = 0;
+    eventEnv.generateText = async () => {
+      calls += 1;
+      if (calls === 1) return '{"title":"训练安排","prompt":"如何安排训练？","answerOptions":["降低负荷"]}';
+      return new Promise<string>(resolve => { releaseJudgment = resolve; });
+    };
+    await eventEnv.userSays('聊聊训练。');
+    await eventEnv.aiReplies('先看本周计划。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const event = eventCtrl.stateAt()!.randomEvents!.current!;
+    expect((await eventCtrl.resolveRandomEvent({ eventId: event.id, answer: '降低负荷。', expectedRevisionId: eventCtrl.status().revisionId! })).ok).toBe(true);
+    await eventEnv.aiReplies('医疗主管确认新安排。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const blocked = await eventCtrl.dispatch({ type: 'CLEAR_NARRATION' });
+    expect(blocked).toMatchObject({ ok: false });
+    expect(blocked.message).toContain('判定随机事件');
+    releaseJudgment(`{"eventId":"${event.id}","outcome":"resolved","summary":"训练安排已经确认。","effects":[]}`);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(eventCtrl.stateAt()!.randomEvents!.current).toMatchObject({ id: event.id, status: 'resolved' });
+  });
+
+  it('副 API 未配置时使用本地事件，并允许无效果跳过', async () => {
+    const eventEnv = new FakeTavern(cardWorldbook());
+    const eventCtrl = new F1Controller(eventEnv);
+    eventCtrl.init();
+    await eventCtrl.loadData();
+    expect((await eventCtrl.newGame({ playerTeamId: 'haas', seed: 92 })).ok).toBe(true);
+    const save = JSON.parse(eventCtrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 3, maxPerWeek: 3, routineWeight: 0, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 1, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    expect((await eventCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    await eventEnv.userSays('开始普通对话。');
+    await eventEnv.aiReplies('车队正在准备。');
+    await new Promise(resolve => setTimeout(resolve, 0));
+    const event = eventCtrl.stateAt()!.randomEvents!.current!;
+    expect(event).toMatchObject({ status: 'awaiting_player' });
+    expect(event.generationError).toContain('副 API');
+    const funds = eventCtrl.stateAt()!.teams.haas.funds;
+    const skipped = eventCtrl.skipRandomEvent({ eventId: event.id, expectedRevisionId: eventCtrl.status().revisionId! });
+    expect(skipped).toMatchObject({ ok: true, event: { status: 'unresolved', effects: [] } });
+    expect(eventCtrl.stateAt()!.teams.haas.funds).toBe(funds);
+    expect(eventCtrl.stateAt()!.randomEvents!.history.at(-1)?.status).toBe('unresolved');
+  });
+
+  it('validates direct secondary API settings before generation', async () => {
+    for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
+    expect(() => ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: '', engineerApiUrl: 'not-a-url', engineerModel: 'test-model' })).toThrow('有效的 http:// 或 https:// 地址');
+
+    expect(() => ctrl.updateSettings({ engineerApi: 'secondary', engineerApiUrl: 'https://api.example.com/v1', engineerModel: '' })).toThrow('必须填写模型名称');
+  });
+
+  it('migrates a legacy script-variable key into device-local storage and scrubs it', () => {
+    const legacyEnv = new FakeTavern();
+    legacyEnv.scriptVars.settings = { engineerApi: 'secondary', engineerProxyPreset: '', engineerApiUrl: 'https://api.example.com/v1', engineerApiKey: 'legacy-secret', engineerModel: 'legacy-model' };
+    const legacyController = new F1Controller(legacyEnv);
+    legacyController.init();
+
+    expect(legacyEnv.localSecrets['secondary-api-key']).toBe('legacy-secret');
+    expect(JSON.stringify(legacyEnv.scriptVars)).not.toContain('legacy-secret');
+    expect(legacyController.settingsView()).toMatchObject({ engineerApiKey: '', hasEngineerApiKey: true });
+  });
+
+  it('keeps a saved device-local key on blank saves and clears it explicitly', () => {
+    ctrl.updateSettings({ engineerApiKey: 'device-secret' });
+    ctrl.updateSettings({ narrationText: '更新叙述文本', engineerApiKey: '' });
+    expect(env.localSecrets['secondary-api-key']).toBe('device-secret');
+    expect(ctrl.settingsView().hasEngineerApiKey).toBe(true);
+
+    ctrl.updateSettings({ clearEngineerApiKey: true });
+    expect(env.localSecrets['secondary-api-key']).toBeUndefined();
+    expect(ctrl.settingsView().hasEngineerApiKey).toBe(false);
+  });
+
+  it('工程师 API 失败时仍自动应用基础策略', async () => {
+    for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
+    env.generateText = async () => { throw new Error('测试超时'); };
+    const result = await ctrl.requestEngineerStrategy('c1');
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain('基础策略已自动应用并执行');
+    expect(result.explanation).toContain('干地基础方案');
+    const saved = ctrl.stateAt()!.weekend!.plans.c1;
+    expect(saved.strategySource).toBe('engineer');
+    expect(saved.tyrePlan).toEqual(result.plan?.tyrePlan);
+  });
+
+  it('完美策略复用所选 API，但忽略车队策略水平并采用最快合法方案', async () => {
+    for (let i = 0; i < 30 && !ctrl.stateAt()!.weekend; i++) expect((await ctrl.dispatch({ type: 'ADVANCE' })).ok).toBe(true);
+    const expected = ctrl.view()!.weekend!.drivers.find(driver => driver.driverId === 'c1')!.options[0].compounds;
+    ctrl.updateSettings({ engineerProxyPreset: '完美策略副线', engineerModel: 'perfect-model' });
+    const result = await ctrl.requestPerfectStrategy('c1', 'secondary');
+    expect(result).toMatchObject({ ok: true, api: 'secondary', strategyLevel: '完美', mode: 'perfect' });
+    expect(result.plan?.tyrePlan).toEqual(expected);
+    expect(result.message).toContain('完美 AI 策略');
+    expect(env.generated.at(-1)?.options).toEqual({ proxyPreset: '完美策略副线', model: 'perfect-model' });
+    expect(env.generated.at(-1)?.prompt).toContain('忽略车队策略部门水平');
+    expect(ctrl.stateAt()!.weekend!.plans.c1.strategySource).toBe('perfect');
+  });
+
+  it('仅在开局启用后通过所选 API 提交一次受限超自然干预', async () => {
+    const disabled = await ctrl.requestSupernaturalIntervention({ description: '提升董事会信心', expectedRevisionId: ctrl.status().revisionId! });
+    expect(disabled.ok).toBe(false);
+    expect(disabled.message).toContain('未启用');
+
+    expect((await ctrl.newGame({ playerTeamId: 'ferrari', principalName: '测试领队', supernaturalMode: true })).ok).toBe(true);
+    ctrl.updateSettings({ engineerApi: 'secondary', engineerProxyPreset: 'persona-api', engineerModel: 'bounded-model' });
+    const before = ctrl.stateAt()!.teams.ferrari.boardConfidence;
+    let generationOptions: unknown;
+    let generationPrompt = '';
+    env.generateText = async (prompt, options) => {
+      generationOptions = options;
+      generationPrompt = prompt;
+      return '<F1M_UPDATE>[{"op":"board","delta":3,"reason":"预知董事会担忧"}]</F1M_UPDATE>';
+    };
+    const result = await ctrl.requestSupernaturalIntervention({
+      description: '读取董事会成员的想法并消除误会',
+      expectedRevisionId: ctrl.status().revisionId!,
+    });
+    expect(result.ok).toBe(true);
+    expect(generationOptions).toEqual({ proxyPreset: 'persona-api', model: 'bounded-model' });
+    expect(generationPrompt).toContain('当前可用类别');
+    expect(ctrl.stateAt()!.teams.ferrari.boardConfidence).toBe(before + 3);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0]).toMatchObject({ op: 'board', applied: 3, ok: true, source: 'supernatural' });
+    expect(ctrl.listRevisions()[0].label).toBe('超自然干预');
+  });
+
+  it('rejects dismissal before generation and counts generated response bytes', async () => {
+    expect((await ctrl.newGame({ playerTeamId: 'ferrari', supernaturalMode: true })).ok).toBe(true);
+    let calls = 0;
+    env.generateText = async () => { calls++; return '<F1M_UPDATE>[]</F1M_UPDATE>'; };
+    const dismissedSave = JSON.parse(ctrl.exportSave()!);
+    dismissedSave.state.ferrari.dismissed = '测试撤职';
+    expect((await ctrl.importSave(JSON.stringify(dismissedSave))).ok).toBe(true);
+    const dismissed = await ctrl.requestSupernaturalIntervention({ description: '继续干预', expectedRevisionId: ctrl.status().revisionId! });
+    expect(dismissed.ok).toBe(false);
+    expect(dismissed.message).toContain('撤职');
+    expect(calls).toBe(0);
+
+    expect((await ctrl.newGame({ playerTeamId: 'ferrari', supernaturalMode: true })).ok).toBe(true);
+    env.generateText = async () => '你'.repeat(6_000);
+    const oversized = await ctrl.requestSupernaturalIntervention({ description: '测试字节限制', expectedRevisionId: ctrl.status().revisionId! });
+    expect(oversized.ok).toBe(false);
+    expect(oversized.message).toContain('16 KiB');
+  });
+
+  it('等待超自然 API 时存档变化会安全丢弃旧结果', async () => {
+    expect((await ctrl.newGame({ playerTeamId: 'ferrari', principalName: '测试领队', supernaturalMode: true })).ok).toBe(true);
+    let release!: (value: string) => void;
+    env.generateText = async () => new Promise<string>(resolve => { release = resolve; });
+    const pending = ctrl.requestSupernaturalIntervention({ description: '改变士气', expectedRevisionId: ctrl.status().revisionId! });
+    await Promise.resolve();
+    const replacement = JSON.parse(ctrl.exportSave()!);
+    replacement.state.gameId = 'replacement-supernatural-game';
+    expect((await ctrl.importSave(JSON.stringify(replacement))).ok).toBe(true);
+    release('<F1M_UPDATE>[{"op":"board","delta":3}]</F1M_UPDATE>');
+    const result = await pending;
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('安全丢弃');
+    expect(ctrl.stateAt()!.gameId).toBe('replacement-supernatural-game');
+  });
+
+  it('正赛发车前只调用一次 API，并为全部 AI 赛车应用批量策略', async () => {
+    const { state } = await prepareRace(ctrl);
+    const aiIds = Object.values(state.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+    const playerIds = state.teams[state.meta.playerTeamId].cars.map(car => car.driverId).filter((id): id is string => !!id);
+    expect(Object.values(state.teams)).toHaveLength(11);
+    expect(aiIds).toHaveLength(20);
+    expect(playerIds).toHaveLength(2);
+    expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[0], plan: { tyrePlan: ['soft', 'medium'], paceMode: 'push', pitTiming: 'early', scReaction: false } })).ok).toBe(true);
+    expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[1], plan: { tyrePlan: ['hard', 'medium'], paceMode: 'conserve', pitTiming: 'late', scReaction: true } })).ok).toBe(true);
+    let calls = 0;
+    let capturedPrompt = '';
+    env.generateText = async prompt => {
+      calls++;
+      capturedPrompt = prompt;
+      const ids = [...prompt.matchAll(/driverId=([^；\n]+)/g)].map(match => match[1]);
+      return JSON.stringify({ strategies: ids.map((driverId, index) => ({
+        driverId,
+        option: 0,
+        paceMode: index % 2 ? 'balanced' : 'push',
+        pitTiming: index % 3 ? 'standard' : 'late',
+        scReaction: index % 2 === 0,
+      })) });
+    };
+    const result = await ctrl.dispatch({ type: 'START_RACE', kind: 'race' });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(1);
+    expect(capturedPrompt).toContain(`strategies 必须包含全部 ${aiIds.length} 辆 AI 赛车`);
+    expect(result.message).toContain(`API ${aiIds.length} 辆，本地补全 0 辆`);
+    const live = ctrl.stateAt()!.weekend!.liveRace!;
+    expect(aiIds.every(id => live.cars[id].plan.strategySource === 'engineer' && live.cars[id].plan.tyrePlan !== 'auto')).toBe(true);
+    expect(new Set(aiIds.map(id => `${live.cars[id].plan.paceMode}:${live.cars[id].plan.pitTiming}:${live.cars[id].plan.scReaction}`)).size).toBeGreaterThan(1);
+    expect(live.cars[playerIds[0]].plan).toMatchObject({ tyrePlan: ['soft', 'medium'], paceMode: 'push', pitTiming: 'early', scReaction: false });
+    expect(live.cars[playerIds[1]].plan).toMatchObject({ tyrePlan: ['hard', 'medium'], paceMode: 'conserve', pitTiming: 'late', scReaction: true });
+    expect(capturedPrompt).not.toContain(`driverId=${playerIds[0]}；`);
+    expect(capturedPrompt).not.toContain(`driverId=${playerIds[1]}；`);
+  });
+
+  it('批量 API 部分缺失时只为缺失 AI 赛车使用本地策略', async () => {
+    const { state } = await prepareRace(ctrl);
+    const aiIds = Object.values(state.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+    env.generateText = async () => JSON.stringify({ strategies: [
+      { driverId: aiIds[0], option: 0, paceMode: 'push', pitTiming: 'late', scReaction: false },
+      { driverId: aiIds[0], option: 1, paceMode: 'balanced', pitTiming: 'standard', scReaction: true },
+      { driverId: aiIds[1], option: 999, paceMode: 'push', pitTiming: 'early', scReaction: true },
+      { driverId: aiIds[2], option: 0, paceMode: 'invalid', pitTiming: 'early', scReaction: true },
+      null,
+    ] });
+    const result = await ctrl.dispatch({ type: 'START_RACE', kind: 'race' });
+    expect(result.ok).toBe(true);
+    expect(result.message).toContain(`API 1 辆，本地补全 ${aiIds.length - 1} 辆`);
+    const live = ctrl.stateAt()!.weekend!.liveRace!;
+    expect(live.cars[aiIds[0]].plan).toMatchObject({ paceMode: 'push', pitTiming: 'late', scReaction: false });
+    expect(aiIds.slice(1).every(id => live.cars[id].plan.strategySource === 'engineer' && live.cars[id].plan.tyrePlan !== 'auto')).toBe(true);
+  });
+
+  it('批量 API 报错或返回畸形内容时使用全部本地 AI 策略并继续发车', async () => {
+    const { state } = await prepareRace(ctrl);
+    const aiIds = Object.values(state.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+    env.generateText = async () => { throw new Error('策略服务不可用'); };
+    const rejected = await ctrl.dispatch({ type: 'START_RACE', kind: 'race' });
+    expect(rejected.ok).toBe(true);
+    expect(rejected.message).toContain(`API 0 辆，本地补全 ${aiIds.length} 辆`);
+    expect(aiIds.every(id => ctrl.stateAt()!.weekend!.liveRace!.cars[id].plan.tyrePlan !== 'auto')).toBe(true);
+
+    const restored = state;
+    restored.weekend!.liveRace = null;
+    expect((await ctrl.importSave(JSON.stringify(restored))).ok).toBe(true);
+    env.generateText = async () => 'not-json';
+    const malformed = await ctrl.dispatch({ type: 'START_RACE', kind: 'race' });
+    expect(malformed.ok).toBe(true);
+    expect(malformed.message).toContain(`API 0 辆，本地补全 ${aiIds.length} 辆`);
+  });
+
+  it('主开始正赛动作通过 ADVANCE 调用批量策略 API', async () => {
+    const { state } = await prepareRace(ctrl);
+    const aiIds = Object.values(state.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));
+    let calls = 0;
+    env.generateText = async prompt => {
+      calls++;
+      const ids = [...prompt.matchAll(/driverId=([^；\n]+)/g)].map(match => match[1]);
+      return JSON.stringify({ strategies: ids.map(driverId => ({ driverId, option: 0, paceMode: 'balanced', pitTiming: 'standard', scReaction: true })) });
+    };
+    const result = await ctrl.dispatch({ type: 'ADVANCE' });
+    expect(result.ok).toBe(true);
+    expect(calls).toBe(1);
+    expect(result.message).toContain(`API ${aiIds.length} 辆，本地补全 0 辆`);
+    expect(ctrl.stateAt()!.weekend!.race).toBeTruthy();
+  });
+
+  it('等待批量策略期间存档变化会中止旧比赛而不覆盖新存档', async () => {
+    const { state } = await prepareRace(ctrl);
+    let release!: (value: string) => void;
+    env.generateText = async () => new Promise<string>(resolve => { release = resolve; });
+    const pending = ctrl.dispatch({ type: 'START_RACE', kind: 'race' });
+    await Promise.resolve();
+    const replacement = JSON.parse(JSON.stringify(state));
+    replacement.gameId = 'replacement-game';
+    expect((await ctrl.importSave(JSON.stringify(replacement))).ok).toBe(true);
+    release('{"strategies":[]}');
+    const result = await pending;
+    expect(result.ok).toBe(false);
+    expect(result.message).toContain('比赛状态已变化');
+    expect(ctrl.stateAt()!.gameId).toBe('replacement-game');
+    expect(ctrl.stateAt()!.weekend!.liveRace).toBeNull();
+  });
+
+  it('生成前注入实时数据提示词', async () => {
+    await env.userSays('你好');
+    await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'normal', {}, false);
+    const inj = env.injected.get(INJECT_ID)!;
+    expect(inj.content).toContain('测试车队C');
+    expect(inj.depth).toBe(1);
+    expect(inj.role).toBe('system');
+  });
+
+  it('AI 回复中的白名单指令会被结算，待叙述事件清空，并追加状态条占位符', async () => {
+    await env.userSays('我去鼓励一下 C2');
+    expect(ctrl.stateAt()!.narration.length).toBeGreaterThan(0);
+    const m0 = ctrl.stateAt()!.drivers.c2.morale;
+    const id = await env.aiReplies(`C2 听完很受鼓舞。${update(['{"op":"morale","driver":"c2","delta":5,"reason":"领队鼓励"}', '{"op":"car_perf","delta":99}'])}`);
+    const s = ctrl.stateAt()!;
+    expect(s.drivers.c2.morale).toBeCloseTo(Math.min(100, m0 + 5), 1);
+    expect(s.narration).toHaveLength(0);
+    const vars = env.messages[id].variables[0];
+    expect(vars.f1m_changes.some((c: string) => c.includes('心态'))).toBe(true);
+    expect(vars.f1m_changes.some((c: string) => c.includes('白名单'))).toBe(true);
+    expect(env.messages[id].swipes[0]).toContain(HUD_TAG);
+    // 同一文本不会重复结算
+    await env.fire(env.events.MESSAGE_RECEIVED, id, 'normal');
+    expect(ctrl.stateAt()!.drivers.c2.morale).toBeCloseTo(s.drivers.c2.morale, 5);
+  });
+
+  it('重 roll（新 swipe）会基于上一楼重新结算，切回旧 swipe 恢复旧状态', async () => {
+    await env.userSays('谈谈');
+    const m0 = ctrl.stateAt()!.drivers.c1.morale;
+    const id = await env.aiReplies(`好。${update(['{"op":"morale","driver":"c1","delta":-6}'])}`);
+    expect(ctrl.stateAt()!.drivers.c1.morale).toBeCloseTo(m0 - 6, 1);
+    // 生成新 swipe 前注入的应是「上一楼」的状态（不含 -6）
+    await env.swipeNew(`另一个版本。${update(['{"op":"morale","driver":"c1","delta":4}'])}`);
+    expect(ctrl.stateAt()!.drivers.c1.morale).toBeCloseTo(Math.min(100, m0 + 4), 1);
+    await env.swipeTo(id, 0);
+    expect(ctrl.stateAt()!.drivers.c1.morale).toBeCloseTo(m0 - 6, 1);
+  });
+
+  it('删除楼层后存档自动回滚', async () => {
+    await env.userSays('开始赛季');
+    await ctrl.dispatch({ type: 'ADVANCE' });
+    expect(ctrl.stateAt()!.season.phase).toBe('pre_race');
+    await env.aiReplies('车队抵达首站。');
+    await env.userSays('进入周末');
+    const gap = ctrl.stateAt()!.season.weeksUntilRound ?? 0;
+    for (let week = 0; week <= gap; week += 1) await ctrl.dispatch({ type: 'ADVANCE' });
+    expect(ctrl.stateAt()!.season.phase).toBe('practice');
+    await env.deleteFrom(3);
+    expect(ctrl.stateAt()!.season.phase).toBe('pre_race');
+    await env.deleteFrom(1);
+    expect(ctrl.stateAt()!.season.phase).toBe('preseason');
+  });
+
+  it('本楼已有面板操作时，编辑 AI 回复不会冲掉玩家操作', async () => {
+    await env.userSays('嗨');
+    const id = await env.aiReplies(`回复。${update(['{"op":"media","delta":2}'])}`);
+    await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' });
+    await env.editMessage(id, `改过的回复。${update(['{"op":"media","delta":-8}'])}`);
+    const s = ctrl.stateAt()!;
+    expect(s.teams.team_c.projects).toHaveLength(1);
+    expect(env.toasts.some(([, m]) => m.includes('面板操作'))).toBe(true);
+  });
+
+  it('没有面板操作时编辑最新 AI 回复会重新结算', async () => {
+    await env.userSays('嗨');
+    const media0 = ctrl.stateAt()!.teams.team_c.mediaReputation;
+    const id = await env.aiReplies(`回复。${update(['{"op":"media","delta":5}'])}`);
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 5, 1);
+    await env.editMessage(id, `改过。${update(['{"op":"media","delta":-3}'])}`);
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 - 3, 1);
+  });
+
+  it('生成过程中拒绝面板操作', async () => {
+    env.generating = true;
+    const r = await ctrl.dispatch({ type: 'ADVANCE' });
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('生成');
+  });
+
+  it('收到完整回复后不再受酒馆残留生成标记永久锁定', async () => {
+    env.generating = true;
+    await env.aiReplies('回复已经完整写入聊天。');
+    expect(ctrl.status().generating).toBe(false);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+  });
+
+  it('生命周期结算后的残留标记会解锁，但下一次生成开始会重新锁定面板', async () => {
+    env.generating = true;
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(false);
+
+    await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'normal', {}, false);
+    expect(ctrl.status().generating).toBe(true);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(false);
+
+    await env.fire(env.events.GENERATION_ENDED);
+    expect(ctrl.status().generating).toBe(false);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+
+    await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'normal', {}, false);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'suspension', ambition: 'standard' })).ok).toBe(false);
+
+    await env.fire(env.events.GENERATION_STOPPED);
+    expect(ctrl.status().generating).toBe(false);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'suspension', ambition: 'standard' })).ok).toBe(true);
+  });
+
+  it('进入赛前阶段后的面板操作会直接启动本周随机事件', async () => {
+    const save = JSON.parse(ctrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 1, maxPerWeek: 1, routineWeight: 1, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    expect((await ctrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    expect((await ctrl.dispatch({ type: 'CLEAR_NARRATION' })).ok).toBe(true);
+    expect(ctrl.stateAt()!.randomEvents?.current).toMatchObject({ status: 'awaiting_player' });
+  });
+
+  it('赛前的后续面板操作不会重复创建同一周的随机事件', async () => {
+    const save = JSON.parse(ctrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 1, maxPerWeek: 1, routineWeight: 1, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    expect((await ctrl.importSave(JSON.stringify(save))).ok).toBe(true);
+
+    expect((await ctrl.dispatch({ type: 'CLEAR_NARRATION' })).ok).toBe(true);
+    const first = ctrl.stateAt()!.randomEvents!;
+    const eventId = first.current!.id;
+    const weeklyStarted = first.weeklyStarted;
+
+    expect((await ctrl.dispatch({ type: 'CLEAR_NARRATION' })).ok).toBe(true);
+    expect(ctrl.stateAt()!.randomEvents).toMatchObject({ weeklyStarted, current: { id: eventId, status: 'awaiting_player' } });
+  });
+
+  it('随机事件内容准备期间只保留一次事件请求和一次最终提交', async () => {
+    const save = JSON.parse(ctrl.exportSave()!);
+    save.state.season.phase = 'pre_race';
+    save.state.rules.randomEvents = { minPerWeek: 1, maxPerWeek: 1, routineWeight: 1, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0, minDialogueTurns: 2, maxDialogueTurns: 2 };
+    expect((await ctrl.importSave(JSON.stringify(save))).ok).toBe(true);
+    const revisionsBefore = ctrl.status().revisions;
+    ctrl.updateSettings({ engineerProxyPreset: 'event-test' });
+    let requests = 0;
+    let release!: (text: string) => void;
+    env.generateText = async () => {
+      requests += 1;
+      return new Promise<string>(resolve => { release = resolve; });
+    };
+    env.messages.push({ role: 'assistant', swipes: [`赛前回复。${update(['{"op":"media","delta":0.1}'])}`], swipe_id: 0, variables: [{}] });
+    const eventMessageId = env.lastMessageId();
+    const preparing = ctrl.onMessageReceived(eventMessageId, 'normal');
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(requests).toBe(1);
+    expect(ctrl.status().revisions).toBe(revisionsBefore + 1);
+    expect(ctrl.stateAt()!.randomEvents?.current).toBeNull();
+    const duplicate = ctrl.onMessageReceived(eventMessageId, 'normal');
+    const blocked = await ctrl.dispatch({ type: 'CLEAR_NARRATION' });
+    expect(blocked).toMatchObject({ ok: false, message: expect.stringContaining('准备随机事件') });
+    expect(requests).toBe(1);
+
+    release('{"title":"固定事件","prompt":"固定题干","answerOptions":["甲","乙"]}');
+    await Promise.all([preparing, duplicate]);
+    expect(ctrl.status().revisions).toBe(revisionsBefore + 2);
+    expect(ctrl.stateAt()!.randomEvents).toMatchObject({ weeklyStarted: 1, current: { status: 'awaiting_player', title: '固定事件' } });
+  });
+
+  it('新周随机事件忽略过期周计数和历史，保持相同种子下的稳定选择', async () => {
+    const eventFor = async (staleWeeklyState: boolean) => {
+      const localEnv = new FakeTavern();
+      const localCtrl = new F1Controller(localEnv);
+      localCtrl.init();
+      expect((await localCtrl.newGame({ playerTeamId: 'team_c', seed: 2024 })).ok).toBe(true);
+      const save = JSON.parse(localCtrl.exportSave()!);
+      save.state.season.phase = 'pre_race';
+      save.state.rules.randomEvents = { minPerWeek: 1, maxPerWeek: 3, routineWeight: 1, noneWeight: 1, driverInjuryWeight: 1, windTunnelWeight: 1, partIssueWeight: 1, minDialogueTurns: 2, maxDialogueTurns: 2 };
+      if (staleWeeklyState) {
+        save.state.randomEvents = {
+          lastRoundKey: '0-w0-r0', weekKey: '0-w0-r0', weeklyQuota: 9, weeklyStarted: 7, current: null,
+          history: [{
+            id: 'old-event', roundKey: '0-w0-r0', kind: 'routine_social', category: 'routine', status: 'resolved',
+            title: '旧事件', detail: '旧事件细节', prompt: '旧事件细节', answerOptions: [], playerAnswer: null,
+            mainReply: null, outcomeSummary: '已结束', effects: [], generationError: null,
+            totalDialogueTurns: 1, completedDialogueTurns: 1, dialogue: [],
+          }],
+        };
+      }
+      expect((await localCtrl.importSave(JSON.stringify(save))).ok).toBe(true);
+      expect((await localCtrl.dispatch({ type: 'CLEAR_NARRATION' })).ok).toBe(true);
+      const weekly = localCtrl.stateAt()!.randomEvents!;
+      const event = weekly.current!;
+      return { weekKey: weekly.weekKey, weeklyQuota: weekly.weeklyQuota, weeklyStarted: weekly.weeklyStarted, kind: event.kind, category: event.category, title: event.title, prompt: event.prompt, answerOptions: event.answerOptions, roundKey: event.roundKey };
+    };
+
+    const clean = await eventFor(false);
+    const stale = await eventFor(true);
+    expect(stale).toEqual(clean);
+    expect(stale.weekKey).toBe(`${ctrl.stateAt()!.season.number}-w${ctrl.stateAt()!.season.week}-r${ctrl.stateAt()!.season.roundIndex}`);
+    expect(stale.weeklyStarted).toBe(1);
+  });
+
+  it('版本数量受上限约束，且当前状态始终可解析', async () => {
+    ctrl.updateSettings({ maxRevisions: 8 });
+    for (let i = 0; i < 20; i++) {
+      await env.userSays(`第 ${i} 轮`);
+      await env.aiReplies(`好的。${update([`{"op":"media","delta":0.5}`])}`);
+    }
+    expect(ctrl.status().revisions).toBeLessThanOrEqual(8 + 12);
+    expect(ctrl.stateAt()).toBeTruthy();
+    const list = ctrl.listRevisions();
+    expect(list[0].current).toBe(true);
+  });
+
+  it('请求 AI 叙述会发送用户消息并触发生成', async () => {
+    const r = await ctrl.requestNarration();
+    expect(r.ok).toBe(true);
+    expect(env.created).toHaveLength(1);
+    expect(env.triggered).toBe(1);
+  });
+
+  it('导出/导入存档', async () => {
+    await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' });
+    const text = ctrl.exportSave()!;
+    const env2 = new FakeTavern();
+    const ctrl2 = new F1Controller(env2);
+    ctrl2.init();
+    expect(ctrl2.status().hasGame).toBe(false);
+    expect((await ctrl2.importSave(text)).ok).toBe(true);
+    expect(ctrl2.stateAt()!.teams.team_c.projects).toHaveLength(1);
+    expect((await ctrl2.importSave('{"bad":1}')).ok).toBe(false);
+  });
+
+  it('读档会把旧版本挂到最新楼层', async () => {
+    const first = ctrl.listRevisions()[0].id;
+    await env.userSays('开始');
+    await ctrl.dispatch({ type: 'ADVANCE' });
+    expect(ctrl.stateAt()!.season.phase).toBe('pre_race');
+    expect((await ctrl.restoreRevision(first)).ok).toBe(true);
+    expect(ctrl.stateAt()!.season.phase).toBe('preseason');
+  });
+
+  it('切换聊天会重新载入存档', async () => {
+    env.chatVars = {};
+    for (const m of env.messages) m.variables = m.variables.map(() => ({}));
+    await env.fire(env.events.CHAT_CHANGED, 'other');
+    expect(ctrl.status().hasGame).toBe(false);
+    expect(env.injected.has(INJECT_ID)).toBe(false);
+  });
+});
+
+describe('管理层世界书同步', () => {
+  const stella = `${LEADERSHIP_PREFIX} [mclaren:principal] 安德里亚·斯特拉`;
+  const wolff = `${LEADERSHIP_PREFIX} [mercedes:principal] 托托·沃尔夫`;
+
+  it('显式覆盖 11 支车队，并只标记实际由玩家替代的人物', () => {
+    expect(Object.keys(PLAYER_REPLACED_LEADERSHIP).sort()).toEqual([
+      'alpine', 'aston_martin', 'audi', 'cadillac', 'ferrari', 'haas', 'mclaren', 'mercedes', 'racing_bulls', 'red_bull', 'williams',
+    ]);
+    expect(PLAYER_REPLACED_LEADERSHIP.mclaren).toEqual([stella]);
+    expect(PLAYER_REPLACED_LEADERSHIP.mercedes).toEqual([]);
+    expect(PLAYER_REPLACED_LEADERSHIP.audi).toEqual([]);
+    expect(PLAYER_REPLACED_LEADERSHIP.alpine).toEqual([]);
+  });
+
+  it('迈凯伦开局禁用斯特拉，换队开局恢复旧条目并保留仍在任的领队', async () => {
+    const env = new FakeTavern(cardWorldbook());
+    env.worldbook.push(
+      { name: stella, content: '', book: 'F1 领队模拟器', enabled: true },
+      { name: wolff, content: '', book: 'F1 领队模拟器', enabled: false },
+    );
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+
+    expect((await ctrl.newGame({ playerTeamId: 'mclaren', seed: 7 })).ok).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
+    expect(env.worldbook.find(entry => entry.name === wolff)?.enabled).toBe(false);
+    const mclarenSave = ctrl.exportSave()!;
+
+    expect((await ctrl.newGame({ playerTeamId: 'mercedes', seed: 8 })).ok).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === wolff)?.enabled).toBe(false);
+
+    expect((await ctrl.importSave(mclarenSave)).ok).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
+
+    env.worldbook.find(entry => entry.name === stella)!.enabled = true;
+    await env.fire(env.events.CHAT_CHANGED);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
+  });
+
+  it('生成叙事前重新同步，且写入接口失败不会阻止开局', async () => {
+    const env = new FakeTavern(cardWorldbook());
+    env.worldbook.push({ name: stella, content: '', book: 'F1 领队模拟器', enabled: true });
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+    expect((await ctrl.newGame({ playerTeamId: 'mclaren', seed: 9 })).ok).toBe(true);
+    env.worldbook.find(entry => entry.name === stella)!.enabled = true;
+    expect((await ctrl.requestNarration()).ok).toBe(true);
+    expect(env.worldbook.find(entry => entry.name === stella)?.enabled).toBe(false);
+
+    const oldEnv = new FakeTavern(cardWorldbook());
+    oldEnv.syncWorldbookEntryStates = async () => { throw new Error('unsupported'); };
+    const oldCtrl = new F1Controller(oldEnv);
+    oldCtrl.init();
+    expect((await oldCtrl.newGame({ playerTeamId: 'mclaren', seed: 10 })).ok).toBe(true);
+  });
+});
+
+describe('流式生成、继续生成与重新开局', () => {
+  let env: FakeTavern;
+  let ctrl: F1Controller;
+  beforeEach(async () => {
+    ({ env, ctrl } = await setup());
+  });
+
+  it('流式生成按真实顺序（先 GENERATION_ENDED 后 MESSAGE_RECEIVED）只结算一次', async () => {
+    await env.userSays('鼓励 C2');
+    const m0 = ctrl.stateAt()!.drivers.c2.morale;
+    const id = await env.aiStreams(`好。${update(['{"op":"morale","driver":"c2","delta":3}'])}`);
+    expect(ctrl.stateAt()!.drivers.c2.morale).toBeCloseTo(Math.min(100, m0 + 3), 1);
+    expect(ctrl.stateAt()!.narration).toHaveLength(0);
+    expect(env.messages[id].swipes[0].split(HUD_TAG)).toHaveLength(2);
+    expect(ctrl.status().revisions).toBe(2);
+  });
+
+  it('在第一个字之前停止生成：占位楼层「...」不结算、不消耗待叙述事件、不加状态条', async () => {
+    await env.userSays('说点什么');
+    const pending = ctrl.stateAt()!.narration.length;
+    expect(pending).toBeGreaterThan(0);
+    const id = await env.aiStreams('');
+    expect(env.messages[id].swipes[0]).toBe('...');
+    expect(env.messages[id].variables[0][PTR]).toBeUndefined();
+    expect(ctrl.stateAt()!.narration).toHaveLength(pending);
+    expect(ctrl.status().revisions).toBe(1);
+  });
+
+  it('本楼有面板操作后继续生成：只结算续写部分，保留面板操作，并沿用本条消息的累计上限', async () => {
+    await env.userSays('谈谈');
+    const limit = ctrl.stateAt()!.rules.aiLimits.morale;
+    const m0 = ctrl.stateAt()!.drivers.c1.morale;
+    const media0 = ctrl.stateAt()!.teams.team_c.mediaReputation;
+    const id = await env.aiReplies(`第一段。${update([`{"op":"morale","driver":"c1","delta":${-limit}}`])}`);
+    const m1 = ctrl.stateAt()!.drivers.c1.morale;
+    expect(m1).toBeCloseTo(Math.max(0, m0 - limit), 1);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+    await env.aiStreams(`第二段。${update([`{"op":"morale","driver":"c1","delta":${-limit}}`, '{"op":"media","delta":2}'])}`, 'continue');
+    const s = ctrl.stateAt()!;
+    expect(s.teams.team_c.projects).toHaveLength(1);
+    expect(s.drivers.c1.morale).toBeCloseTo(m1, 1); // 已达本条消息的心态上限
+    expect(s.teams.team_c.mediaReputation).toBeCloseTo(media0 + 2, 1);
+    const text = env.messages[id].swipes[0];
+    expect(text.match(/<F1M_UPDATE>/g)).toHaveLength(2); // 酒馆去掉的原指令块被放回
+    expect(text.split(HUD_TAG)).toHaveLength(2);
+    expect(text.trimEnd().endsWith(HUD_TAG)).toBe(true);
+    expect(env.toasts.some(([, m]) => m.includes('面板操作'))).toBe(false);
+    // 之后编辑本楼仍然受面板操作保护
+    await env.editMessage(id, `改写。${update(['{"op":"media","delta":-8}'])}`);
+    expect(ctrl.stateAt()!.teams.team_c.projects).toHaveLength(1);
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 2, 1);
+    expect(env.toasts.some(([, m]) => m.includes('面板操作'))).toBe(true);
+  });
+
+  it('停止生成后保留续写基线，使迟到的续写仍结算到本楼面板状态', async () => {
+    await env.userSays('谈谈');
+    const media0 = ctrl.stateAt()!.teams.team_c.mediaReputation;
+    const first = `第一段。${update(['{"op":"media","delta":2}'])}`;
+    const id = await env.aiReplies(first);
+    expect((await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+
+    await env.fire(env.events.GENERATION_AFTER_COMMANDS, 'continue', {}, false);
+    await env.fire(env.events.GENERATION_STOPPED);
+    await env.setMessageText(id, `${first}第二段。${update(['{"op":"media","delta":3}'])}`);
+    await ctrl.onMessageReceived(id, 'continue');
+
+    expect(ctrl.stateAt()!.teams.team_c.projects).toHaveLength(1);
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 5, 1);
+  });
+
+  it('没有面板操作时继续生成会按全文重新结算', async () => {
+    await env.userSays('谈谈');
+    const media0 = ctrl.stateAt()!.teams.team_c.mediaReputation;
+    await env.aiReplies(`第一段。${update(['{"op":"media","delta":2}'])}`);
+    const id = await env.aiStreams(`第二段。${update(['{"op":"media","delta":3}'])}`, 'continue');
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 5, 1);
+    expect(env.messages[id].swipes[0].match(/<F1M_UPDATE>/g)).toHaveLength(2);
+    // 之后编辑本楼重新结算时，原指令仍然在文本里
+    await env.editMessage(id, env.messages[id].swipes[0].replace('"delta":3', '"delta":4'));
+    expect(ctrl.stateAt()!.teams.team_c.mediaReputation).toBeCloseTo(media0 + 6, 1);
+  });
+
+  it('续写对齐：忽略被去掉的指令块、占位符与空白变化', () => {
+    const original = `第一段。\n${update(['{"op":"media","delta":2}'])}\n\n${HUD_TAG}`;
+    expect(continuationSuffix(original, '第一段。 接着说。')).toBe(' 接着说。');
+    expect(continuationSuffix(original, `${original}接着`)).toBe('\n\n接着');
+    expect(continuationSuffix(original, '完全不同的文本')).toBeNull();
+  });
+
+  it('AI 回复没有指令、本楼随后有面板操作时，编辑回复不会冲掉面板操作', async () => {
+    await env.userSays('嗨');
+    await env.aiReplies('只是聊天。');
+    await env.userSays('再聊');
+    const id = await env.aiReplies('还是聊天。');
+    await ctrl.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' });
+    await env.editMessage(id, `改过。${update(['{"op":"media","delta":-3}'])}`);
+    expect(ctrl.stateAt()!.teams.team_c.projects).toHaveLength(1);
+  });
+
+  it('重新开局后，旧对局的楼层不会显示新对局的状态', async () => {
+    await env.userSays('开始');
+    await ctrl.dispatch({ type: 'ADVANCE' });
+    await env.aiReplies(`好。${update(['{"op":"media","delta":1}'])}`);
+    await env.userSays('再来');
+    await env.aiReplies(`好。${update(['{"op":"media","delta":1}'])}`);
+    const oldFloor = 2;
+    expect(ctrl.stateAt(oldFloor)!.meta.playerTeamId).toBe('team_c');
+    await env.userSays('换个车队');
+    expect((await ctrl.newGame({ playerTeamId: 'team_a', seed: 7 })).ok).toBe(true);
+    expect(ctrl.stateAt()!.meta.playerTeamId).toBe('team_a');
+    expect(ctrl.stateAt(oldFloor)).toBeNull();
+    expect(ctrl.hud(oldFloor).hasGame).toBe(false);
+    // 新对局的版本号不会和旧楼层上的指针重名
+    const oldIds = env.messages.slice(0, -1).map(m => m.variables[0][PTR]).filter(Boolean);
+    expect(oldIds).not.toContain(env.messages.at(-1)!.variables[0][PTR]);
+    expect(ctrl.status().revisions).toBe(1);
+  });
+
+  it('导入存档后，旧楼层同样不会显示导入的状态', async () => {
+    const text = ctrl.exportSave()!;
+    await env.userSays('开始');
+    await ctrl.dispatch({ type: 'ADVANCE' });
+    await env.userSays('导入');
+    expect((await ctrl.importSave(text)).ok).toBe(true);
+    // 同一对局 id 的旧指针已失效，回退版本不能比请求的楼层更晚
+    expect(ctrl.stateAt(1)).toBeNull();
+    expect(ctrl.stateAt()!.season.phase).toBe('preseason');
+  });
+});
+
+describe('数据错误', () => {
+  it('世界书没有数据条目时无法开局并给出原因', async () => {
+    const env = new FakeTavern([]);
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+    const r = await ctrl.newGame({ playerTeamId: 'team_c' });
+    expect(r.ok).toBe(false);
+    expect(r.message).toContain('F1M数据');
+  });
+
+  it('YAML 语法错误会被报告', async () => {
+    const env = new FakeTavern([{ name: '[F1M数据] 坏', content: 'teams: [ {id: a', book: 'x' }]);
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+    const rep = await ctrl.loadData();
+    expect(rep.ok).toBe(false);
+    expect(rep.issues.some(i => i.message.includes('YAML'))).toBe(true);
+  });
+
+  it('选择法拉利：写入被选中的理由，状态条显示媒体支持率与粉丝意见', async () => {
+    const env = new FakeTavern();
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+    const res = await ctrl.newGame({ playerTeamId: 'ferrari', seed: 7, selectionReason: '我在耐力赛里带出过冠军车队' });
+    expect(res.ok).toBe(true);
+    expect(res.message).toContain('过渡领队');
+    const st = ctrl.stateAt()!;
+    expect(st.meta.selectionReason).toBe('我在耐力赛里带出过冠军车队');
+    const hud = ctrl.hud(0);
+    expect(hud.ferrari).toMatchObject({ media: st.rules.ferrari.startMedia, gap: 0, dismissed: null });
+    expect(hud.ferrari!.fans).toHaveLength(2);
+    expect((await ctrl.loadData()).teams.find(t => t.id === 'ferrari')?.special).toBe('ferrari');
+  });
+
+  it('领队称谓只按玩家车队的特殊机制判断', () => {
+    expect(principalRole('mclaren')).toBe('临时领队');
+    expect(principalRole('ferrari')).toBe('过渡领队');
+    expect(principalRole(null)).toBe('领队');
+  });
+
+  it('被法拉利撤职后状态条不再显示下一步', async () => {
+    const env = new FakeTavern();
+    const ctrl = new F1Controller(env);
+    ctrl.init();
+    await ctrl.newGame({ playerTeamId: 'ferrari', seed: 7 });
+    const st = ctrl.stateAt()!;
+    expect(ctrl.hud(0).season?.next).toBeTruthy();
+    st.ferrari!.dismissed = '测试';
+    expect((await ctrl.importSave(JSON.stringify(st))).ok).toBe(true);
+    const hud = ctrl.hud(0);
+    expect(hud.ferrari?.dismissed).toBe('测试');
+    expect(hud.season?.next ?? null).toBeNull();
+  });
+});

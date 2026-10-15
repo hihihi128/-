@@ -1,0 +1,110 @@
+/* F1 领队模拟器 · "F1 TV Broadcast" design tokens
+ * Shared by the panel (src/ui/panel/styles.css) and the in-chat HUD (src/ui/hud/hud.html).
+ * Offline-safe: system fonts only; carbon texture and glows are pure CSS gradients.
+ * Existing variable names (--bg, --bg2, --bg3, --line, --text, --muted, --red, --green,
+ * --yellow, --blue, --team, --radius) are kept so current templates keep working.
+ * --team is still set at runtime from team.color (App.vue watch / hud.html root.style).
+ * Mockup HTML files inline a copy of this block because each mockup must be self-contained.
+ */
+:root {
+  color-scheme: dark;
+
+  /* ---- surfaces ---- */
+  --bg: #07080b;              /* app background (under carbon texture) */
+  --bg2: #101218;             /* card body */
+  --bg3: #181b23;             /* raised: input, chip, seg */
+  --bg4: #222631;             /* hover */
+  --line: #232733;            /* hairline */
+  --line2: #333949;           /* stronger divider / focus ring base */
+  --glass: rgba(10, 12, 17, 0.88);
+
+  /* ---- carbon fibre texture (apply as background on .app / .hud) ---- */
+  --carbon:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.022) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.5) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #0c0e13, #07080b);
+  --carbon-card:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.016) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #12151c, #0d0f14);
+
+  /* ---- text ---- */
+  --text: #f3f4f7;
+  --muted: #8e95a5;
+  --dim: #5c6373;
+
+  /* ---- broadcast signal colours ---- */
+  --red: #e10600;             /* live dot, alerts, F1 red */
+  --green: #1fd17a;           /* personal best / gain / ok */
+  --purple: #b05cff;          /* overall fastest / best on grid */
+  --yellow: #ffd60a;          /* warning / yellow flag */
+  --orange: #ff8a1f;          /* caution, tyre stress */
+  --blue: #3d8bfd;            /* info / blue flag / PIT */
+  --cyan: #7fdcff;            /* blueprint line art */
+  --neg: #ff5a5f;             /* loss text */
+
+  /* ---- team (runtime) ---- */
+  --team: #e10600;
+  --team-soft: color-mix(in srgb, var(--team) 18%, transparent);
+  --team-glow: color-mix(in srgb, var(--team) 60%, transparent);
+  --team-ink: color-mix(in srgb, var(--team) 70%, #fff);   /* team colour readable as text */
+
+  /* ---- tyre compounds (Tyre.vue still reads labels.tyres[c].color) ---- */
+  --tyre-s: #ff2b2b;
+  --tyre-m: #ffd60a;
+  --tyre-h: #f3f4f7;
+  --tyre-i: #24c35a;
+  --tyre-w: #2f8cff;
+
+  /* ---- 2026 grid team colours (data-teams.yaml; runtime uses team.color) ---- */
+  --c-mercedes: #27f4d2;
+  --c-ferrari: #dc0000;
+  --c-mclaren: #ff8000;
+  --c-red_bull: #3671c6;
+  --c-alpine: #0093cc;
+  --c-audi: #bb0a30;
+  --c-racing_bulls: #6692ff;
+  --c-haas: #b6babd;
+  --c-williams: #64c4ff;
+  --c-cadillac: #c8a95b;
+  --c-aston_martin: #229971;
+
+  /* ---- part performance scale (R&D car drawing hotspots) ---- */
+  --perf-top: var(--purple);  /* best on the grid */
+  --perf-good: var(--green);  /* above grid average */
+  --perf-mid: var(--yellow);  /* below average */
+  --perf-low: var(--neg);     /* clear weakness */
+  --perf-locked: #4a5060;     /* customer PU parts (not developable) */
+
+  /* ---- type ---- */
+  --font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif;
+  --font-display: 'Bahnschrift SemiCondensed', 'Bahnschrift', 'DIN Condensed', 'Roboto Condensed', 'Arial Narrow', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-num: 'Bahnschrift', 'DIN Alternate', 'Roboto Condensed', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --fs-tiny: 12px;            /* minimum size; labels, hints */
+  --fs-s: 12.5px;
+  --fs-m: 13px;               /* desktop body (unchanged from current panel) */
+  --fs-phone: 14px;           /* phone body */
+  --fs-l: 15px;
+  --fs-xl: 18px;
+  --fs-kpi: 24px;
+
+  /* ---- shape / depth ---- */
+  --radius: 3px;              /* broadcast graphics are sharp */
+  --radius-l: 6px;
+  --skew: -12deg;             /* parallelogram tags, badges, active tab */
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  --glow: 0 0 0 1px var(--team-glow), 0 0 18px -4px var(--team-glow);
+
+  /* ---- layout ---- */
+  --tower-w: 212px;           /* desktop timing tower sidebar */
+  --header-h: 60px;
+  --tabbar-h: 64px;           /* phone bottom tab bar (+ safe-area inset) */
+
+  /* ---- motion ---- */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-fast: 0.15s;
+  --t-med: 0.35s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

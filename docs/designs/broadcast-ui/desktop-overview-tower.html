@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>总览 · 桌面 · F1 领队模拟器</title>
+<meta name="description" content="桌面面板总览页：左侧计时塔显示车手积分榜，右侧 KPI、下一站、性能排名、车手与待叙述。">
+<meta name="viewport" content="width=980">
+<style>
+:root {
+  color-scheme: dark;
+
+  /* ---- surfaces ---- */
+  --bg: #07080b;              /* app background (under carbon texture) */
+  --bg2: #101218;             /* card body */
+  --bg3: #181b23;             /* raised: input, chip, seg */
+  --bg4: #222631;             /* hover */
+  --line: #232733;            /* hairline */
+  --line2: #333949;           /* stronger divider / focus ring base */
+  --glass: rgba(10, 12, 17, 0.88);
+
+  /* ---- carbon fibre texture (apply as background on .app / .hud) ---- */
+  --carbon:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.022) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.5) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #0c0e13, #07080b);
+  --carbon-card:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.016) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #12151c, #0d0f14);
+
+  /* ---- text ---- */
+  --text: #f3f4f7;
+  --muted: #8e95a5;
+  --dim: #5c6373;
+
+  /* ---- broadcast signal colours ---- */
+  --red: #e10600;             /* live dot, alerts, F1 red */
+  --green: #1fd17a;           /* personal best / gain / ok */
+  --purple: #b05cff;          /* overall fastest / best on grid */
+  --yellow: #ffd60a;          /* warning / yellow flag */
+  --orange: #ff8a1f;          /* caution, tyre stress */
+  --blue: #3d8bfd;            /* info / blue flag / PIT */
+  --cyan: #7fdcff;            /* blueprint line art */
+  --neg: #ff5a5f;             /* loss text */
+
+  /* ---- team (runtime) ---- */
+  --team: #e10600;
+  --team-soft: color-mix(in srgb, var(--team) 18%, transparent);
+  --team-glow: color-mix(in srgb, var(--team) 60%, transparent);
+  --team-ink: color-mix(in srgb, var(--team) 70%, #fff);   /* team colour readable as text */
+
+  /* ---- tyre compounds (Tyre.vue still reads labels.tyres[c].color) ---- */
+  --tyre-s: #ff2b2b;
+  --tyre-m: #ffd60a;
+  --tyre-h: #f3f4f7;
+  --tyre-i: #24c35a;
+  --tyre-w: #2f8cff;
+
+  /* ---- 2026 grid team colours (data-teams.yaml; runtime uses team.color) ---- */
+  --c-mercedes: #27f4d2;
+  --c-ferrari: #dc0000;
+  --c-mclaren: #ff8000;
+  --c-red_bull: #3671c6;
+  --c-alpine: #0093cc;
+  --c-audi: #bb0a30;
+  --c-racing_bulls: #6692ff;
+  --c-haas: #b6babd;
+  --c-williams: #64c4ff;
+  --c-cadillac: #c8a95b;
+  --c-aston_martin: #229971;
+
+  /* ---- part performance scale (R&D car drawing hotspots) ---- */
+  --perf-top: var(--purple);  /* best on the grid */
+  --perf-good: var(--green);  /* above grid average */
+  --perf-mid: var(--yellow);  /* below average */
+  --perf-low: var(--neg);     /* clear weakness */
+  --perf-locked: #4a5060;     /* customer PU parts (not developable) */
+
+  /* ---- type ---- */
+  --font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif;
+  --font-display: 'Bahnschrift SemiCondensed', 'Bahnschrift', 'DIN Condensed', 'Roboto Condensed', 'Arial Narrow', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-num: 'Bahnschrift', 'DIN Alternate', 'Roboto Condensed', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --fs-tiny: 12px;            /* minimum size; labels, hints */
+  --fs-s: 12.5px;
+  --fs-m: 13px;               /* desktop body (unchanged from current panel) */
+  --fs-phone: 14px;           /* phone body */
+  --fs-l: 15px;
+  --fs-xl: 18px;
+  --fs-kpi: 24px;
+
+  /* ---- shape / depth ---- */
+  --radius: 3px;              /* broadcast graphics are sharp */
+  --radius-l: 6px;
+  --skew: -12deg;             /* parallelogram tags, badges, active tab */
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  --glow: 0 0 0 1px var(--team-glow), 0 0 18px -4px var(--team-glow);
+
+  /* ---- layout ---- */
+  --tower-w: 212px;           /* desktop timing tower sidebar */
+  --header-h: 60px;
+  --tabbar-h: 64px;           /* phone bottom tab bar (+ safe-area inset) */
+
+  /* ---- motion ---- */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-fast: 0.15s;
+  --t-med: 0.35s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ===== base / reset ===== */
+* { box-sizing: border-box; }
+body { margin: 0; background: #000; color: var(--text); font: 13px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3, h4 { margin: 0; }
+.frame { position: relative; overflow: hidden; background: var(--carbon); }
+.muted { color: var(--muted); }
+.dim { color: var(--dim); }
+.small { font-size: 12.5px; }
+.tiny { font-size: 12px; }
+.mono, .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.spread { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.grow { flex: 1; min-width: 0; }
+.grid { display: grid; gap: 10px; }
+.g2 { grid-template-columns: 1fr 1fr; }
+.g3 { grid-template-columns: repeat(3, 1fr); }
+.g4 { grid-template-columns: repeat(4, 1fr); }
+.stack > * + * { margin-top: 10px; }
+.stack-s > * + * { margin-top: 7px; }
+.pos { color: var(--green); }
+.neg { color: var(--neg); }
+.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== display type ===== */
+.disp { font-family: var(--font-display); font-style: italic; font-weight: 800; letter-spacing: 0.01em; }
+.eyebrow { font-family: var(--font-display); font-style: italic; font-weight: 700; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+/* ===== buttons ===== */
+button { cursor: pointer; border: 1px solid var(--line2); background: var(--bg3); border-radius: var(--radius); padding: 6px 12px; transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast); }
+button:hover:not(:disabled) { background: var(--bg4); border-color: #4a5163; }
+button:focus-visible { outline: 2px solid var(--team-ink); outline-offset: 2px; }
+button:disabled { opacity: 0.42; cursor: not-allowed; }
+button.primary { position: relative; border: 0; color: #fff; font-family: var(--font-display); font-style: italic; font-weight: 800; letter-spacing: 0.02em; padding: 8px 18px; background: linear-gradient(100deg, var(--team), color-mix(in srgb, var(--team) 72%, #000)); clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+button.primary:hover:not(:disabled) { filter: brightness(1.12); }
+button.small { padding: 4px 9px; font-size: 12px; }
+button.ghost { background: transparent; }
+button.danger { border-color: #6b1f22; color: #ff8a8f; background: rgba(225, 6, 0, .06); }
+button.icon { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.count { display: inline-flex; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; align-items: center; justify-content: center; background: var(--yellow); color: #111; font: 800 11.5px/1 var(--font-num); }
+
+/* ===== inputs ===== */
+select, input[type='text'], input[type='number'], textarea { background: #05060a; border: 1px solid var(--line2); border-radius: var(--radius); padding: 6px 9px; }
+textarea { width: 100%; resize: vertical; line-height: 1.5; }
+label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+label.field > * { color: var(--text); }
+input[type='range'] { width: 100%; accent-color: var(--team); }
+
+/* ===== segmented control ===== */
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; background: #05060a; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 5px 11px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--team-soft); color: #fff; box-shadow: inset 0 -2px 0 var(--team); font-weight: 600; }
+.seg.wrap { flex-wrap: wrap; }
+
+/* ===== cards: lower-third ===== */
+.card { position: relative; background: var(--carbon-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: 0 1px 0 rgba(255,255,255,.03) inset; }
+.card::before { content: ''; position: absolute; left: -1px; top: -1px; bottom: -1px; width: 3px; background: linear-gradient(180deg, var(--team), color-mix(in srgb, var(--team) 25%, transparent)); border-radius: var(--radius) 0 0 var(--radius); }
+.card > h3, .card .h3 { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-style: italic; font-weight: 800; font-size: 14.5px; letter-spacing: .02em; margin: 0 0 8px; }
+.card > h3::after, .card .h3::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line2), transparent); }
+.card.flat::before { display: none; }
+/* chyron label (skewed tag) */
+.chyron { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; transform: skewX(var(--skew)); background: var(--team); color: #fff; font: italic 800 12px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; }
+.chyron > span { transform: skewX(12deg); }
+.chyron.dark { background: #fff; color: #08090c; }
+
+/* ===== KPI tiles ===== */
+.kpi { position: relative; background: var(--carbon-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 11px 9px; overflow: hidden; }
+.kpi .k-label { font-size: 12px; color: var(--muted); }
+.kpi .k-value { font: italic 800 22px/1.1 var(--font-display); letter-spacing: .01em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.kpi .k-sub { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--line2); }
+.kpi.ok .k-value { color: var(--green); } .kpi.ok::after { background: var(--green); }
+.kpi.warn .k-value { color: var(--yellow); } .kpi.warn::after { background: var(--yellow); }
+.kpi.bad .k-value { color: var(--neg); } .kpi.bad::after { background: var(--neg); }
+.kpi.team::after { background: var(--team); box-shadow: 0 0 10px var(--team-glow); }
+
+/* ===== badges ===== */
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 2px; border: 1px solid var(--line2); background: var(--bg3); font-size: 12px; white-space: nowrap; line-height: 1; }
+.badge.ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); background: color-mix(in srgb, var(--green) 9%, transparent); }
+.badge.warn { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 40%, transparent); background: color-mix(in srgb, var(--yellow) 8%, transparent); }
+.badge.bad { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 45%, transparent); background: color-mix(in srgb, var(--neg) 9%, transparent); }
+.badge.team { background: var(--team); border-color: transparent; color: #fff; font-weight: 700; }
+.badge.purple { color: #e4cbff; border-color: color-mix(in srgb, var(--purple) 55%, transparent); background: color-mix(in srgb, var(--purple) 18%, transparent); }
+.badge.info { color: #a9cdff; border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 12%, transparent); }
+
+/* ===== notices ===== */
+.notice { border: 1px solid var(--line2); border-left: 3px solid var(--blue); background: rgba(61,139,253,.06); padding: 7px 10px; border-radius: var(--radius); }
+.notice.warn { border-left-color: var(--yellow); background: rgba(255,214,10,.06); }
+.notice.bad { border-left-color: var(--neg); background: rgba(255,90,95,.07); }
+.notice.ok { border-left-color: var(--green); background: rgba(31,209,122,.06); }
+
+/* ===== bars (Bar.vue) ===== */
+.bar { display: grid; grid-template-columns: auto 1fr 38px; align-items: center; gap: 8px; font-size: 12px; }
+.bar.nolabel { grid-template-columns: 1fr 38px; }
+.bar-label { color: var(--muted); min-width: 52px; white-space: nowrap; }
+.bar-track { position: relative; height: 6px; background: #05060a; border: 1px solid var(--line); transform: skewX(var(--skew)); overflow: visible; }
+.bar-fill { height: 100%; background: var(--team); box-shadow: 0 0 8px -1px currentColor; transform-origin: left; animation: fill .9s var(--ease) both; }
+.bar-ref { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #fff; box-shadow: 0 0 4px #fff; }
+.bar-val { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; }
+@keyframes fill { from { transform: scaleX(0); } }
+
+/* ===== progress ===== */
+.progress { height: 5px; background: #05060a; border: 1px solid var(--line); overflow: hidden; transform: skewX(var(--skew)); }
+.progress > div { height: 100%; background: repeating-linear-gradient(-45deg, var(--team) 0 6px, color-mix(in srgb, var(--team) 70%, #000) 6px 12px); box-shadow: 0 0 10px var(--team-glow); animation: fill 1s var(--ease) both; }
+
+/* ===== tables ===== */
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { padding: 5px 7px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font: italic 700 12px var(--font-display); letter-spacing: .06em; color: var(--muted); text-transform: uppercase; background: rgba(255,255,255,.02); }
+tr.me td { background: linear-gradient(90deg, var(--team-soft), transparent 80%); }
+tr.me td:first-child { box-shadow: inset 3px 0 0 var(--team); }
+.swatch { display: inline-block; width: 3px; height: 13px; margin-right: 7px; vertical-align: -2px; transform: skewX(var(--skew)); }
+
+/* ===== tyre chip (Tyre.vue) ===== */
+.tyre { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid currentColor; background: #0b0b0d; font: 800 10px/1 var(--font-num); flex: 0 0 auto; }
+.tyre.s { color: var(--tyre-s); } .tyre.m { color: var(--tyre-m); } .tyre.h { color: var(--tyre-h); } .tyre.i { color: var(--tyre-i); } .tyre.w { color: var(--tyre-w); }
+.tyre.sm { width: 15px; height: 15px; border-width: 2px; font-size: 8.5px; }
+
+/* ===== timing tower ===== */
+.tower { display: flex; flex-direction: column; background: linear-gradient(180deg, rgba(5,6,9,.96), rgba(8,9,13,.96)); border-right: 1px solid var(--line); }
+.tower-head { padding: 8px 8px 6px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #14171f, #0b0d12); position: relative; }
+.tower-head::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--red); }
+.tower-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.tower-title .t1 { font: italic 800 14px/1.1 var(--font-display); letter-spacing: .04em; }
+.lap { font: italic 800 15px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.lap small { font-size: 11.5px; color: var(--muted); font-style: normal; margin-left: 2px; }
+.live { display: inline-flex; align-items: center; gap: 5px; font: italic 800 12px/1 var(--font-display); color: #fff; background: var(--red); padding: 3px 6px 3px 5px; letter-spacing: .08em; }
+.live i { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.tower .seg { width: 100%; margin-top: 6px; }
+.tower .seg button { flex: 1; padding: 3px 0; font-size: 12px; }
+.tower-rows { flex: 1; overflow: hidden; padding: 3px 0; }
+.trow { position: relative; display: grid; grid-template-columns: 24px 3px 1fr auto auto; align-items: center; column-gap: 6px; height: 24px; padding: 0 7px 0 0; font-size: 12.5px; animation: rowin .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 28ms); }
+.trow + .trow { border-top: 1px solid rgba(255,255,255,.035); }
+.trow .t-pos { height: 100%; display: flex; align-items: center; justify-content: center; font: italic 800 13px/1 var(--font-display); background: rgba(255,255,255,.06); color: #fff; }
+.trow:nth-child(-n+3) .t-pos { background: #f3f4f7; color: #08090c; }
+.trow .t-bar { width: 3px; height: 15px; background: var(--c); }
+.trow .t-code { font: italic 800 13.5px/1 var(--font-display); letter-spacing: .06em; display: flex; align-items: center; gap: 5px; }
+.trow .t-gap { font: 600 12px/1 var(--font-num); font-variant-numeric: tabular-nums; color: #d9dce4; text-align: right; min-width: 52px; }
+.trow .t-pts { font: italic 800 13px/1 var(--font-display); font-variant-numeric: tabular-nums; text-align: right; min-width: 30px; }
+.trow .t-flag { display: inline-flex; align-items: center; height: 15px; padding: 0 4px; font: italic 800 10.5px/1 var(--font-display); letter-spacing: .06em; border-radius: 1px; }
+.t-flag.pit { background: var(--blue); color: #fff; }
+.t-flag.fl { background: var(--purple); color: #fff; }
+.t-flag.pen { background: var(--yellow); color: #111; }
+.t-flag.dnf { background: #3a3f4c; color: #c7cbd6; }
+.t-flag.ot { background: var(--green); color: #052; }
+.trow.me { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 34%, transparent), color-mix(in srgb, var(--c) 6%, transparent)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent); }
+.trow.me .t-code { color: #fff; text-shadow: 0 0 10px color-mix(in srgb, var(--c) 80%, transparent); }
+.trow.me::after { content: ''; position: absolute; right: 0; top: 4px; bottom: 4px; width: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+.trow.fl .t-gap { color: #d9b8ff; }
+.trow.dnf { opacity: .5; }
+.trow.dnf .t-pos { background: transparent; color: var(--muted); font-size: 11px; }
+.trow.dnf .t-gap { color: var(--muted); }
+.trow.pit .t-gap { color: #a9cdff; }
+.trow.up .t-pos::after, .trow.down .t-pos::after { content: ''; position: absolute; left: 25px; width: 0; height: 0; border: 3px solid transparent; }
+.tower-foot { padding: 6px 8px; border-top: 1px solid var(--line); display: flex; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+@keyframes rowin { from { opacity: 0; transform: translateX(-14px); } }
+
+/* ===== app shell (desktop panel) ===== */
+.top { position: relative; display: flex; align-items: center; gap: 12px; height: var(--header-h); padding: 0 14px 0 0; background: linear-gradient(90deg, color-mix(in srgb, var(--team) 26%, #0b0c10) 0, #0d0f14 34%, #0b0c10); border-bottom: 1px solid var(--line); overflow: hidden; }
+.top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--team), transparent 60%); box-shadow: 0 0 12px var(--team-glow); }
+.top::before { content: ''; position: absolute; top: 0; bottom: 0; width: 120px; left: -140px; background: linear-gradient(100deg, transparent, rgba(255,255,255,.12), transparent); transform: skewX(-20deg); animation: sweep 1.6s .3s var(--ease) both; }
+@keyframes sweep { to { left: 110%; } }
+.team-badge { height: 100%; min-width: 74px; padding: 0 18px 0 14px; display: flex; align-items: center; justify-content: center; background: var(--team); color: #fff; font: italic 900 19px/1 var(--font-display); letter-spacing: .06em; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); text-shadow: 0 1px 3px rgba(0,0,0,.45); }
+.title { font: italic 800 17px/1.15 var(--font-display); letter-spacing: .01em; }
+.title .muted { font: 400 12.5px var(--font); margin-left: 6px; }
+.meta { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-top: 3px; white-space: nowrap; }
+.money { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; padding: 0 12px; border-right: 1px solid var(--line); }
+.money b { font: italic 800 16px/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.money span { font-size: 12px; color: var(--muted); }
+.tabs { display: flex; gap: 0; padding: 0 8px; height: 38px; align-items: stretch; border-bottom: 1px solid var(--line); background: rgba(5,6,9,.7); }
+.tabs button { position: relative; border: 0; border-radius: 0; background: transparent; padding: 0 13px; color: var(--muted); font: italic 700 13.5px var(--font-display); letter-spacing: .02em; white-space: nowrap; }
+.tabs button.on { color: #fff; }
+.tabs button.on::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: 0; height: 3px; background: var(--team); transform: skewX(var(--skew)); box-shadow: 0 0 10px var(--team-glow); }
+.content { padding: 12px 14px; }
+.scroll-hint { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, transparent, rgba(7,8,11,.95)); pointer-events: none; }
+
+/* ===== phone shell ===== */
+.p-top { position: relative; display: flex; align-items: center; gap: 8px; height: 56px; padding-right: 8px; background: linear-gradient(90deg, color-mix(in srgb, var(--team) 26%, #0b0c10), #0b0c10 60%); border-bottom: 1px solid var(--line); }
+.p-top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--team), transparent 70%); box-shadow: 0 0 10px var(--team-glow); }
+.p-top .team-badge { min-width: 60px; font-size: 17px; padding: 0 14px 0 10px; }
+.p-top .ttl { font: italic 800 15px/1.15 var(--font-display); }
+.p-top .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-top button.icon { width: 44px; height: 44px; position: relative; }
+.p-top button.icon .count { position: absolute; top: 3px; right: 2px; }
+.p-top button.primary { height: 44px; padding: 0 14px 0 16px; font-size: 14px; }
+.tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: grid; grid-template-columns: repeat(6, 1fr); background: rgba(6,7,10,.97); border-top: 1px solid var(--line); z-index: 20; }
+.tabbar button { position: relative; border: 0; border-radius: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); font-size: 11.5px; padding: 0; min-height: 44px; }
+.tabbar button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tabbar button.on { color: #fff; }
+.tabbar button.on::before { content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 3px; background: var(--team); transform: skewX(var(--skew)); box-shadow: 0 0 10px var(--team-glow); }
+.tabbar button.on svg { stroke: var(--team-ink); }
+.p-content { position: absolute; left: 0; right: 0; overflow: hidden; padding: 10px 12px 12px; }
+.strip { position: relative; display: flex; align-items: center; height: 40px; background: #06070a; border-bottom: 1px solid var(--line); overflow: hidden; }
+.strip .s-head { display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 10px 0 8px; background: #11141b; border-right: 1px solid var(--line); flex: 0 0 auto; }
+.strip .s-items { display: flex; align-items: center; gap: 0; overflow: hidden; flex: 1; mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.strip .s-item { display: flex; align-items: center; gap: 4px; padding: 0 6px; height: 26px; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.06); }
+.strip .s-item .p { font: italic 800 12.5px/1 var(--font-display); color: var(--muted); }
+.strip .s-item .bar3 { width: 3px; height: 14px; background: var(--c); }
+.strip .s-item .c { font: italic 800 13px/1 var(--font-display); letter-spacing: .05em; }
+.strip .s-item .g { font: 600 12px/1 var(--font-num); color: #cfd3dc; }
+.strip .s-item.me { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 32%, transparent), transparent); box-shadow: inset 2px 0 0 var(--c); }
+.strip .s-toggle { flex: 0 0 auto; width: 44px; height: 40px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: #11141b; display: flex; align-items: center; justify-content: center; }
+
+/* ===== misc ===== */
+.label-sm { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.divider { height: 1px; background: var(--line); margin: 8px 0; }
+.kv { display: grid; gap: 2px; }
+.kv span { font-size: 12px; color: var(--muted); }
+.kv b { font: italic 800 15px/1.15 var(--font-display); font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+.pips { display: inline-flex; gap: 3px; }
+.pips span { width: 14px; height: 6px; background: #05060a; border: 1px solid var(--line2); transform: skewX(var(--skew)); }
+.pips span.on { background: var(--team); border-color: transparent; box-shadow: 0 0 6px var(--team-glow); }
+
+:root { --team: #229971; }
+
+.shell { position: absolute; top: 60px; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: var(--tower-w) 1fr; }
+.main { position: relative; overflow: hidden; display: flex; flex-direction: column; }
+.content { flex: 1; overflow: hidden; }
+.rank-row { display: grid; grid-template-columns: 16px 6px 1fr 46%; align-items: center; gap: 6px; height: 21px; font-size: 12.5px; padding: 0 4px; }
+.rank-row .swatch { margin: 0; }
+.rank-row.me { background: linear-gradient(90deg, var(--team-soft), transparent); box-shadow: inset 2px 0 0 var(--team); }
+.track-hero { display: flex; gap: 12px; align-items: flex-start; }
+.track-map { flex: 0 0 96px; height: 70px; border: 1px solid var(--line); background: #05070b; display: flex; align-items: center; justify-content: center; }
+.driver-row { padding: 8px 0; }
+.driver-row + .driver-row { border-top: 1px solid var(--line); }
+.dnum { font: italic 900 20px/1 var(--font-display); color: var(--team-ink); margin-right: 6px; }
+.narr-item { display: flex; gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.narr-item:last-child { border: 0; }
+.narr-item i { flex: 0 0 3px; background: var(--yellow); }
+
+</style>
+</head>
+<body>
+<div class="frame" style="width:980px;height:720px">
+<header class="top" data-component-id="panel-header">
+  <div class="team-badge" aria-label="阿斯顿·马丁车队">AMR</div>
+  <div class="grow">
+    <div class="title">阿斯顿·马丁车队<span class="muted">领队 玩家</span></div>
+    <div class="meta">2026 赛季 · 第 8/24 站 · 摩纳哥赛道（街道）· <span class="badge team">工厂周</span></div>
+  </div>
+  <div class="money" data-component-id="header-funds"><b>$82.4M</b><span>预算帽余 $128.6M</span></div>
+  <button class="small" data-component-id="header-narrate" title="待叙述：底板 v3 交付、第 7 站正赛">让 AI 叙述 <span class="count">2</span></button>
+  <button class="primary" data-component-id="header-advance">▶ 进入比赛周末：摩纳哥大奖赛</button>
+</header>
+<div class="shell">
+  <aside class="tower " aria-label="计时塔" data-component-id="timing-tower"><div class="tower-head"><div class="tower-title"><span class="t1">积分榜</span><span class="tiny muted">第 7 站后</span></div><div class="seg" role="tablist" aria-label="积分榜类型"><button class="on" data-component-id="tower-toggle-drivers">车手</button><button data-component-id="tower-toggle-constructors">车队</button></div></div><div class="tower-rows" role="table"><div class="trow" style="--c:#27f4d2;--i:0" data-component-id="tower-row-rus" role="row"><span class="t-pos">1</span><span class="t-bar"></span><span class="t-code">RUS</span><span class="tiny dim">MER</span><span class="t-pts">136</span></div>
+<div class="trow" style="--c:#ff8000;--i:1" data-component-id="tower-row-nor" role="row"><span class="t-pos">2</span><span class="t-bar"></span><span class="t-code">NOR</span><span class="tiny dim">MCL</span><span class="t-pts">127</span></div>
+<div class="trow" style="--c:#27f4d2;--i:2" data-component-id="tower-row-ant" role="row"><span class="t-pos">3</span><span class="t-bar"></span><span class="t-code">ANT</span><span class="tiny dim">MER</span><span class="t-pts">112</span></div>
+<div class="trow" style="--c:#3671c6;--i:3" data-component-id="tower-row-ver" role="row"><span class="t-pos">4</span><span class="t-bar"></span><span class="t-code">VER</span><span class="tiny dim">RBR</span><span class="t-pts">108</span></div>
+<div class="trow" style="--c:#ff8000;--i:4" data-component-id="tower-row-pia" role="row"><span class="t-pos">5</span><span class="t-bar"></span><span class="t-code">PIA</span><span class="tiny dim">MCL</span><span class="t-pts">98</span></div>
+<div class="trow" style="--c:#dc0000;--i:5" data-component-id="tower-row-lec" role="row"><span class="t-pos">6</span><span class="t-bar"></span><span class="t-code">LEC</span><span class="tiny dim">FER</span><span class="t-pts">73</span></div>
+<div class="trow" style="--c:#dc0000;--i:6" data-component-id="tower-row-ham" role="row"><span class="t-pos">7</span><span class="t-bar"></span><span class="t-code">HAM</span><span class="tiny dim">FER</span><span class="t-pts">57</span></div>
+<div class="trow me" style="--c:#229971;--i:7" data-component-id="tower-row-alo" role="row"><span class="t-pos">8</span><span class="t-bar"></span><span class="t-code">ALO</span><span class="tiny dim">AMR</span><span class="t-pts">42</span></div>
+<div class="trow" style="--c:#3671c6;--i:8" data-component-id="tower-row-had" role="row"><span class="t-pos">9</span><span class="t-bar"></span><span class="t-code">HAD</span><span class="tiny dim">RBR</span><span class="t-pts">38</span></div>
+<div class="trow" style="--c:#64c4ff;--i:9" data-component-id="tower-row-sai" role="row"><span class="t-pos">10</span><span class="t-bar"></span><span class="t-code">SAI</span><span class="tiny dim">WIL</span><span class="t-pts">31</span></div>
+<div class="trow" style="--c:#0093cc;--i:10" data-component-id="tower-row-gas" role="row"><span class="t-pos">11</span><span class="t-bar"></span><span class="t-code">GAS</span><span class="tiny dim">ALP</span><span class="t-pts">25</span></div>
+<div class="trow" style="--c:#bb0a30;--i:11" data-component-id="tower-row-hul" role="row"><span class="t-pos">12</span><span class="t-bar"></span><span class="t-code">HUL</span><span class="tiny dim">AUD</span><span class="t-pts">20</span></div>
+<div class="trow" style="--c:#b6babd;--i:12" data-component-id="tower-row-bea" role="row"><span class="t-pos">13</span><span class="t-bar"></span><span class="t-code">BEA</span><span class="tiny dim">HAA</span><span class="t-pts">17</span></div>
+<div class="trow me" style="--c:#229971;--i:13" data-component-id="tower-row-str" role="row"><span class="t-pos">14</span><span class="t-bar"></span><span class="t-code">STR</span><span class="tiny dim">AMR</span><span class="t-pts">14</span></div>
+<div class="trow" style="--c:#64c4ff;--i:14" data-component-id="tower-row-alb" role="row"><span class="t-pos">15</span><span class="t-bar"></span><span class="t-code">ALB</span><span class="tiny dim">WIL</span><span class="t-pts">12</span></div>
+<div class="trow" style="--c:#6692ff;--i:15" data-component-id="tower-row-law" role="row"><span class="t-pos">16</span><span class="t-bar"></span><span class="t-code">LAW</span><span class="tiny dim">RB</span><span class="t-pts">8</span></div>
+<div class="trow" style="--c:#b6babd;--i:16" data-component-id="tower-row-oco" role="row"><span class="t-pos">17</span><span class="t-bar"></span><span class="t-code">OCO</span><span class="tiny dim">HAA</span><span class="t-pts">6</span></div>
+<div class="trow" style="--c:#bb0a30;--i:17" data-component-id="tower-row-bor" role="row"><span class="t-pos">18</span><span class="t-bar"></span><span class="t-code">BOR</span><span class="tiny dim">AUD</span><span class="t-pts">4</span></div>
+<div class="trow" style="--c:#6692ff;--i:18" data-component-id="tower-row-lin" role="row"><span class="t-pos">19</span><span class="t-bar"></span><span class="t-code">LIN</span><span class="tiny dim">RB</span><span class="t-pts">2</span></div>
+<div class="trow" style="--c:#0093cc;--i:19" data-component-id="tower-row-col" role="row"><span class="t-pos">20</span><span class="t-bar"></span><span class="t-code">COL</span><span class="tiny dim">ALP</span><span class="t-pts">1</span></div>
+<div class="trow" style="--c:#c8a95b;--i:20" data-component-id="tower-row-bot" role="row"><span class="t-pos">21</span><span class="t-bar"></span><span class="t-code">BOT</span><span class="tiny dim">CAD</span><span class="t-pts">0</span></div>
+<div class="trow" style="--c:#c8a95b;--i:21" data-component-id="tower-row-per" role="row"><span class="t-pos">22</span><span class="t-bar"></span><span class="t-code">PER</span><span class="tiny dim">CAD</span><span class="t-pts">0</span></div></div><div class="tower-foot"><span>比赛周末开始后切换为实时排名</span></div></aside>
+  <div class="main">
+    <nav class="tabs" role="tablist" aria-label="面板页面"><button class="on" data-component-id="tab-overview" role="tab" aria-selected="true">总览</button><button class="" data-component-id="tab-weekend" role="tab" aria-selected="false">比赛周末</button><button class="" data-component-id="tab-drivers" role="tab" aria-selected="false">车手</button><button class="" data-component-id="tab-car" role="tab" aria-selected="false">赛车</button><button class="" data-component-id="tab-rnd" role="tab" aria-selected="false">研发与设施</button><button class="" data-component-id="tab-standings" role="tab" aria-selected="false">积分榜</button><button class="" data-component-id="tab-saves" role="tab" aria-selected="false">存档与设置</button></nav>
+    <main class="content stack">
+      <div class="grid g4" style="gap:8px">
+        <div class="kpi team"><div class="k-label">车队积分榜</div><div class="k-value">P5</div><div class="k-sub">56 分 · 榜首 248 分</div></div>
+        <div class="kpi "><div class="k-label">资金</div><div class="k-value">$82.4M</div><div class="k-sub">年薪支出 $61.0M</div></div>
+        <div class="kpi "><div class="k-label">预算帽剩余</div><div class="k-value">$128.6M</div><div class="k-sub">已用 40% / $215.0M</div></div>
+        <div class="kpi warn"><div class="k-label">董事会信心</div><div class="k-value">58</div><div class="k-sub">目标：车队第 5</div></div>
+        <div class="kpi ok"><div class="k-label">媒体声誉</div><div class="k-value">61</div></div>
+        <div class="kpi ok"><div class="k-label">员工士气</div><div class="k-value">66</div></div>
+        <div class="kpi "><div class="k-label">风洞/CFD 时长</div><div class="k-value">34h</div><div class="k-sub">每站按排名刷新</div></div>
+        <div class="kpi "><div class="k-label">研发槽位</div><div class="k-value">2/4</div><div class="k-sub">进行中的设计项目</div></div>
+      </div>
+      <div class="grid g2">
+        <section class="card stack-s" data-component-id="next-round-card">
+          <h3>摩纳哥大奖赛</h3>
+          <div class="track-hero">
+            <div class="track-map" aria-label="赛道示意（占位）"><svg width="84" height="56" viewBox="0 0 84 56" fill="none" stroke="#7fdcff" stroke-width="2" stroke-linejoin="round" opacity=".8"><path d="M6 40 L18 22 L34 18 L40 8 L58 10 L66 20 L78 24 L74 36 L56 38 L50 48 L28 48 Z"/></svg></div>
+            <div class="small muted">摩纳哥赛道 · 街道 · 78 圈 · 进站损失 19s · 6 月 7 日<div class="small" style="color:var(--text);margin-top:4px">狭窄的街道几乎无法超车，排位决定一切。</div></div>
+          </div>
+          <div class="bar" title="赛道对该属性的需求权重(%)"><span class="bar-label">下压力</span><div class="bar-track"><div class="bar-fill" style="width:34%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">34</span></div>
+          <div class="bar" title=""><span class="bar-label">气动效率</span><div class="bar-track"><div class="bar-fill" style="width:12%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">12</span></div>
+          <div class="bar" title=""><span class="bar-label">动力</span><div class="bar-track"><div class="bar-fill" style="width:10%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">10</span></div>
+          <div class="bar" title=""><span class="bar-label">机械抓地</span><div class="bar-track"><div class="bar-fill" style="width:44%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">44</span></div>
+          <div class="bar" title=""><span class="bar-label">超车容易度</span><div class="bar-track"><div class="bar-fill" style="width:8%;background:#9b7bff;color:#9b7bff"></div></div><span class="bar-val">8</span></div>
+          <div class="bar" title=""><span class="bar-label">轮胎负荷</span><div class="bar-track"><div class="bar-fill" style="width:30%;background:#ffb347;color:#ffb347"></div></div><span class="bar-val">30</span></div>
+          <div class="row"><span class="badge info">降雨概率 15%</span><span class="badge">安全车倾向 60%</span></div>
+        </section>
+        <section class="card" data-component-id="track-ranking-card">
+          <h3>本站赛车性能排名</h3>
+          <div class="rank-row"><span class="mono muted">1</span><span class="swatch" style="background:#27f4d2"></span><span class="grow ellipsis">梅赛德斯车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:70.24999999999999%;background:#27f4d2;color:#27f4d2"></div></div><span class="bar-val">88.1</span></div></div><div class="rank-row"><span class="mono muted">2</span><span class="swatch" style="background:#ff8000"></span><span class="grow ellipsis">迈凯伦车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:66.00000000000001%;background:#ff8000;color:#ff8000"></div></div><span class="bar-val">86.4</span></div></div><div class="rank-row"><span class="mono muted">3</span><span class="swatch" style="background:#dc0000"></span><span class="grow ellipsis">法拉利车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:60.0%;background:#dc0000;color:#dc0000"></div></div><span class="bar-val">84.0</span></div></div><div class="rank-row"><span class="mono muted">4</span><span class="swatch" style="background:#3671c6"></span><span class="grow ellipsis">红牛车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:58.00000000000001%;background:#3671c6;color:#3671c6"></div></div><span class="bar-val">83.2</span></div></div><div class="rank-row me"><span class="mono muted">5</span><span class="swatch" style="background:#229971"></span><span class="grow ellipsis">阿斯顿·马丁车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:48.999999999999986%;background:#229971;color:#229971"></div></div><span class="bar-val">79.6</span></div></div><div class="rank-row"><span class="mono muted">6</span><span class="swatch" style="background:#64c4ff"></span><span class="grow ellipsis">威廉姆斯车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:40.0%;background:#64c4ff;color:#64c4ff"></div></div><span class="bar-val">76.0</span></div></div><div class="rank-row"><span class="mono muted">7</span><span class="swatch" style="background:#0093cc"></span><span class="grow ellipsis">阿尔派车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:35.249999999999986%;background:#0093cc;color:#0093cc"></div></div><span class="bar-val">74.1</span></div></div><div class="rank-row"><span class="mono muted">8</span><span class="swatch" style="background:#6692ff"></span><span class="grow ellipsis">小红牛车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:31.999999999999996%;background:#6692ff;color:#6692ff"></div></div><span class="bar-val">72.8</span></div></div><div class="rank-row"><span class="mono muted">9</span><span class="swatch" style="background:#b6babd"></span><span class="grow ellipsis">哈斯车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:26.25%;background:#b6babd;color:#b6babd"></div></div><span class="bar-val">70.5</span></div></div><div class="rank-row"><span class="mono muted">10</span><span class="swatch" style="background:#bb0a30"></span><span class="grow ellipsis">奥迪车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:24.750000000000014%;background:#bb0a30;color:#bb0a30"></div></div><span class="bar-val">69.9</span></div></div><div class="rank-row"><span class="mono muted">11</span><span class="swatch" style="background:#c8a95b"></span><span class="grow ellipsis">凯迪拉克车队</span><div class="bar nolabel" title=""><div class="bar-track"><div class="bar-fill" style="width:8.000000000000007%;background:#c8a95b;color:#c8a95b"></div></div><span class="bar-val">63.2</span></div></div>
+          <div class="tiny muted" style="margin-top:6px">按赛道需求加权的赛车性能（取车队较快的那台车）。</div>
+        </section>
+      </div>
+      <div class="grid g2">
+        <section class="card" data-component-id="drivers-card">
+          <h3>车手</h3>
+          <div class="driver-row stack-s">
+            <div class="spread"><b><span class="dnum">14</span>费尔南多·阿隆索 <span class="badge team">优先</span></b><span class="small muted">车手榜 P8 · 42 分</span></div>
+            <div class="grid g3" style="gap:4px 10px"><div class="bar" title="白线 = 潜力上限"><span class="bar-label">综合</span><div class="bar-track"><div class="bar-fill" style="width:88%;background:var(--team);color:var(--team)"></div><div class="bar-ref" style="left:89%"></div></div><span class="bar-val">88</span></div><div class="bar" title=""><span class="bar-label">心态</span><div class="bar-track"><div class="bar-fill" style="width:64%;background:var(--green);color:var(--green)"></div></div><span class="bar-val">64</span></div><div class="bar" title=""><span class="bar-label">信任</span><div class="bar-track"><div class="bar-fill" style="width:71%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">71</span></div></div>
+          </div>
+          <div class="driver-row stack-s">
+            <div class="spread"><b><span class="dnum">18</span>兰斯·斯特罗尔</b><span class="small muted">车手榜 P14 · 14 分</span></div>
+            <div class="grid g3" style="gap:4px 10px"><div class="bar" title=""><span class="bar-label">综合</span><div class="bar-track"><div class="bar-fill" style="width:74%;background:var(--team);color:var(--team)"></div><div class="bar-ref" style="left:76%"></div></div><span class="bar-val">74</span></div><div class="bar" title=""><span class="bar-label">心态</span><div class="bar-track"><div class="bar-fill" style="width:41%;background:var(--yellow);color:var(--yellow)"></div></div><span class="bar-val">41</span></div><div class="bar" title=""><span class="bar-label">信任</span><div class="bar-track"><div class="bar-fill" style="width:55%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">55</span></div></div>
+          </div>
+        </section>
+        <section class="card" data-component-id="narration-card">
+          <div class="spread"><h3 style="margin:0;flex:1">待 AI 叙述</h3><button class="small primary" data-component-id="narrate-now">让 AI 叙述</button></div>
+          <div class="narr-item"><i></i><div><b class="small">底板 v3 交付</b><div class="tiny muted">新底板首批 2 件已入库，真实性能待练习赛验证。</div></div></div>
+          <div class="narr-item"><i></i><div><b class="small">第 7 站正赛：阿隆索 P6</b><div class="tiny muted">斯特罗尔因变速箱故障退赛。</div></div></div>
+        </section>
+      </div>
+    </main>
+    <div class="scroll-hint"></div>
+  </div>
+</div>
+</div>
+
+</body>
+</html>

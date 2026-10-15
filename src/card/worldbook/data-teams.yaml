@@ -1,0 +1,491 @@
+# ═══════════════ [F1M数据] 车队 ═══════════════
+# 2026 赛季真实的 11 支车队（季前状态）。
+#
+# 数值依据（2026-10 整理）：
+#   - 2025 赛季成绩：车队积分榜 迈凯伦 833 / 梅赛德斯 469 / 红牛 451 / 法拉利 398 / 威廉姆斯 137 /
+#     小红牛 92 / 阿斯顿·马丁 89 / 哈斯 79 / 索伯 70 / 阿尔派 22。
+#   - 2026 赛季实测：各车队相对梅赛德斯的平均单圈差距（秒），赛车数值按这张表校准：
+#       梅赛德斯 基准 / 法拉利 +0.422 / 迈凯伦 +0.502 / 红牛 +0.676 / 阿尔派 +1.657 /
+#       奥迪 +1.866 / 小红牛 +1.877 / 哈斯 +2.242 / 威廉姆斯 +2.454 / 凯迪拉克 +3.676 /
+#       阿斯顿·马丁 +3.783
+#     校准方法：在均衡赛道上（权重与赛车综合分相同），两台车的「赛车综合分 × 0.08 秒 +
+#     车手正赛能力 × 0.035 秒」平均值与梅赛德斯的差，等于上表的差距（误差 < 0.02 秒）。
+#     所以车手较强的车队，赛车数值会相应低一些。
+#   - 动力单元：梅赛德斯（梅赛德斯 / 迈凯伦 / 威廉姆斯 / 阿尔派）、红牛-福特（红牛 / 小红牛）、
+#     法拉利（法拉利 / 哈斯 / 凯迪拉克）、本田（阿斯顿·马丁）、奥迪（奥迪）。
+#     同一供应商的客户车队拿到同一规格的动力单元，所以 六类动力单元部件数值相同。
+#   - 动力单元排序：梅赛德斯 > 法拉利 > 红牛-福特 > 奥迪 > 本田（本田可靠性最差）。
+#     本卡设定中法拉利放弃了钢制气缸盖方案，退回成熟方案：功率接近梅赛德斯，可靠性略逊。
+#
+# 数值尺度：零件性能 perf 每差 1 点，赛车综合分约差 1 点；在一般赛道上约等于每圈 0.08 秒
+#           （规则中的 secPerCarPoint）。最快与最慢的车相差约 3.8 秒，所以综合分跨度约 45 点。可靠性 rel 85 约每场 4% 故障率，70 约 10%。
+#
+# 字段说明（除 id 外都可省略，省略时使用默认值）：
+#   id              唯一标识（英文/数字），车手与赛历都用它引用车队
+#   name / short    全称 / 三字母简称
+#   color           车队主色（#RRGGBB），用于界面
+#   principal       AI 车队的领队名字（玩家车队会被替换成玩家）
+#   special         特殊机制（可省略）。目前只有 ferrari：玩家作为过渡领队，
+#                   需要维持媒体支持率并平衡两位车手的粉丝意见，否则会被撤职
+#   engine / base   动力单元供应商 / 车队基地
+#   worksTeam       动力单元厂商车队（true / 省略）。同一 engine 的其他车队是客户车队：
+#                   不能自行研发六类动力单元部件，厂商车队的新件会同时交付给客户车队。
+#                   ADUO 评估也按厂商（engine）进行，只有厂商车队获得补偿
+#   funds           初始资金（百万美元 M$）
+#   sponsorIncome   每站赞助收入（M$）
+#   operatingCost   每站运营成本（M$，计入预算帽）
+#   targetPosition  董事会期望的车队排名
+#   selectionDifficulty  开局选队难度分组：easy 简单 / medium 中等 / hard 困难（省略时为 medium）
+#   facilities      设施等级 1~5：windTunnel 风洞 / cfd CFD / simulator 模拟器 / factory 工厂
+#                   （模拟器等级影响周末初始调校信心）
+#   staff           关键员工：technicalDirector 技术总监 / aeroChief 空气动力学主管 /
+#                   raceEngineer 一号车比赛工程师 / raceEngineer2 二号车比赛工程师 /
+#                   pitCrew 维修组 / strategist 首席策略师
+#                   每项可写 {name, skill(1~100), salary(年薪 M$)}，也可只写一个数字表示 skill
+#                   工程师可写 abilities: {setup, communication, reaction, weather}；
+#                   首席策略师可写 abilities: {strategy, weather, reaction, risk}。旧数据缺失时回退到 skill。
+#   carBase         未单独填写的零件默认 {perf 性能, rel 可靠性}
+#   parts           各零件初始 {perf, rel}，键为零件类型：
+#                   ice 内燃机 / turbocharger 涡轮 / mgu_k 动能回收电机 / energy_store 储能系统 /
+#                   control_electronics 控制电子 / exhaust 排气（2026：MGU-K 350kW，取消 MGU-H）/
+#                   gearbox 变速箱 / chassis 底盘 / front_wing 前翼（主动空力）/
+#                   rear_wing 尾翼（主动空力）/ floor 底板 / sidepods 侧箱 / suspension 悬挂
+#   description     车队简介（会显示在面板上）
+teams:
+  # ── 梅赛德斯：季前最完整的赛车，动力单元公认最强；早期能量回收略逊于红牛 ──
+  - id: mercedes
+    special: mercedes
+    name: 梅赛德斯车队
+    short: MER
+    color: '#27f4d2'
+    principal: 托托·沃尔夫
+    engine: 梅赛德斯
+    worksTeam: true
+    base: 英国·布拉克利
+    funds: 115
+    sponsorIncome: 7.2
+    operatingCost: 2.6
+    targetPosition: 1
+    selectionDifficulty: medium
+    facilities: { windTunnel: 5, cfd: 5, simulator: 5, factory: 5 }
+    staff:
+      technicalDirector: { name: 詹姆斯·艾利森, skill: 90, salary: 3.5 }
+      aeroChief: { name: 贾罗德·墨菲, skill: 85, salary: 2.2 }
+      raceEngineer: { name: 马库斯·达德利, skill: 84, abilities: { setup: 86, communication: 84, reaction: 84, weather: 83 }, salary: 1.1 }
+      raceEngineer2: { name: 彼得·博宁顿, skill: 88, abilities: { setup: 90, communication: 91, reaction: 88, weather: 86 }, salary: 1.2 }
+      pitCrew: { name: 梅赛德斯维修组, skill: 86, salary: 1.6 }
+      strategist: { name: 罗茜·韦特, skill: 87, abilities: { strategy: 89, weather: 87, reaction: 86, risk: 67 }, salary: 1.1 }
+    carBase: { perf: 87, rel: 88 }
+    parts:
+      ice: { perf: 91, rel: 87 }
+      turbocharger: { perf: 91, rel: 87 }
+      exhaust: { perf: 91, rel: 87 }
+      mgu_k: { perf: 86, rel: 85 }
+      energy_store: { perf: 86, rel: 85 }
+      control_electronics: { perf: 86, rel: 85 }
+      gearbox: { perf: 87, rel: 89 }
+      chassis: { perf: 88, rel: 88 }
+      front_wing: { perf: 87, rel: 89 }
+      rear_wing: { perf: 87, rel: 89 }
+      floor: { perf: 88, rel: 87 }
+      sidepods: { perf: 87, rel: 89 }
+      suspension: { perf: 87, rel: 88 }
+    description: W17 · 梅赛德斯动力单元。2025 年车队积分榜第 2（469 分）。季前测试跑得最多、长距离最稳，压缩比设计还让对手持续向 FIA 施压，被普遍看作新规则下起步最好的车队。托托·沃尔夫决定培养接班人，你将作为副领队加入：带队争夺总冠军，同时让沃尔夫保持满意，否则培养计划终止，你会被撤职。
+
+  # ── 迈凯伦：2025 双冠王，底盘与轮胎管理顶级；客户版梅赛德斯动力 ──
+  - id: mclaren
+    special: mclaren
+    name: 迈凯伦车队
+    short: MCL
+    color: '#ff8000'
+    principal: 安德里亚·斯特拉
+    engine: 梅赛德斯
+    base: 英国·沃金
+    funds: 115
+    sponsorIncome: 7.4
+    operatingCost: 2.6
+    targetPosition: 1
+    selectionDifficulty: hard
+    facilities: { windTunnel: 5, cfd: 5, simulator: 5, factory: 5 }
+    staff:
+      technicalDirector: { name: 罗布·马歇尔, skill: 87, salary: 3 }
+      aeroChief: { name: 彼得·普罗德罗穆, skill: 88, salary: 2.4 }
+      raceEngineer: { name: 威尔·约瑟夫, skill: 84, abilities: { setup: 85, communication: 87, reaction: 83, weather: 82 }, salary: 1.1 }
+      raceEngineer2: { name: 汤姆·斯托拉德, skill: 85, abilities: { setup: 86, communication: 85, reaction: 86, weather: 84 }, salary: 1.1 }
+      pitCrew: { name: 迈凯伦维修组, skill: 92, salary: 1.8 }
+      strategist: { name: 兰迪普·辛格, skill: 86, abilities: { strategy: 88, weather: 85, reaction: 87, risk: 71 }, salary: 1.1 }
+    carBase: { perf: 78, rel: 87 }
+    parts:
+      ice: { perf: 91, rel: 87 }
+      turbocharger: { perf: 91, rel: 87 }
+      exhaust: { perf: 91, rel: 87 }
+      mgu_k: { perf: 86, rel: 85 }
+      energy_store: { perf: 86, rel: 85 }
+      control_electronics: { perf: 86, rel: 85 }
+      gearbox: { perf: 76.5, rel: 88 }
+      chassis: { perf: 78.5, rel: 88 }
+      front_wing: { perf: 77.5, rel: 87 }
+      rear_wing: { perf: 76.5, rel: 87 }
+      floor: { perf: 78.5, rel: 87 }
+      sidepods: { perf: 76.5, rel: 88 }
+      suspension: { perf: 79.5, rel: 88 }
+    description: MCL40 · 梅赛德斯客户动力单元。2025 年车队与车手双冠王（833 分，诺里斯夺冠），底盘以对轮胎友好著称。2026 年初，领队安德里亚·斯特拉在交通事故中受伤，至少需要一年恢复。扎克·布朗任命你为临时领队：先解决动力单元与车体控制系统的适配故障，再管住诺里斯与皮亚斯特里的队内之争，守住冠军。
+
+  # ── 红牛：首台自研红牛-福特动力单元，能量回收出色但可靠性未经验证 ──
+  - id: red_bull
+    special: red_bull
+    name: 红牛车队
+    short: RBR
+    color: '#3671c6'
+    principal: 洛朗·梅基斯
+    engine: 红牛-福特
+    worksTeam: true
+    base: 英国·米尔顿凯恩斯
+    funds: 115
+    sponsorIncome: 7.4
+    operatingCost: 2.6
+    targetPosition: 2
+    selectionDifficulty: hard
+    facilities: { windTunnel: 4, cfd: 5, simulator: 5, factory: 5 }
+    staff:
+      technicalDirector: { name: 皮埃尔·瓦谢, skill: 87, salary: 3 }
+      aeroChief: { name: 恩里科·巴尔博, skill: 84, salary: 2 }
+      raceEngineer: { name: 詹皮耶罗·兰比亚塞, skill: 88, abilities: { setup: 89, communication: 91, reaction: 90, weather: 87 }, salary: 1.3 }
+      raceEngineer2: { name: 理查德·伍德, skill: 82, abilities: { setup: 82, communication: 84, reaction: 83, weather: 80 }, salary: 1 }
+      pitCrew: { name: 红牛维修组, skill: 90, salary: 1.7 }
+      strategist: { name: 汉娜·施密茨, skill: 87, abilities: { strategy: 91, weather: 89, reaction: 90, risk: 76 }, salary: 1.2 }
+    carBase: { perf: 76, rel: 83 }
+    parts:
+      ice: { perf: 87, rel: 78 }
+      turbocharger: { perf: 87, rel: 78 }
+      exhaust: { perf: 87, rel: 78 }
+      mgu_k: { perf: 88, rel: 78 }
+      energy_store: { perf: 88, rel: 78 }
+      control_electronics: { perf: 88, rel: 78 }
+      gearbox: { perf: 75.9, rel: 82 }
+      chassis: { perf: 75.9, rel: 85 }
+      front_wing: { perf: 75.9, rel: 86 }
+      rear_wing: { perf: 75.9, rel: 86 }
+      floor: { perf: 76.9, rel: 85 }
+      sidepods: { perf: 74.9, rel: 86 }
+      suspension: { perf: 74.9, rel: 85 }
+    description: RB22 · 红牛-福特动力单元（车队首台自研动力）。2025 年车队积分榜第 3（451 分），但全力争冠拖累了新车准备，季前还暴露出液压问题。马尔科被解雇，大批人才流失。你将辅助领队洛朗·梅基斯管理人手不足的团队：留住正与迈凯伦谈判的工程师 GP，并让维斯塔潘夏休时留在车手榜前三，否则他会转投梅赛德斯。
+
+  # ── 法拉利：真实车队（2026 赛季），带「过渡领队」特殊机制 ──
+  # 选择法拉利开局时：玩家是埃尔坎从外部请来的过渡领队，需要稳住媒体支持率，
+  # 并平衡汉密尔顿与勒克莱尔两边的粉丝意见（阈值见 [F1M数据] 规则中的 ferrari 段）。
+  # 平均单圈仅次于梅赛德斯；底盘与主动空力是强项。
+  - id: ferrari
+    name: 法拉利车队
+    short: FER
+    color: '#dc0000'
+    special: ferrari
+    principal: 空缺（过渡领队）
+    engine: 法拉利
+    worksTeam: true
+    base: 意大利·马拉内罗
+    funds: 120
+    sponsorIncome: 7.5
+    operatingCost: 2.6
+    targetPosition: 4
+    selectionDifficulty: medium
+    facilities: { windTunnel: 4, cfd: 4, simulator: 5, factory: 5 }
+    staff:
+      technicalDirector: { name: 洛伊克·塞拉（底盘技术总监）, skill: 84, salary: 3 }
+      aeroChief: { name: 迭戈·通迪, skill: 80, salary: 2 }
+      raceEngineer: { name: 卡洛·桑蒂, skill: 79, abilities: { setup: 81, communication: 82, reaction: 78, weather: 77 }, salary: 1 }
+      raceEngineer2: { name: 布莱恩·博齐, skill: 82, abilities: { setup: 85, communication: 84, reaction: 81, weather: 79 }, salary: 1 }
+      pitCrew: { name: 法拉利维修组, skill: 87, salary: 1.6 }
+      strategist: { name: 拉文·贾恩, skill: 78, abilities: { strategy: 76, weather: 74, reaction: 73, risk: 82 }, salary: 1 }
+    carBase: { perf: 81, rel: 83 }
+    parts:
+      # 钢制气缸盖方案被放弃，退回成熟方案：功率接近梅赛德斯，可靠性略逊
+      ice: { perf: 89, rel: 84 }
+      turbocharger: { perf: 89, rel: 84 }
+      exhaust: { perf: 89, rel: 84 }
+      mgu_k: { perf: 85, rel: 83 }
+      energy_store: { perf: 85, rel: 83 }
+      control_electronics: { perf: 85, rel: 83 }
+      gearbox: { perf: 79.1, rel: 84 }
+      chassis: { perf: 81.1, rel: 85 }
+      front_wing: { perf: 82.1, rel: 85 }
+      rear_wing: { perf: 82.1, rel: 84 }
+      floor: { perf: 80.1, rel: 83 }
+      sidepods: { perf: 79.1, rel: 85 }
+      suspension: { perf: 81.1, rel: 85 }
+    description: SF-26 · 法拉利动力单元。2025 年 SF-25 的底板与后悬挂问题迫使赛车抬高车身，全年无大奖赛胜利，车队积分榜第 4（398 分）。年底，恩里科·瓜尔蒂耶里主导的钢制气缸盖发动机方案宣告失败，埃尔坎随即解除了弗雷德·瓦塞尔的领队职务。2026 是过渡年，你将作为外聘的过渡领队接手：稳住媒体、平衡汉密尔顿与勒克莱尔两边的粉丝，否则会被撤职。
+
+  # ── 威廉姆斯：2025 年中游领头羊；季前底盘不如预期，但有顶级的梅赛德斯动力 ──
+  - id: williams
+    special: williams
+    name: 威廉姆斯车队
+    short: WIL
+    color: '#64c4ff'
+    principal: 詹姆斯·沃尔斯
+    engine: 梅赛德斯
+    base: 英国·格罗夫
+    funds: 52
+    sponsorIncome: 5.2
+    operatingCost: 2.4
+    targetPosition: 5
+    selectionDifficulty: hard
+    facilities: { windTunnel: 2, cfd: 3, simulator: 3, factory: 3 }
+    staff:
+      technicalDirector: { name: 帕特·弗莱, skill: 82, salary: 2.2 }
+      aeroChief: { name: 亚当·肯扬, skill: 77, salary: 1.5 }
+      raceEngineer: { name: 詹姆斯·厄文, skill: 78, abilities: { setup: 81, communication: 80, reaction: 78, weather: 76 }, salary: 0.9 }
+      raceEngineer2: { name: 加埃唐·热戈, skill: 78, abilities: { setup: 79, communication: 81, reaction: 77, weather: 78 }, salary: 0.9 }
+      pitCrew: { name: 威廉姆斯维修组, skill: 82, salary: 1.2 }
+      strategist: { name: 夏尔-安托万·弗洛朗坦, skill: 80, abilities: { strategy: 82, weather: 80, reaction: 79, risk: 69 }, salary: 0.9 }
+    carBase: { perf: 49, rel: 82 }
+    parts:
+      ice: { perf: 91, rel: 87 }
+      turbocharger: { perf: 91, rel: 87 }
+      exhaust: { perf: 91, rel: 87 }
+      mgu_k: { perf: 86, rel: 85 }
+      energy_store: { perf: 86, rel: 85 }
+      control_electronics: { perf: 86, rel: 85 }
+      gearbox: { perf: 50.9, rel: 84 }
+      chassis: { perf: 46.9, rel: 82 }
+      front_wing: { perf: 48.9, rel: 83 }
+      rear_wing: { perf: 49.9, rel: 83 }
+      floor: { perf: 47.9, rel: 82 }
+      sidepods: { perf: 49.9, rel: 83 }
+      suspension: { perf: 48.9, rel: 82 }
+    description: FW48 · 梅赛德斯客户动力单元。2025 年车队积分榜第 5（137 分），塞恩斯在阿塞拜疆登上领奖台。但新车季前底盘不如预期，资金只有 52 M$，设施多年落后。詹姆斯·沃尔斯将在赛季末返回梅赛德斯，你作为接班人选从开季起接受培养：每周在设施、升级和现金之间分配预算，赢得沃尔斯信任，赛季末才能正式接任。
+
+  # ── 小红牛：红牛二队，红牛-福特动力，阵容最年轻 ──
+  - id: racing_bulls
+    special: racing_bulls
+    name: 小红牛车队
+    short: RB
+    color: '#6692ff'
+    principal: 艾伦·佩尔曼
+    engine: 红牛-福特
+    base: 意大利·法恩扎
+    funds: 65
+    sponsorIncome: 4.4
+    operatingCost: 2.3
+    targetPosition: 7
+    selectionDifficulty: easy
+    facilities: { windTunnel: 3, cfd: 3, simulator: 4, factory: 3 }
+    staff:
+      technicalDirector: { name: 蒂姆·戈斯, skill: 76, salary: 1.6 }
+      aeroChief: { name: 古鲁·乔尔, skill: 75, salary: 1.3 }
+      raceEngineer: { name: 亚历山大·伊利奥普洛斯, skill: 76, abilities: { setup: 77, communication: 78, reaction: 75, weather: 73 }, salary: 0.8 }
+      raceEngineer2: { name: 皮埃尔·哈梅林, skill: 78, abilities: { setup: 80, communication: 79, reaction: 77, weather: 76 }, salary: 0.8 }
+      pitCrew: { name: 小红牛维修组, skill: 84, salary: 1.1 }
+      strategist: { name: 马蒂厄·迪布瓦-卢卡, skill: 76, abilities: { strategy: 77, weather: 75, reaction: 76, risk: 77 }, salary: 0.8 }
+    carBase: { perf: 62, rel: 82 }
+    parts:
+      ice: { perf: 87, rel: 78 }
+      turbocharger: { perf: 87, rel: 78 }
+      exhaust: { perf: 87, rel: 78 }
+      mgu_k: { perf: 88, rel: 78 }
+      energy_store: { perf: 88, rel: 78 }
+      control_electronics: { perf: 88, rel: 78 }
+      gearbox: { perf: 64.1, rel: 82 }
+      chassis: { perf: 62.1, rel: 83 }
+      front_wing: { perf: 62.1, rel: 83 }
+      rear_wing: { perf: 62.1, rel: 83 }
+      floor: { perf: 62.1, rel: 82 }
+      sidepods: { perf: 61.1, rel: 83 }
+      suspension: { perf: 62.1, rel: 82 }
+    description: VCARB 03 · 红牛-福特客户动力单元。2025 年车队积分榜第 6（92 分）。梅基斯调往红牛后，艾伦·佩尔曼接手车队，阵容是劳森和新秀林德布拉德。风洞与工厂等级偏低，底盘与空力偏后，但能量回收系统出色。你将以副领队身份辅佐佩尔曼：既要拿积分，又要培养车手，还要随时应对红牛临时调走正式车手。
+
+  # ── 阿斯顿·马丁：纽维出任领队、本田回归；季前可靠性灾难 ──
+  - id: aston_martin
+    special: aston_martin
+    name: 阿斯顿·马丁车队
+    short: AMR
+    color: '#229971'
+    principal: 阿德里安·纽维
+    engine: 本田
+    worksTeam: true
+    base: 英国·银石
+    funds: 110
+    sponsorIncome: 6.5
+    operatingCost: 2.6
+    targetPosition: 8
+    selectionDifficulty: hard
+    facilities: { windTunnel: 5, cfd: 4, simulator: 5, factory: 5 }
+    staff:
+      technicalDirector: { name: 恩里科·卡尔迪莱, skill: 84, salary: 2.8 }
+      aeroChief: { name: 焦阿基诺·维诺, skill: 80, salary: 1.8 }
+      raceEngineer: { name: 克里斯·克罗宁, skill: 77, abilities: { setup: 78, communication: 82, reaction: 75, weather: 78 }, salary: 1 }
+      raceEngineer2: { name: 加里·甘农, skill: 77, abilities: { setup: 79, communication: 78, reaction: 76, weather: 76 }, salary: 0.9 }
+      pitCrew: { name: 阿斯顿·马丁维修组, skill: 80, salary: 1.3 }
+      strategist: { name: 彼得·霍尔, skill: 77, abilities: { strategy: 75, weather: 74, reaction: 74, risk: 80 }, salary: 0.9 }
+    carBase: { perf: 35, rel: 74 }
+    parts:
+      # 电池故障、备件不足：动力单元是全场最弱的一环
+      ice: { perf: 72, rel: 60 }
+      turbocharger: { perf: 72, rel: 60 }
+      exhaust: { perf: 72, rel: 60 }
+      mgu_k: { perf: 68, rel: 58 }
+      energy_store: { perf: 68, rel: 58 }
+      control_electronics: { perf: 68, rel: 58 }
+      gearbox: { perf: 34.8, rel: 72 }
+      chassis: { perf: 35.8, rel: 74 }
+      front_wing: { perf: 34.8, rel: 76 }
+      rear_wing: { perf: 34.8, rel: 76 }
+      floor: { perf: 33.8, rel: 74 }
+      sidepods: { perf: 33.8, rel: 76 }
+      suspension: { perf: 34.8, rel: 76 }
+    description: AMR26 · 本田动力单元。2025 年车队积分榜第 7（89 分）。这是纽维设计的第一台阿斯顿·马丁赛车，但本田缺少新规经验，动力单元功率与可靠性全场最低，与车体结合后还产生危险振动。季前测试后惠特利被撤职，你被找来接手日常管理：调解本田与纽维、保护车手安全，还要平衡阿隆索粉丝与老斯特罗尔的期待。
+
+  # ── 哈斯：法拉利客户车队，预算有限 ──
+  - id: haas
+    special: haas
+    name: 哈斯车队
+    short: HAA
+    color: '#b6babd'
+    principal: 小松礼雄
+    engine: 法拉利
+    base: 美国·坎纳波利斯 / 英国·班伯里
+    funds: 45
+    sponsorIncome: 4.6
+    operatingCost: 2.3
+    targetPosition: 8
+    selectionDifficulty: medium
+    facilities: { windTunnel: 3, cfd: 3, simulator: 3, factory: 2 }
+    staff:
+      technicalDirector: { name: 安德烈亚·德佐尔多, skill: 75, salary: 1.4 }
+      aeroChief: { name: 戴维德·帕加内利, skill: 74, salary: 1.2 }
+      raceEngineer: { name: 劳拉·穆勒, skill: 77, abilities: { setup: 78, communication: 80, reaction: 76, weather: 74 }, salary: 0.8 }
+      raceEngineer2: { name: 罗南·奥黑尔, skill: 77, abilities: { setup: 78, communication: 79, reaction: 76, weather: 74 }, salary: 0.8 }
+      pitCrew: { name: 哈斯维修组, skill: 79, salary: 1 }
+      strategist: { name: 卡琳·克里德利希, skill: 78, abilities: { strategy: 79, weather: 76, reaction: 78, risk: 72 }, salary: 0.8 }
+    carBase: { perf: 55, rel: 81 }
+    parts:
+      ice: { perf: 89, rel: 84 }
+      turbocharger: { perf: 89, rel: 84 }
+      exhaust: { perf: 89, rel: 84 }
+      mgu_k: { perf: 85, rel: 83 }
+      energy_store: { perf: 85, rel: 83 }
+      control_electronics: { perf: 85, rel: 83 }
+      gearbox: { perf: 56.8, rel: 82 }
+      chassis: { perf: 54.8, rel: 82 }
+      front_wing: { perf: 54.8, rel: 82 }
+      rear_wing: { perf: 54.8, rel: 82 }
+      floor: { perf: 54.8, rel: 81 }
+      sidepods: { perf: 53.8, rel: 82 }
+      suspension: { perf: 54.8, rel: 82 }
+    description: VF-26 · 法拉利客户动力单元。2025 年车队积分榜第 8（79 分）。2026 年以 TGR 哈斯车队名义参赛，丰田的投入逐步加大，小松礼雄已无法独自处理全部事务。开局资金只有 45 M$，工厂等级仅为 2。你将作为共同领队协助小松礼雄：在吉恩·哈斯与丰田之间维持平衡。丰田的钱越多，干涉也越多；失去哈斯的支持，你就会被解职。
+
+  # ── 奥迪：索伯改组为奥迪厂商车队，季前中游的惊喜 ──
+  - id: audi
+    special: audi
+    name: 奥迪车队
+    short: AUD
+    color: '#bb0a30'
+    principal: 马蒂亚·比诺托
+    engine: 奥迪
+    worksTeam: true
+    base: 瑞士·欣维尔
+    funds: 105
+    sponsorIncome: 5.6
+    operatingCost: 2.5
+    targetPosition: 8
+    selectionDifficulty: medium
+    facilities: { windTunnel: 4, cfd: 4, simulator: 4, factory: 4 }
+    staff:
+      technicalDirector: { name: 詹姆斯·基, skill: 80, salary: 2.2 }
+      aeroChief: { name: 亚历山德罗·奇内利, skill: 76, salary: 1.5 }
+      raceEngineer: { name: 史蒂文·佩特里克, skill: 78, abilities: { setup: 79, communication: 79, reaction: 77, weather: 76 }, salary: 0.9 }
+      raceEngineer2: { name: 何塞·曼努埃尔·洛佩斯, skill: 77, abilities: { setup: 78, communication: 78, reaction: 76, weather: 76 }, salary: 0.9 }
+      pitCrew: { name: 奥迪维修组, skill: 80, salary: 1.2 }
+      strategist: { name: 里特维克·达南贾亚·雷迪, skill: 78, abilities: { strategy: 79, weather: 78, reaction: 77, risk: 70 }, salary: 0.9 }
+    carBase: { perf: 62, rel: 79 }
+    parts:
+      ice: { perf: 81, rel: 75 }
+      turbocharger: { perf: 81, rel: 75 }
+      exhaust: { perf: 81, rel: 75 }
+      mgu_k: { perf: 80, rel: 76 }
+      energy_store: { perf: 80, rel: 76 }
+      control_electronics: { perf: 80, rel: 76 }
+      gearbox: { perf: 61.3, rel: 78 }
+      chassis: { perf: 62.3, rel: 81 }
+      front_wing: { perf: 62.3, rel: 82 }
+      rear_wing: { perf: 63.3, rel: 82 }
+      floor: { perf: 62.3, rel: 81 }
+      sidepods: { perf: 62.3, rel: 82 }
+      suspension: { perf: 62.3, rel: 81 }
+    description: R26 · 奥迪动力单元（厂商首台 F1 动力）。前身索伯 2025 年车队积分榜第 9（70 分），季前长距离表现排在中游前列。惠特利转投阿斯顿·马丁后，马蒂亚·比诺托接掌车队并主管技术。但自研动力单元存在涡轮问题，起步时常常丢位置。你将以副领队身份负责围场政治：联合其他车队推动 ADUO 追赶机制，尽快解决涡轮问题。
+
+  # ── 阿尔派：改用梅赛德斯客户动力；2025 年垫底 ──
+  - id: alpine
+    special: alpine
+    name: 阿尔派车队
+    short: ALP
+    color: '#0093cc'
+    principal: 弗拉维奥·布里亚托利
+    engine: 梅赛德斯
+    base: 英国·恩斯通
+    funds: 75
+    sponsorIncome: 4.8
+    operatingCost: 2.4
+    targetPosition: 7
+    selectionDifficulty: easy
+    facilities: { windTunnel: 4, cfd: 4, simulator: 4, factory: 4 }
+    staff:
+      technicalDirector: { name: 大卫·桑切斯, skill: 78, salary: 1.8 }
+      aeroChief: { name: 迈克尔·布罗德赫斯特, skill: 75, salary: 1.3 }
+      raceEngineer: { name: 乔什·佩克特, skill: 76, abilities: { setup: 77, communication: 78, reaction: 75, weather: 74 }, salary: 0.8 }
+      raceEngineer2: { name: 斯图尔特·巴洛, skill: 75, abilities: { setup: 76, communication: 76, reaction: 74, weather: 73 }, salary: 0.8 }
+      pitCrew: { name: 阿尔派维修组, skill: 80, salary: 1.1 }
+      strategist: { name: 奥里奥尔·伊塞恩, skill: 76, abilities: { strategy: 76, weather: 75, reaction: 74, risk: 78 }, salary: 0.8 }
+    carBase: { perf: 65, rel: 82 }
+    parts:
+      ice: { perf: 91, rel: 87 }
+      turbocharger: { perf: 91, rel: 87 }
+      exhaust: { perf: 91, rel: 87 }
+      mgu_k: { perf: 86, rel: 85 }
+      energy_store: { perf: 86, rel: 85 }
+      control_electronics: { perf: 86, rel: 85 }
+      gearbox: { perf: 66.5, rel: 83 }
+      chassis: { perf: 64.5, rel: 82 }
+      front_wing: { perf: 64.5, rel: 83 }
+      rear_wing: { perf: 64.5, rel: 83 }
+      floor: { perf: 63.5, rel: 82 }
+      sidepods: { perf: 64.5, rel: 83 }
+      suspension: { perf: 64.5, rel: 82 }
+    description: A526 · 梅赛德斯客户动力单元。2025 年车队积分榜第 10（22 分），全场垫底，积分几乎全靠加斯利。2026 年车队放弃雷诺厂商动力，车体、冷却与能量管理还没完全匹配。弗拉维奥·布里亚托利决定培养接班人，你以副领队身份加入：只能在他划定的研发方向内启动项目，同时平衡科拉平托粉丝与加斯利的留队意愿，令他失望就会被撤职。
+
+  # ── 凯迪拉克：新加入的第 11 支车队，法拉利客户动力；跑得多但下压力不足 ──
+  - id: cadillac
+    name: 凯迪拉克车队
+    short: CAD
+    color: '#c8a95b'
+    principal: 格雷姆·洛登
+    engine: 法拉利
+    base: 美国·费希尔斯 / 英国·银石
+    funds: 95
+    sponsorIncome: 4.5
+    operatingCost: 2.4
+    targetPosition: 11
+    selectionDifficulty: easy
+    facilities: { windTunnel: 3, cfd: 3, simulator: 4, factory: 4 }
+    staff:
+      technicalDirector: { name: 尼克·切斯特, skill: 74, salary: 1.8 }
+      aeroChief: { name: 乔恩·汤姆林森, skill: 70, salary: 1.3 }
+      raceEngineer: { name: 约翰·霍华德, skill: 75, abilities: { setup: 76, communication: 77, reaction: 74, weather: 73 }, salary: 0.8 }
+      raceEngineer2: { name: 卡洛·帕塞蒂, skill: 74, abilities: { setup: 75, communication: 75, reaction: 73, weather: 72 }, salary: 0.8 }
+      pitCrew: { name: 凯迪拉克维修组, skill: 72, salary: 1.1 }
+      strategist: { name: 亚历克斯·古迪纳夫, skill: 74, abilities: { strategy: 74, weather: 72, reaction: 73, risk: 80 }, salary: 0.8 }
+    carBase: { perf: 32, rel: 81 }
+    parts:
+      ice: { perf: 89, rel: 84 }
+      turbocharger: { perf: 89, rel: 84 }
+      exhaust: { perf: 89, rel: 84 }
+      mgu_k: { perf: 85, rel: 83 }
+      energy_store: { perf: 85, rel: 83 }
+      control_electronics: { perf: 85, rel: 83 }
+      gearbox: { perf: 36, rel: 80 }
+      chassis: { perf: 32, rel: 82 }
+      front_wing: { perf: 31, rel: 82 }
+      rear_wing: { perf: 32, rel: 82 }
+      floor: { perf: 29, rel: 80 }
+      sidepods: { perf: 32, rel: 82 }
+      suspension: { perf: 33, rel: 82 }
+    description: 法拉利客户动力单元。全新的第 11 支车队，由通用汽车与 TWG 支持，基地横跨美国费希尔斯与英国银石。季前测试比头名慢约 3 秒，下压力严重不足，底板落后全场；但跑出约五个比赛距离，可靠性好于预期。你将加入格雷姆·洛登的创始管理团队，成为车队首任领队之一：从零搭建团队，带领博塔斯和佩雷斯争取第一个积分。

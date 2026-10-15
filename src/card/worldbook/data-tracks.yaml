@@ -1,0 +1,386 @@
+# ═══════════════ [F1M数据] 2026 赛道 ═══════════════
+# baseLap、pitLoss 与环境概率是用于模拟平衡的参考值；圈数与赛道身份按正式赛历。
+tracks:
+  - id: melbourne
+    name: 阿尔伯特公园赛道
+    country: 澳大利亚
+    type: 半街道·高速均衡
+    laps: 58
+    baseLap: 77
+    pitLoss: 20.5
+    weights: { downforce: 0.25, efficiency: 0.3, power: 0.25, mechanical: 0.2 }
+    overtaking: 62
+    tyreStress: 55
+    surfaceTemperature: 36 # 模拟参考路温（°C）
+    thermalDemand: 54 # 模拟参考生热需求（0–100）
+    rainChance: 0.28
+    scChance: 0.58
+    description: 快速改造后的公园赛道，连续高速弯与多段直道并存，赛季揭幕站容易出现安全车。
+
+  - id: shanghai
+    name: 上海国际赛车场
+    country: 中国
+    type: 均衡·长直道
+    laps: 56
+    baseLap: 92.5
+    pitLoss: 22
+    weights: { downforce: 0.24, efficiency: 0.28, power: 0.27, mechanical: 0.21 }
+    overtaking: 72
+    tyreStress: 65
+    surfaceTemperature: 38 # 模拟参考路温（°C）
+    thermalDemand: 64 # 模拟参考生热需求（0–100）
+    rainChance: 0.27
+    scChance: 0.42
+    description: 超长一号弯和后直道同时考验前胎、气动效率与动力，2026 年举办冲刺赛。
+
+  - id: suzuka
+    name: 铃鹿国际赛车场
+    country: 日本
+    type: 高速·高下压力
+    laps: 53
+    baseLap: 88.5
+    pitLoss: 22.5
+    weights: { downforce: 0.36, efficiency: 0.27, power: 0.19, mechanical: 0.18 }
+    overtaking: 38
+    tyreStress: 72
+    surfaceTemperature: 40 # 模拟参考路温（°C）
+    thermalDemand: 70 # 模拟参考生热需求（0–100）
+    rainChance: 0.32
+    scChance: 0.4
+    description: 8 字形经典赛道，S 弯、130R 和高速方向变化对气动稳定性要求极高。
+
+  - id: bahrain
+    name: 巴林国际赛车场
+    country: 巴林
+    type: 牵引·重刹车
+    laps: 57
+    baseLap: 90
+    pitLoss: 23
+    weights: { downforce: 0.18, efficiency: 0.23, power: 0.29, mechanical: 0.3 }
+    overtaking: 78
+    tyreStress: 78
+    surfaceTemperature: 41 # 模拟参考路温（°C）
+    thermalDemand: 75 # 模拟参考生热需求（0–100）
+    rainChance: 0.01
+    scChance: 0.34
+    description: 砂漠夜赛拥有多处重刹车超车点，后胎热衰减和低速牵引决定长距离表现。
+
+  - id: jeddah
+    name: 吉达滨海赛道
+    country: 沙特阿拉伯
+    type: 超高速街道
+    laps: 50
+    baseLap: 88
+    pitLoss: 20
+    weights: { downforce: 0.2, efficiency: 0.35, power: 0.3, mechanical: 0.15 }
+    overtaking: 60
+    tyreStress: 42
+    surfaceTemperature: 33 # 模拟参考路温（°C）
+    thermalDemand: 43 # 模拟参考生热需求（0–100）
+    rainChance: 0.02
+    scChance: 0.72
+    description: 贴墙高速街道赛，气动效率与车手信心重要，事故很容易引发安全车或红旗。
+
+  - id: miami
+    name: 迈阿密国际赛车场
+    country: 美国
+    type: 半街道·均衡
+    laps: 57
+    baseLap: 89
+    pitLoss: 20.5
+    weights: { downforce: 0.22, efficiency: 0.28, power: 0.28, mechanical: 0.22 }
+    overtaking: 66
+    tyreStress: 58
+    surfaceTemperature: 37 # 模拟参考路温（°C）
+    thermalDemand: 57 # 模拟参考生热需求（0–100）
+    rainChance: 0.25
+    scChance: 0.5
+    description: 长直道、低速体育场区和炎热天气形成多样挑战，2026 年举办冲刺赛。
+
+  - id: montreal
+    name: 吉尔·维伦纽夫赛道
+    country: 加拿大
+    type: 停走·低下压力
+    laps: 70
+    baseLap: 72
+    pitLoss: 18.5
+    weights: { downforce: 0.13, efficiency: 0.32, power: 0.34, mechanical: 0.21 }
+    overtaking: 74
+    tyreStress: 48
+    surfaceTemperature: 35 # 模拟参考路温（°C）
+    thermalDemand: 48 # 模拟参考生热需求（0–100）
+    rainChance: 0.31
+    scChance: 0.63
+    description: 低下压力、路肩和连续重刹车考验制动与牵引，天气多变，2026 年首次举办冲刺赛。
+
+  - id: monaco
+    name: 摩纳哥赛道
+    country: 摩纳哥
+    type: 低速街道
+    laps: 78
+    baseLap: 72
+    pitLoss: 20
+    weights: { downforce: 0.35, efficiency: 0.05, power: 0.08, mechanical: 0.52 }
+    overtaking: 8
+    tyreStress: 28
+    surfaceTemperature: 30 # 模拟参考路温（°C）
+    thermalDemand: 30 # 模拟参考生热需求（0–100）
+    rainChance: 0.22
+    scChance: 0.76
+    description: 最狭窄的街道赛，机械抓地和排位位置远比直线速度重要。
+
+  - id: barcelona
+    name: 巴塞罗那-加泰罗尼亚赛道
+    country: 西班牙
+    type: 高下压力·均衡
+    laps: 66
+    baseLap: 78.5
+    pitLoss: 22
+    weights: { downforce: 0.38, efficiency: 0.24, power: 0.17, mechanical: 0.21 }
+    overtaking: 46
+    tyreStress: 76
+    surfaceTemperature: 41 # 模拟参考路温（°C）
+    thermalDemand: 73 # 模拟参考生热需求（0–100）
+    rainChance: 0.12
+    scChance: 0.3
+    description: 高速长弯对气动平台和轮胎管理要求严苛，是检验赛车综合能力的传统赛道。
+
+  - id: spielberg
+    name: 红牛环
+    country: 奥地利
+    type: 短圈·动力
+    laps: 71
+    baseLap: 64
+    pitLoss: 19
+    weights: { downforce: 0.18, efficiency: 0.28, power: 0.35, mechanical: 0.19 }
+    overtaking: 76
+    tyreStress: 55
+    surfaceTemperature: 36 # 模拟参考路温（°C）
+    thermalDemand: 54 # 模拟参考生热需求（0–100）
+    rainChance: 0.28
+    scChance: 0.38
+    description: 高海拔短赛道包含三处强力加速区，圈速接近导致排位差距极小。
+
+  - id: silverstone
+    name: 银石赛道
+    country: 英国
+    type: 超高速·高下压力
+    laps: 52
+    baseLap: 86
+    pitLoss: 23
+    weights: { downforce: 0.37, efficiency: 0.29, power: 0.18, mechanical: 0.16 }
+    overtaking: 58
+    tyreStress: 82
+    surfaceTemperature: 42 # 模拟参考路温（°C）
+    thermalDemand: 79 # 模拟参考生热需求（0–100）
+    rainChance: 0.42
+    scChance: 0.4
+    description: 马戈茨—贝克茨高速弯组考验气动稳定性，英国天气增加策略变化，2026 年举办冲刺赛。
+
+  - id: spa
+    name: 斯帕-弗朗科尔尚赛道
+    country: 比利时
+    type: 超高速·长圈
+    laps: 44
+    baseLap: 105
+    pitLoss: 21.5
+    weights: { downforce: 0.22, efficiency: 0.33, power: 0.31, mechanical: 0.14 }
+    overtaking: 72
+    tyreStress: 68
+    surfaceTemperature: 39 # 模拟参考路温（°C）
+    thermalDemand: 66 # 模拟参考生热需求（0–100）
+    rainChance: 0.48
+    scChance: 0.52
+    description: 全年最长圈之一，奥鲁日与森林微气候使低阻力设定和天气判断同样关键。
+
+  - id: hungaroring
+    name: 匈牙利赛道
+    country: 匈牙利
+    type: 低速·高下压力
+    laps: 70
+    baseLap: 75
+    pitLoss: 21
+    weights: { downforce: 0.4, efficiency: 0.1, power: 0.1, mechanical: 0.4 }
+    overtaking: 27
+    tyreStress: 62
+    surfaceTemperature: 38 # 模拟参考路温（°C）
+    thermalDemand: 61 # 模拟参考生热需求（0–100）
+    rainChance: 0.24
+    scChance: 0.34
+    description: 连续弯角几乎没有喘息空间，超车困难，排位和进站窗口十分重要。
+
+  - id: zandvoort
+    name: 赞德沃特赛道
+    country: 荷兰
+    type: 高下压力·起伏
+    laps: 72
+    baseLap: 70
+    pitLoss: 19
+    weights: { downforce: 0.39, efficiency: 0.16, power: 0.13, mechanical: 0.32 }
+    overtaking: 34
+    tyreStress: 70
+    surfaceTemperature: 39 # 模拟参考路温（°C）
+    thermalDemand: 68 # 模拟参考生热需求（0–100）
+    rainChance: 0.35
+    scChance: 0.46
+    description: 银行弯、海风和狭窄布局考验高下压力与轮胎，2026 年举办冲刺赛。
+
+  - id: monza
+    name: 蒙扎国家赛车场
+    country: 意大利
+    type: 极低下压力
+    laps: 53
+    baseLap: 79
+    pitLoss: 24
+    weights: { downforce: 0.05, efficiency: 0.42, power: 0.4, mechanical: 0.13 }
+    overtaking: 80
+    tyreStress: 44
+    surfaceTemperature: 34 # 模拟参考路温（°C）
+    thermalDemand: 45 # 模拟参考生热需求（0–100）
+    rainChance: 0.18
+    scChance: 0.42
+    description: 速度圣殿以超长全油门区和减速弯闻名，动力和低阻力压倒其他属性。
+
+  - id: madrid
+    name: 马德里 IFEMA 赛道
+    country: 西班牙
+    type: 半街道·待认证
+    laps: 57
+    baseLap: 92
+    pitLoss: 21
+    weights: { downforce: 0.25, efficiency: 0.27, power: 0.25, mechanical: 0.23 }
+    overtaking: 58
+    tyreStress: 56
+    surfaceTemperature: 36 # 模拟参考路温（°C）
+    thermalDemand: 55 # 模拟参考生热需求（0–100）
+    rainChance: 0.15
+    scChance: 0.55
+    description: 2026 年首次进入赛历的半街道赛道，包含长直道、快速弯和大倾角弯；参数按公开布局估算。
+
+  - id: baku
+    name: 巴库城市赛道
+    country: 阿塞拜疆
+    type: 街道·超长直道
+    laps: 51
+    baseLap: 103
+    pitLoss: 21
+    weights: { downforce: 0.12, efficiency: 0.38, power: 0.36, mechanical: 0.14 }
+    overtaking: 70
+    tyreStress: 42
+    surfaceTemperature: 33 # 模拟参考路温（°C）
+    thermalDemand: 43 # 模拟参考生热需求（0–100）
+    rainChance: 0.08
+    scChance: 0.7
+    description: 城堡区极窄，主直道极长，低阻力和事故规避决定比赛走势。
+
+  - id: singapore
+    name: 滨海湾街道赛道
+    country: 新加坡
+    type: 夜间街道·高下压力
+    laps: 62
+    baseLap: 91
+    pitLoss: 28
+    weights: { downforce: 0.34, efficiency: 0.09, power: 0.13, mechanical: 0.44 }
+    overtaking: 31
+    tyreStress: 66
+    surfaceTemperature: 39 # 模拟参考路温（°C）
+    thermalDemand: 64 # 模拟参考生热需求（0–100）
+    rainChance: 0.38
+    scChance: 0.78
+    description: 高温高湿、贴墙和漫长比赛考验机械抓地与专注力，2026 年举办冲刺赛。
+
+  - id: cota
+    name: 美洲赛道
+    country: 美国
+    type: 综合·起伏
+    laps: 56
+    baseLap: 94
+    pitLoss: 20.5
+    weights: { downforce: 0.31, efficiency: 0.22, power: 0.23, mechanical: 0.24 }
+    overtaking: 68
+    tyreStress: 72
+    surfaceTemperature: 40 # 模拟参考路温（°C）
+    thermalDemand: 70 # 模拟参考生热需求（0–100）
+    rainChance: 0.2
+    scChance: 0.38
+    description: 一号弯爬坡、高速 S 弯和长直道组成完整综合测试。
+
+  - id: mexico
+    name: 罗德里格斯兄弟赛道
+    country: 墨西哥
+    type: 高海拔·低抓地
+    laps: 71
+    baseLap: 78
+    pitLoss: 22
+    weights: { downforce: 0.2, efficiency: 0.24, power: 0.35, mechanical: 0.21 }
+    overtaking: 70
+    tyreStress: 50
+    surfaceTemperature: 35 # 模拟参考路温（°C）
+    thermalDemand: 50 # 模拟参考生热需求（0–100）
+    rainChance: 0.18
+    scChance: 0.43
+    description: 极高海拔削弱下压力和冷却，长直道与体育场区需要折中设定。
+
+  - id: interlagos
+    name: 若泽·卡洛斯·帕切赛道
+    country: 巴西
+    type: 短圈·起伏
+    laps: 71
+    baseLap: 69.5
+    pitLoss: 21
+    weights: { downforce: 0.26, efficiency: 0.24, power: 0.27, mechanical: 0.23 }
+    overtaking: 70
+    tyreStress: 64
+    surfaceTemperature: 38 # 模拟参考路温（°C）
+    thermalDemand: 63 # 模拟参考生热需求（0–100）
+    rainChance: 0.44
+    scChance: 0.58
+    description: 逆时针短圈、持续起伏和快速变化天气经常制造混乱比赛。
+
+  - id: las_vegas
+    name: 拉斯维加斯街道赛道
+    country: 美国
+    type: 超高速街道·低温
+    laps: 50
+    baseLap: 94
+    pitLoss: 20
+    weights: { downforce: 0.09, efficiency: 0.4, power: 0.38, mechanical: 0.13 }
+    overtaking: 76
+    tyreStress: 36
+    surfaceTemperature: 32 # 模拟参考路温（°C）
+    thermalDemand: 37 # 模拟参考生热需求（0–100）
+    rainChance: 0.04
+    scChance: 0.62
+    description: 夜间低温和超长大道直道使轮胎升温、动力和低阻力成为核心。
+
+  - id: lusail
+    name: 卢赛尔国际赛车场
+    country: 卡塔尔
+    type: 高速·高轮胎负荷
+    laps: 57
+    baseLap: 82
+    pitLoss: 25
+    weights: { downforce: 0.35, efficiency: 0.23, power: 0.17, mechanical: 0.25 }
+    overtaking: 46
+    tyreStress: 88
+    surfaceTemperature: 43 # 模拟参考路温（°C）
+    thermalDemand: 84 # 模拟参考生热需求（0–100）
+    rainChance: 0.01
+    scChance: 0.32
+    description: 连续中高速弯和高温对轮胎结构与车手体能提出极高要求。
+
+  - id: yas_marina
+    name: 亚斯码头赛道
+    country: 阿联酋
+    type: 黄昏·均衡
+    laps: 58
+    baseLap: 83
+    pitLoss: 21
+    weights: { downforce: 0.24, efficiency: 0.27, power: 0.27, mechanical: 0.22 }
+    overtaking: 66
+    tyreStress: 55
+    surfaceTemperature: 36 # 模拟参考路温（°C）
+    thermalDemand: 54 # 模拟参考生热需求（0–100）
+    rainChance: 0.01
+    scChance: 0.36
+    description: 黄昏收官战由长直道和技术弯区组成，赛道温度随夜幕下降。

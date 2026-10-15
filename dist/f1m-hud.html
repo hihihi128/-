@@ -1,0 +1,156 @@
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  :root { color-scheme: dark; --bg:#07080b; --bg2:#101218; --bg3:#181b23; --line:#232733; --line2:#333949; --text:#f3f4f7; --muted:#8e95a5; --red:#e10600; --green:#1fd17a; --yellow:#ffd60a; --neg:#ff5a5f; --team:#e10600; --skew:-12deg; --font-display:'Noto Sans CJK SC','PingFang SC','Microsoft YaHei','Bahnschrift SemiCondensed','Bahnschrift','DIN Condensed','Arial Narrow',sans-serif; --carbon:repeating-linear-gradient(45deg,rgba(255,255,255,.022) 0 2px,transparent 2px 4px),repeating-linear-gradient(-45deg,rgba(0,0,0,.5) 0 2px,transparent 2px 4px),linear-gradient(180deg,#0c0e13,#07080b); }
+  body { margin: 0; background: transparent; font: 12px/1.5 "Noto Sans CJK SC","PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif; color:var(--text); }
+  .hud { --team:#e10600; position:relative; overflow:hidden; background:var(--carbon); border:1px solid var(--line); border-radius:3px; padding:8px 10px 9px 13px; box-shadow:0 1px 0 rgba(255,255,255,.04) inset; }
+  .hud::before { content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--team); box-shadow:0 0 10px color-mix(in srgb,var(--team) 70%,transparent); }.hud.old { opacity:.72; filter:saturate(.7); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+  .spread { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; }
+  .team { font:italic 800 14px var(--font-display); letter-spacing:.02em; }.badge { display:inline-flex; align-items:center; height:20px; padding:0 7px; border-radius:2px; border:1px solid var(--line2); background:var(--bg3); white-space:nowrap; font-size:11px; }.badge.team-c { background:var(--team); border-color:transparent; color:#fff; font-weight:700; transform:skewX(var(--skew)); }.badge.team-c::first-letter { transform:skewX(12deg); }.badge.warn { color:var(--yellow); border-color:color-mix(in srgb,var(--yellow) 45%,transparent); }.muted { color:var(--muted); }
+  .num { font-variant-numeric: tabular-nums; }
+  .good { color:var(--green); } .mid { color:var(--yellow); } .bad { color:var(--neg); }
+  .line { margin-top: 5px; }
+  .chg { margin-top:6px; padding-top:5px; border-top:1px dashed var(--line); }
+  .chg div { color: #c9cedb; }
+  .chg div.x { color: #ff9a9a; }
+  button { font:italic 800 12px var(--font-display); letter-spacing:.02em; color:#fff; background:linear-gradient(100deg,var(--team),color-mix(in srgb,var(--team) 70%,#000)); border:0; border-radius:2px; padding:4px 11px; cursor:pointer; clip-path:polygon(6px 0,100% 0,calc(100% - 6px) 100%,0 100%); }.hud button { min-height:28px; } button.ghost { background:var(--bg3); border:1px solid var(--line2); color:var(--text); }
+  button:hover { filter: brightness(1.12); }
+  details summary { cursor: pointer; color: #8d93a3; }
+  .bar { display:inline-block; width:44px; height:5px; background:#05060a; border:1px solid var(--line); transform:skewX(var(--skew)); vertical-align:middle; overflow:hidden; }
+  .bar i { display: block; height: 100%; }
+  @media (max-width: 420px) {
+    .hud { padding: 7px 8px 8px 11px; font-size: 12px; }
+    .spread > .row:last-child { width: 100%; justify-content: space-between; }
+    .team { font-size: 13px; }
+    .badge { height: 19px; padding: 0 5px; font-size: 10.5px; }
+    button { min-height: 34px; padding: 4px 13px; }
+    .row { gap: 5px 8px; }
+    .line { margin-top: 4px; }
+  }
+</style>
+</head>
+<body>
+<div id="f1m-hud" class="hud"><span class="muted">F1 领队模拟器 · 载入中…</span></div>
+<script>
+(function () {
+  var root = document.getElementById('f1m-hud');
+  var floor = -1;
+  try { floor = getCurrentMessageId(); } catch (e) { floor = -1; }
+  var waited = 0;
+
+  function api() {
+    try { return window.parent.F1Manager || null; } catch (e) { return null; }
+  }
+  function esc(s) {
+    return String(s === null || s === undefined ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+  function tone(v) { return v >= 60 ? 'good' : v >= 35 ? 'mid' : 'bad'; }
+  function bar(v, color) {
+    var w = Math.max(0, Math.min(100, v));
+    return '<span class="bar"><i style="width:' + w + '%;background:' + color + '"></i></span>';
+  }
+  function open(tab) {
+    var a = api();
+    if (a) a.openPanel(tab);
+  }
+
+  function render() {
+    var a = api();
+    if (!a) {
+      if (waited > 8) {
+        root.innerHTML = '<span class="bad">F1 领队模拟器：后端脚本没有运行。</span> <span class="muted">请在「酒馆助手 → 脚本库」中允许并启用本角色卡的脚本。</span>';
+      }
+      return;
+    }
+    var h;
+    try { h = a.hud(floor); } catch (e) { root.innerHTML = '<span class="bad">状态读取失败：' + esc(e && e.message) + '</span>'; return; }
+    h = JSON.parse(JSON.stringify(h));
+    if (!h.hasGame) {
+      root.innerHTML = '<div class="spread"><span><b class="team">F1 领队模拟器</b> <span class="muted">尚未开局</span></span>' +
+        '<button data-tab="overview">打开管理面板</button></div>';
+      return;
+    }
+    root.style.setProperty('--team', h.team.color || '#e10600');
+    root.className = 'hud' + (h.isLatest ? '' : ' old');
+    var html = '';
+    html += '<div class="spread"><div class="row">' +
+      '<span class="team">' + esc(h.team.name) + '</span>' +
+      '<span class="badge team-c">P' + h.team.rank + ' · ' + h.team.points + ' 分</span>' +
+      '<span class="badge num">' + esc(h.team.funds) + '</span>' +
+      '<span class="badge num" title="预算帽剩余">帽 ' + esc(h.team.cap) + '</span>' +
+      '<span class="badge" title="董事会信心">董事会 <span class="' + tone(h.team.board) + '">' + h.team.board + '</span></span>' +
+      '</div><div class="row">' +
+      '<span class="muted">' + esc(h.season.label) + ' · ' + esc(h.season.track) + '</span>' +
+      '<span class="badge">' + esc(h.season.phase) + '</span>' +
+      (h.pending ? '<span class="badge warn" title="下一条 AI 回复会叙述这些事件">待叙述 ' + h.pending + '</span>' : '') +
+      '<button data-tab="weekend">面板</button>' +
+      '</div></div>';
+
+    var drv = (h.drivers || []).map(function (d) {
+      return '<span><b>' + esc(d.name) + '</b> <span class="muted num">' + d.overall + '</span> 心态' + bar(d.morale, d.morale >= 60 ? '#2fbf71' : d.morale >= 35 ? '#f5c518' : '#ff5a5a') +
+        '<span class="num ' + tone(d.morale) + '">' + d.morale + '</span> 信任<span class="num">' + d.trust + '</span> <span class="muted num">' + d.points + '分</span></span>';
+    }).join('');
+    var cars = (h.cars || []).map(function (c) {
+      return '<span class="muted">' + c.slot + '号车 ' + esc(c.driver) + ' <span class="num">' + (c.score !== null ? c.score : c.overall) + '</span></span>';
+    }).join('');
+    if (h.ferrari) {
+      var f = h.ferrari;
+      var mTone = f.media < f.minMedia ? 'bad' : f.media < f.warnMedia ? 'mid' : 'good';
+      var gTone = f.gap > f.maxFanGap ? 'bad' : f.gap > f.warnFanGap ? 'mid' : 'good';
+      html += '<div class="row line">' +
+        (f.dismissed ? '<span class="badge warn">已被撤职：' + esc(f.dismissed) + '</span>' : '<span class="badge" title="法拉利过渡领队考核">过渡领队</span>') +
+        '<span class="badge" title="媒体支持率（低于 ' + f.minMedia + ' 撤职）">媒体 <span class="num ' + mTone + '">' + f.media + '</span></span>' +
+        (f.fans || []).map(function (x) { return '<span class="badge" title="粉丝意见">' + esc(x.name) + '粉丝 <span class="num">' + x.value + '</span></span>'; }).join('') +
+        '<span class="badge" title="粉丝意见差距（超过 ' + f.maxFanGap + ' 撤职）">粉丝差 <span class="num ' + gTone + '">' + f.gap + '</span></span>' +
+        '</div>';
+    }
+    if (h.dismissal) html += '<div class="row line"><span class="badge warn">已被撤职：' + esc(h.dismissal) + '</span></div>';
+    html += '<div class="row line">' + drv + '</div>';
+    html += '<div class="row line">' + cars +
+      (h.projects && h.projects.length ? '<span class="muted">研发：' + h.projects.map(function (p) { return esc(p.label) + ' ' + p.weeksLeft + '周'; }).join('，') + '</span>' : '') +
+      (h.lastRace ? '<span class="muted">上一站：' + esc(h.lastRace) + '</span>' : '') +
+      '</div>';
+    if (h.liveRace) {
+      var live = h.liveRace;
+      html += '<div class="row line"><span class="badge warn">LIVE · L' + esc(live.lap) + '/' + esc(live.totalLaps) + '</span>' +
+        (live.raceControl ? '<span class="badge warn">' + esc(String(live.raceControl).toUpperCase()) + '</span>' : '') +
+        (live.pendingDecision ? '<span class="badge warn">等待比赛决策</span>' : '') +
+        '<button data-tab="weekend">进入正赛指挥</button></div>';
+    }
+    if (h.season.next && h.isLatest) {
+      html += '<div class="row line"><span class="muted">下一步：</span><span>' + esc(h.season.next) + '</span></div>';
+    }
+    if ((h.changes && h.changes.length) || (h.narrated && h.narrated.length)) {
+      html += '<div class="chg">';
+      if (h.narrated && h.narrated.length) html += '<div class="muted">本楼已叙述：' + h.narrated.map(esc).join('、') + '</div>';
+      (h.changes || []).forEach(function (c) {
+        html += '<div class="' + (c.indexOf('✗') === 0 ? 'x' : '') + '">' + esc(c) + '</div>';
+      });
+      html += '</div>';
+    }
+    if (h.warning) html += '<div class="line mid">' + esc(h.warning) + '</div>';
+    root.innerHTML = html;
+  }
+
+  root.addEventListener('click', function (ev) {
+    var b = ev.target && ev.target.closest ? ev.target.closest('button[data-tab]') : null;
+    if (b) open(b.getAttribute('data-tab'));
+  });
+
+  function tick() {
+    if (api()) { render(); return; }
+    waited += 1;
+    render();
+    if (waited < 60) setTimeout(tick, 500);
+  }
+  tick();
+  try {
+    eventOn('f1m_changed', function () { render(); });
+  } catch (e) { /* 非酒馆助手环境 */ }
+})();
+</script>
+</body>
+</html>

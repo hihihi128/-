@@ -1,0 +1,397 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>总览 · 手机 · F1 领队模拟器</title>
+<meta name="description" content="手机面板总览页：折叠的计时塔横条、关键指标、下一站、车手卡与待叙述折叠项，底部 6 栏导航。">
+<meta name="viewport" content="width=390">
+<style>
+:root {
+  color-scheme: dark;
+
+  /* ---- surfaces ---- */
+  --bg: #07080b;              /* app background (under carbon texture) */
+  --bg2: #101218;             /* card body */
+  --bg3: #181b23;             /* raised: input, chip, seg */
+  --bg4: #222631;             /* hover */
+  --line: #232733;            /* hairline */
+  --line2: #333949;           /* stronger divider / focus ring base */
+  --glass: rgba(10, 12, 17, 0.88);
+
+  /* ---- carbon fibre texture (apply as background on .app / .hud) ---- */
+  --carbon:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.022) 0 2px, transparent 2px 4px),
+    repeating-linear-gradient(-45deg, rgba(0, 0, 0, 0.5) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #0c0e13, #07080b);
+  --carbon-card:
+    repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.016) 0 2px, transparent 2px 4px),
+    linear-gradient(180deg, #12151c, #0d0f14);
+
+  /* ---- text ---- */
+  --text: #f3f4f7;
+  --muted: #8e95a5;
+  --dim: #5c6373;
+
+  /* ---- broadcast signal colours ---- */
+  --red: #e10600;             /* live dot, alerts, F1 red */
+  --green: #1fd17a;           /* personal best / gain / ok */
+  --purple: #b05cff;          /* overall fastest / best on grid */
+  --yellow: #ffd60a;          /* warning / yellow flag */
+  --orange: #ff8a1f;          /* caution, tyre stress */
+  --blue: #3d8bfd;            /* info / blue flag / PIT */
+  --cyan: #7fdcff;            /* blueprint line art */
+  --neg: #ff5a5f;             /* loss text */
+
+  /* ---- team (runtime) ---- */
+  --team: #e10600;
+  --team-soft: color-mix(in srgb, var(--team) 18%, transparent);
+  --team-glow: color-mix(in srgb, var(--team) 60%, transparent);
+  --team-ink: color-mix(in srgb, var(--team) 70%, #fff);   /* team colour readable as text */
+
+  /* ---- tyre compounds (Tyre.vue still reads labels.tyres[c].color) ---- */
+  --tyre-s: #ff2b2b;
+  --tyre-m: #ffd60a;
+  --tyre-h: #f3f4f7;
+  --tyre-i: #24c35a;
+  --tyre-w: #2f8cff;
+
+  /* ---- 2026 grid team colours (data-teams.yaml; runtime uses team.color) ---- */
+  --c-mercedes: #27f4d2;
+  --c-ferrari: #dc0000;
+  --c-mclaren: #ff8000;
+  --c-red_bull: #3671c6;
+  --c-alpine: #0093cc;
+  --c-audi: #bb0a30;
+  --c-racing_bulls: #6692ff;
+  --c-haas: #b6babd;
+  --c-williams: #64c4ff;
+  --c-cadillac: #c8a95b;
+  --c-aston_martin: #229971;
+
+  /* ---- part performance scale (R&D car drawing hotspots) ---- */
+  --perf-top: var(--purple);  /* best on the grid */
+  --perf-good: var(--green);  /* above grid average */
+  --perf-mid: var(--yellow);  /* below average */
+  --perf-low: var(--neg);     /* clear weakness */
+  --perf-locked: #4a5060;     /* customer PU parts (not developable) */
+
+  /* ---- type ---- */
+  --font: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', 'Noto Sans CJK SC', sans-serif;
+  --font-display: 'Bahnschrift SemiCondensed', 'Bahnschrift', 'DIN Condensed', 'Roboto Condensed', 'Arial Narrow', 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', sans-serif;
+  --font-num: 'Bahnschrift', 'DIN Alternate', 'Roboto Condensed', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --fs-tiny: 12px;            /* minimum size; labels, hints */
+  --fs-s: 12.5px;
+  --fs-m: 13px;               /* desktop body (unchanged from current panel) */
+  --fs-phone: 14px;           /* phone body */
+  --fs-l: 15px;
+  --fs-xl: 18px;
+  --fs-kpi: 24px;
+
+  /* ---- shape / depth ---- */
+  --radius: 3px;              /* broadcast graphics are sharp */
+  --radius-l: 6px;
+  --skew: -12deg;             /* parallelogram tags, badges, active tab */
+  --shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  --glow: 0 0 0 1px var(--team-glow), 0 0 18px -4px var(--team-glow);
+
+  /* ---- layout ---- */
+  --tower-w: 212px;           /* desktop timing tower sidebar */
+  --header-h: 60px;
+  --tabbar-h: 64px;           /* phone bottom tab bar (+ safe-area inset) */
+
+  /* ---- motion ---- */
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --t-fast: 0.15s;
+  --t-med: 0.35s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+
+/* ===== base / reset ===== */
+* { box-sizing: border-box; }
+body { margin: 0; background: #000; color: var(--text); font: 13px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3, h4 { margin: 0; }
+.frame { position: relative; overflow: hidden; background: var(--carbon); }
+.muted { color: var(--muted); }
+.dim { color: var(--dim); }
+.small { font-size: 12.5px; }
+.tiny { font-size: 12px; }
+.mono, .num { font-family: var(--font-num); font-variant-numeric: tabular-nums; }
+.row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.spread { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.grow { flex: 1; min-width: 0; }
+.grid { display: grid; gap: 10px; }
+.g2 { grid-template-columns: 1fr 1fr; }
+.g3 { grid-template-columns: repeat(3, 1fr); }
+.g4 { grid-template-columns: repeat(4, 1fr); }
+.stack > * + * { margin-top: 10px; }
+.stack-s > * + * { margin-top: 7px; }
+.pos { color: var(--green); }
+.neg { color: var(--neg); }
+.ellipsis { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* ===== display type ===== */
+.disp { font-family: var(--font-display); font-style: italic; font-weight: 800; letter-spacing: 0.01em; }
+.eyebrow { font-family: var(--font-display); font-style: italic; font-weight: 700; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+
+/* ===== buttons ===== */
+button { cursor: pointer; border: 1px solid var(--line2); background: var(--bg3); border-radius: var(--radius); padding: 6px 12px; transition: background var(--t-fast), border-color var(--t-fast), box-shadow var(--t-fast); }
+button:hover:not(:disabled) { background: var(--bg4); border-color: #4a5163; }
+button:focus-visible { outline: 2px solid var(--team-ink); outline-offset: 2px; }
+button:disabled { opacity: 0.42; cursor: not-allowed; }
+button.primary { position: relative; border: 0; color: #fff; font-family: var(--font-display); font-style: italic; font-weight: 800; letter-spacing: 0.02em; padding: 8px 18px; background: linear-gradient(100deg, var(--team), color-mix(in srgb, var(--team) 72%, #000)); clip-path: polygon(8px 0, 100% 0, calc(100% - 8px) 100%, 0 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.25); text-shadow: 0 1px 2px rgba(0,0,0,.45); }
+button.primary:hover:not(:disabled) { filter: brightness(1.12); }
+button.small { padding: 4px 9px; font-size: 12px; }
+button.ghost { background: transparent; }
+button.danger { border-color: #6b1f22; color: #ff8a8f; background: rgba(225, 6, 0, .06); }
+button.icon { width: 32px; height: 32px; padding: 0; display: inline-flex; align-items: center; justify-content: center; }
+.count { display: inline-flex; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; align-items: center; justify-content: center; background: var(--yellow); color: #111; font: 800 11.5px/1 var(--font-num); }
+
+/* ===== inputs ===== */
+select, input[type='text'], input[type='number'], textarea { background: #05060a; border: 1px solid var(--line2); border-radius: var(--radius); padding: 6px 9px; }
+textarea { width: 100%; resize: vertical; line-height: 1.5; }
+label.field { display: flex; flex-direction: column; gap: 5px; font-size: 12px; color: var(--muted); }
+label.field > * { color: var(--text); }
+input[type='range'] { width: 100%; accent-color: var(--team); }
+
+/* ===== segmented control ===== */
+.seg { display: inline-flex; border: 1px solid var(--line2); border-radius: var(--radius); overflow: hidden; background: #05060a; }
+.seg button { border: 0; border-radius: 0; background: transparent; padding: 5px 11px; color: var(--muted); }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button.on { background: var(--team-soft); color: #fff; box-shadow: inset 0 -2px 0 var(--team); font-weight: 600; }
+.seg.wrap { flex-wrap: wrap; }
+
+/* ===== cards: lower-third ===== */
+.card { position: relative; background: var(--carbon-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; box-shadow: 0 1px 0 rgba(255,255,255,.03) inset; }
+.card::before { content: ''; position: absolute; left: -1px; top: -1px; bottom: -1px; width: 3px; background: linear-gradient(180deg, var(--team), color-mix(in srgb, var(--team) 25%, transparent)); border-radius: var(--radius) 0 0 var(--radius); }
+.card > h3, .card .h3 { display: flex; align-items: center; gap: 8px; font-family: var(--font-display); font-style: italic; font-weight: 800; font-size: 14.5px; letter-spacing: .02em; margin: 0 0 8px; }
+.card > h3::after, .card .h3::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, var(--line2), transparent); }
+.card.flat::before { display: none; }
+/* chyron label (skewed tag) */
+.chyron { display: inline-flex; align-items: center; height: 22px; padding: 0 10px; transform: skewX(var(--skew)); background: var(--team); color: #fff; font: italic 800 12px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; }
+.chyron > span { transform: skewX(12deg); }
+.chyron.dark { background: #fff; color: #08090c; }
+
+/* ===== KPI tiles ===== */
+.kpi { position: relative; background: var(--carbon-card); border: 1px solid var(--line); border-radius: var(--radius); padding: 8px 11px 9px; overflow: hidden; }
+.kpi .k-label { font-size: 12px; color: var(--muted); }
+.kpi .k-value { font: italic 800 22px/1.1 var(--font-display); letter-spacing: .01em; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.kpi .k-sub { font-size: 12px; color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kpi::after { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 2px; background: var(--line2); }
+.kpi.ok .k-value { color: var(--green); } .kpi.ok::after { background: var(--green); }
+.kpi.warn .k-value { color: var(--yellow); } .kpi.warn::after { background: var(--yellow); }
+.kpi.bad .k-value { color: var(--neg); } .kpi.bad::after { background: var(--neg); }
+.kpi.team::after { background: var(--team); box-shadow: 0 0 10px var(--team-glow); }
+
+/* ===== badges ===== */
+.badge { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 7px; border-radius: 2px; border: 1px solid var(--line2); background: var(--bg3); font-size: 12px; white-space: nowrap; line-height: 1; }
+.badge.ok { color: var(--green); border-color: color-mix(in srgb, var(--green) 40%, transparent); background: color-mix(in srgb, var(--green) 9%, transparent); }
+.badge.warn { color: var(--yellow); border-color: color-mix(in srgb, var(--yellow) 40%, transparent); background: color-mix(in srgb, var(--yellow) 8%, transparent); }
+.badge.bad { color: var(--neg); border-color: color-mix(in srgb, var(--neg) 45%, transparent); background: color-mix(in srgb, var(--neg) 9%, transparent); }
+.badge.team { background: var(--team); border-color: transparent; color: #fff; font-weight: 700; }
+.badge.purple { color: #e4cbff; border-color: color-mix(in srgb, var(--purple) 55%, transparent); background: color-mix(in srgb, var(--purple) 18%, transparent); }
+.badge.info { color: #a9cdff; border-color: color-mix(in srgb, var(--blue) 45%, transparent); background: color-mix(in srgb, var(--blue) 12%, transparent); }
+
+/* ===== notices ===== */
+.notice { border: 1px solid var(--line2); border-left: 3px solid var(--blue); background: rgba(61,139,253,.06); padding: 7px 10px; border-radius: var(--radius); }
+.notice.warn { border-left-color: var(--yellow); background: rgba(255,214,10,.06); }
+.notice.bad { border-left-color: var(--neg); background: rgba(255,90,95,.07); }
+.notice.ok { border-left-color: var(--green); background: rgba(31,209,122,.06); }
+
+/* ===== bars (Bar.vue) ===== */
+.bar { display: grid; grid-template-columns: auto 1fr 38px; align-items: center; gap: 8px; font-size: 12px; }
+.bar.nolabel { grid-template-columns: 1fr 38px; }
+.bar-label { color: var(--muted); min-width: 52px; white-space: nowrap; }
+.bar-track { position: relative; height: 6px; background: #05060a; border: 1px solid var(--line); transform: skewX(var(--skew)); overflow: visible; }
+.bar-fill { height: 100%; background: var(--team); box-shadow: 0 0 8px -1px currentColor; transform-origin: left; animation: fill .9s var(--ease) both; }
+.bar-ref { position: absolute; top: -3px; bottom: -3px; width: 2px; background: #fff; box-shadow: 0 0 4px #fff; }
+.bar-val { text-align: right; font-family: var(--font-num); font-variant-numeric: tabular-nums; font-weight: 600; }
+@keyframes fill { from { transform: scaleX(0); } }
+
+/* ===== progress ===== */
+.progress { height: 5px; background: #05060a; border: 1px solid var(--line); overflow: hidden; transform: skewX(var(--skew)); }
+.progress > div { height: 100%; background: repeating-linear-gradient(-45deg, var(--team) 0 6px, color-mix(in srgb, var(--team) 70%, #000) 6px 12px); box-shadow: 0 0 10px var(--team-glow); animation: fill 1s var(--ease) both; }
+
+/* ===== tables ===== */
+table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+th, td { padding: 5px 7px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th { font: italic 700 12px var(--font-display); letter-spacing: .06em; color: var(--muted); text-transform: uppercase; background: rgba(255,255,255,.02); }
+tr.me td { background: linear-gradient(90deg, var(--team-soft), transparent 80%); }
+tr.me td:first-child { box-shadow: inset 3px 0 0 var(--team); }
+.swatch { display: inline-block; width: 3px; height: 13px; margin-right: 7px; vertical-align: -2px; transform: skewX(var(--skew)); }
+
+/* ===== tyre chip (Tyre.vue) ===== */
+.tyre { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid currentColor; background: #0b0b0d; font: 800 10px/1 var(--font-num); flex: 0 0 auto; }
+.tyre.s { color: var(--tyre-s); } .tyre.m { color: var(--tyre-m); } .tyre.h { color: var(--tyre-h); } .tyre.i { color: var(--tyre-i); } .tyre.w { color: var(--tyre-w); }
+.tyre.sm { width: 15px; height: 15px; border-width: 2px; font-size: 8.5px; }
+
+/* ===== timing tower ===== */
+.tower { display: flex; flex-direction: column; background: linear-gradient(180deg, rgba(5,6,9,.96), rgba(8,9,13,.96)); border-right: 1px solid var(--line); }
+.tower-head { padding: 8px 8px 6px; border-bottom: 1px solid var(--line); background: linear-gradient(180deg, #14171f, #0b0d12); position: relative; }
+.tower-head::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px; background: var(--red); }
+.tower-title { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
+.tower-title .t1 { font: italic 800 14px/1.1 var(--font-display); letter-spacing: .04em; }
+.lap { font: italic 800 15px/1 var(--font-display); font-variant-numeric: tabular-nums; }
+.lap small { font-size: 11.5px; color: var(--muted); font-style: normal; margin-left: 2px; }
+.live { display: inline-flex; align-items: center; gap: 5px; font: italic 800 12px/1 var(--font-display); color: #fff; background: var(--red); padding: 3px 6px 3px 5px; letter-spacing: .08em; }
+.live i { width: 6px; height: 6px; border-radius: 50%; background: #fff; animation: blink 1.4s ease-in-out infinite; }
+@keyframes blink { 50% { opacity: .2; } }
+.tower .seg { width: 100%; margin-top: 6px; }
+.tower .seg button { flex: 1; padding: 3px 0; font-size: 12px; }
+.tower-rows { flex: 1; overflow: hidden; padding: 3px 0; }
+.trow { position: relative; display: grid; grid-template-columns: 24px 3px 1fr auto auto; align-items: center; column-gap: 6px; height: 24px; padding: 0 7px 0 0; font-size: 12.5px; animation: rowin .5s var(--ease) both; animation-delay: calc(var(--i, 0) * 28ms); }
+.trow + .trow { border-top: 1px solid rgba(255,255,255,.035); }
+.trow .t-pos { height: 100%; display: flex; align-items: center; justify-content: center; font: italic 800 13px/1 var(--font-display); background: rgba(255,255,255,.06); color: #fff; }
+.trow:nth-child(-n+3) .t-pos { background: #f3f4f7; color: #08090c; }
+.trow .t-bar { width: 3px; height: 15px; background: var(--c); }
+.trow .t-code { font: italic 800 13.5px/1 var(--font-display); letter-spacing: .06em; display: flex; align-items: center; gap: 5px; }
+.trow .t-gap { font: 600 12px/1 var(--font-num); font-variant-numeric: tabular-nums; color: #d9dce4; text-align: right; min-width: 52px; }
+.trow .t-pts { font: italic 800 13px/1 var(--font-display); font-variant-numeric: tabular-nums; text-align: right; min-width: 30px; }
+.trow .t-flag { display: inline-flex; align-items: center; height: 15px; padding: 0 4px; font: italic 800 10.5px/1 var(--font-display); letter-spacing: .06em; border-radius: 1px; }
+.t-flag.pit { background: var(--blue); color: #fff; }
+.t-flag.fl { background: var(--purple); color: #fff; }
+.t-flag.pen { background: var(--yellow); color: #111; }
+.t-flag.dnf { background: #3a3f4c; color: #c7cbd6; }
+.t-flag.ot { background: var(--green); color: #052; }
+.trow.me { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 34%, transparent), color-mix(in srgb, var(--c) 6%, transparent)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--c) 55%, transparent); }
+.trow.me .t-code { color: #fff; text-shadow: 0 0 10px color-mix(in srgb, var(--c) 80%, transparent); }
+.trow.me::after { content: ''; position: absolute; right: 0; top: 4px; bottom: 4px; width: 2px; background: var(--c); box-shadow: 0 0 8px var(--c); }
+.trow.fl .t-gap { color: #d9b8ff; }
+.trow.dnf { opacity: .5; }
+.trow.dnf .t-pos { background: transparent; color: var(--muted); font-size: 11px; }
+.trow.dnf .t-gap { color: var(--muted); }
+.trow.pit .t-gap { color: #a9cdff; }
+.trow.up .t-pos::after, .trow.down .t-pos::after { content: ''; position: absolute; left: 25px; width: 0; height: 0; border: 3px solid transparent; }
+.tower-foot { padding: 6px 8px; border-top: 1px solid var(--line); display: flex; gap: 8px; font-size: 12px; color: var(--muted); flex-wrap: wrap; }
+@keyframes rowin { from { opacity: 0; transform: translateX(-14px); } }
+
+/* ===== app shell (desktop panel) ===== */
+.top { position: relative; display: flex; align-items: center; gap: 12px; height: var(--header-h); padding: 0 14px 0 0; background: linear-gradient(90deg, color-mix(in srgb, var(--team) 26%, #0b0c10) 0, #0d0f14 34%, #0b0c10); border-bottom: 1px solid var(--line); overflow: hidden; }
+.top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--team), transparent 60%); box-shadow: 0 0 12px var(--team-glow); }
+.top::before { content: ''; position: absolute; top: 0; bottom: 0; width: 120px; left: -140px; background: linear-gradient(100deg, transparent, rgba(255,255,255,.12), transparent); transform: skewX(-20deg); animation: sweep 1.6s .3s var(--ease) both; }
+@keyframes sweep { to { left: 110%; } }
+.team-badge { height: 100%; min-width: 74px; padding: 0 18px 0 14px; display: flex; align-items: center; justify-content: center; background: var(--team); color: #fff; font: italic 900 19px/1 var(--font-display); letter-spacing: .06em; clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%); text-shadow: 0 1px 3px rgba(0,0,0,.45); }
+.title { font: italic 800 17px/1.15 var(--font-display); letter-spacing: .01em; }
+.title .muted { font: 400 12.5px var(--font); margin-left: 6px; }
+.meta { font-size: 12.5px; color: var(--muted); display: flex; align-items: center; gap: 6px; margin-top: 3px; white-space: nowrap; }
+.money { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; padding: 0 12px; border-right: 1px solid var(--line); }
+.money b { font: italic 800 16px/1.1 var(--font-display); font-variant-numeric: tabular-nums; }
+.money span { font-size: 12px; color: var(--muted); }
+.tabs { display: flex; gap: 0; padding: 0 8px; height: 38px; align-items: stretch; border-bottom: 1px solid var(--line); background: rgba(5,6,9,.7); }
+.tabs button { position: relative; border: 0; border-radius: 0; background: transparent; padding: 0 13px; color: var(--muted); font: italic 700 13.5px var(--font-display); letter-spacing: .02em; white-space: nowrap; }
+.tabs button.on { color: #fff; }
+.tabs button.on::after { content: ''; position: absolute; left: 8px; right: 8px; bottom: 0; height: 3px; background: var(--team); transform: skewX(var(--skew)); box-shadow: 0 0 10px var(--team-glow); }
+.content { padding: 12px 14px; }
+.scroll-hint { position: absolute; left: 0; right: 0; bottom: 0; height: 36px; background: linear-gradient(180deg, transparent, rgba(7,8,11,.95)); pointer-events: none; }
+
+/* ===== phone shell ===== */
+.p-top { position: relative; display: flex; align-items: center; gap: 8px; height: 56px; padding-right: 8px; background: linear-gradient(90deg, color-mix(in srgb, var(--team) 26%, #0b0c10), #0b0c10 60%); border-bottom: 1px solid var(--line); }
+.p-top::after { content: ''; position: absolute; left: 0; right: 0; bottom: -1px; height: 2px; background: linear-gradient(90deg, var(--team), transparent 70%); box-shadow: 0 0 10px var(--team-glow); }
+.p-top .team-badge { min-width: 60px; font-size: 17px; padding: 0 14px 0 10px; }
+.p-top .ttl { font: italic 800 15px/1.15 var(--font-display); }
+.p-top .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.p-top button.icon { width: 44px; height: 44px; position: relative; }
+.p-top button.icon .count { position: absolute; top: 3px; right: 2px; }
+.p-top button.primary { height: 44px; padding: 0 14px 0 16px; font-size: 14px; }
+.tabbar { position: absolute; left: 0; right: 0; bottom: 0; height: 64px; display: grid; grid-template-columns: repeat(6, 1fr); background: rgba(6,7,10,.97); border-top: 1px solid var(--line); z-index: 20; }
+.tabbar button { position: relative; border: 0; border-radius: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); font-size: 11.5px; padding: 0; min-height: 44px; }
+.tabbar button svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.tabbar button.on { color: #fff; }
+.tabbar button.on::before { content: ''; position: absolute; top: 0; left: 18%; right: 18%; height: 3px; background: var(--team); transform: skewX(var(--skew)); box-shadow: 0 0 10px var(--team-glow); }
+.tabbar button.on svg { stroke: var(--team-ink); }
+.p-content { position: absolute; left: 0; right: 0; overflow: hidden; padding: 10px 12px 12px; }
+.strip { position: relative; display: flex; align-items: center; height: 40px; background: #06070a; border-bottom: 1px solid var(--line); overflow: hidden; }
+.strip .s-head { display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 10px 0 8px; background: #11141b; border-right: 1px solid var(--line); flex: 0 0 auto; }
+.strip .s-items { display: flex; align-items: center; gap: 0; overflow: hidden; flex: 1; mask-image: linear-gradient(90deg, #000 85%, transparent); }
+.strip .s-item { display: flex; align-items: center; gap: 4px; padding: 0 6px; height: 26px; white-space: nowrap; border-right: 1px solid rgba(255,255,255,.06); }
+.strip .s-item .p { font: italic 800 12.5px/1 var(--font-display); color: var(--muted); }
+.strip .s-item .bar3 { width: 3px; height: 14px; background: var(--c); }
+.strip .s-item .c { font: italic 800 13px/1 var(--font-display); letter-spacing: .05em; }
+.strip .s-item .g { font: 600 12px/1 var(--font-num); color: #cfd3dc; }
+.strip .s-item.me { background: linear-gradient(90deg, color-mix(in srgb, var(--c) 32%, transparent), transparent); box-shadow: inset 2px 0 0 var(--c); }
+.strip .s-toggle { flex: 0 0 auto; width: 44px; height: 40px; border: 0; border-left: 1px solid var(--line); border-radius: 0; background: #11141b; display: flex; align-items: center; justify-content: center; }
+
+/* ===== misc ===== */
+.label-sm { font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+.divider { height: 1px; background: var(--line); margin: 8px 0; }
+.kv { display: grid; gap: 2px; }
+.kv span { font-size: 12px; color: var(--muted); }
+.kv b { font: italic 800 15px/1.15 var(--font-display); font-variant-numeric: tabular-nums; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
+.pips { display: inline-flex; gap: 3px; }
+.pips span { width: 14px; height: 6px; background: #05060a; border: 1px solid var(--line2); transform: skewX(var(--skew)); }
+.pips span.on { background: var(--team); border-color: transparent; box-shadow: 0 0 6px var(--team-glow); }
+
+:root { --team: #229971; }
+
+.p-content { top: 96px; bottom: 64px; display: flex; flex-direction: column; gap: 10px; }
+.p-content > * { flex: 0 0 auto; }
+.kpis { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.kpi .k-value { font-size: 22px; }
+.chips { display: flex; gap: 6px; overflow: hidden; }
+.chips .kpi { flex: 1 1 0; display: flex; align-items: baseline; justify-content: space-between; gap: 6px; padding: 7px 10px; }
+.chips .kpi .k-value { font-size: 16px; }
+.next { position: relative; }
+.next .track { display: flex; gap: 10px; align-items: center; }
+.track-map { flex: 0 0 72px; height: 52px; border: 1px solid var(--line); background: #05070b; display: flex; align-items: center; justify-content: center; }
+.drv { display: grid; grid-template-columns: 36px 1fr auto; gap: 2px 8px; align-items: center; padding: 8px 0; }
+.drv + .drv { border-top: 1px solid var(--line); }
+.drv .n { grid-row: span 2; font: italic 900 24px/1 var(--font-display); color: var(--team-ink); }
+.drv .bars { grid-column: 2 / 4; display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.drv .bar { grid-template-columns: auto 1fr 20px; gap: 4px; }
+.drv .bar-label { font-size: 12px; min-width: 0; }
+.acc { display: flex; align-items: center; justify-content: space-between; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); background: var(--carbon-card); border-radius: var(--radius); font-size: 14px; }
+.acc .disp { font-size: 14px; }
+
+</style>
+</head>
+<body>
+<div class="frame" style="width:390px;height:844px">
+<header class="p-top" data-component-id="panel-header">
+  <div class="team-badge" aria-label="阿斯顿·马丁车队">AMR</div>
+  <div class="grow" style="min-width:0">
+    <div class="ttl ellipsis">阿斯顿·马丁 <span class="mono" style="font-style:normal;font-weight:600;font-size:13px;color:#fff">$82.4M</span></div>
+    <div class="sub">R8/24 · 摩纳哥 · 工厂周</div>
+  </div>
+  <button class="icon ghost" aria-label="让 AI 叙述（2 条）" data-component-id="header-narrate"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/><path d="M8 9h8M8 12h5"/></svg><span class="count">2</span></button>
+  <button class="primary" data-component-id="header-advance" aria-label="▶ 进入比赛周末：摩纳哥大奖赛">▶ 比赛周末</button>
+</header><div class="strip" data-component-id="tower-strip" aria-label="计时塔（折叠）"><div class="s-head"><span class="t1 disp" style="font-size:13px">车手榜</span><span class="tiny muted">R7</span></div><div class="s-items"><div class="s-item" style="--c:#27f4d2"><span class="p">1</span><span class="bar3"></span><span class="c">RUS</span><span class="g">136</span></div><div class="s-item"><span class="dim">…</span></div><div class="s-item me" style="--c:#229971"><span class="p">8</span><span class="bar3"></span><span class="c">ALO</span><span class="g">42</span></div><div class="s-item" style="--c:#3671c6"><span class="p">9</span><span class="bar3"></span><span class="c">HAD</span><span class="g">38</span></div></div><button class="s-toggle" aria-label="展开计时塔" aria-expanded="false" data-component-id="tower-strip-toggle"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button></div>
+<main class="p-content" data-component-id="overview-content">
+  <div class="kpis">
+    <div class="kpi team"><div class="k-label">车队积分榜</div><div class="k-value">P5</div><div class="k-sub">56 分 · 榜首 248</div></div>
+    <div class="kpi warn"><div class="k-label">董事会信心</div><div class="k-value">58</div><div class="k-sub">目标：车队第 5</div></div>
+    <div class="kpi "><div class="k-label">预算帽剩余</div><div class="k-value">$128.6M</div><div class="k-sub">已用 40%</div></div>
+    <div class="kpi "><div class="k-label">研发槽位</div><div class="k-value">2/4</div><div class="k-sub">进行中的设计项目</div></div>
+  </div>
+  <div class="chips" aria-label="更多指标">
+    <div class="kpi ok"><div class="k-label">媒体声誉</div><div class="k-value">61</div></div><div class="kpi ok"><div class="k-label">员工士气</div><div class="k-value">66</div></div><div class="kpi "><div class="k-label">风洞</div><div class="k-value">34h</div></div>
+  </div>
+  <section class="card next stack-s" data-component-id="next-round-card">
+    <h3>下一站 · 摩纳哥大奖赛</h3>
+    <div class="track">
+      <div class="track-map" aria-label="赛道示意（占位）"><svg width="62" height="42" viewBox="0 0 84 56" fill="none" stroke="#7fdcff" stroke-width="2.4" stroke-linejoin="round" opacity=".8"><path d="M6 40 L18 22 L34 18 L40 8 L58 10 L66 20 L78 24 L74 36 L56 38 L50 48 L28 48 Z"/></svg></div>
+      <div class="small"><div class="muted">街道 · 78 圈 · 进站损失 19s</div><div class="row" style="gap:6px;margin-top:4px"><span class="badge info">降雨 15%</span><span class="badge">安全车 60%</span></div></div>
+    </div>
+    <div class="bar" title=""><span class="bar-label">机械抓地</span><div class="bar-track"><div class="bar-fill" style="width:44%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">44</span></div>
+    <div class="bar" title=""><span class="bar-label">下压力</span><div class="bar-track"><div class="bar-fill" style="width:34%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">34</span></div>
+    <div class="bar" title=""><span class="bar-label">超车容易度</span><div class="bar-track"><div class="bar-fill" style="width:8%;background:#9b7bff;color:#9b7bff"></div></div><span class="bar-val">8</span></div>
+    <div class="spread small"><span class="muted">本站赛车性能</span><span><b class="disp" style="font-size:16px;color:var(--team-ink)">P5</b> <span class="muted">/ 11 · 79.6</span></span></div>
+  </section>
+  <section class="card" data-component-id="drivers-card">
+    <h3>车手</h3>
+    <div class="drv"><span class="n">14</span><b>阿隆索 <span class="badge team">优先</span></b><span class="small muted">P8 · 42 分</span>
+      <div class="bars"><div class="bar" title=""><span class="bar-label">综合</span><div class="bar-track"><div class="bar-fill" style="width:88%;background:var(--team);color:var(--team)"></div><div class="bar-ref" style="left:89%"></div></div><span class="bar-val">88</span></div><div class="bar" title=""><span class="bar-label">心态</span><div class="bar-track"><div class="bar-fill" style="width:64%;background:var(--green);color:var(--green)"></div></div><span class="bar-val">64</span></div><div class="bar" title=""><span class="bar-label">信任</span><div class="bar-track"><div class="bar-fill" style="width:71%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">71</span></div></div></div>
+    <div class="drv"><span class="n">18</span><b>斯特罗尔</b><span class="small muted">P14 · 14 分</span>
+      <div class="bars"><div class="bar" title=""><span class="bar-label">综合</span><div class="bar-track"><div class="bar-fill" style="width:74%;background:var(--team);color:var(--team)"></div><div class="bar-ref" style="left:76%"></div></div><span class="bar-val">74</span></div><div class="bar" title=""><span class="bar-label">心态</span><div class="bar-track"><div class="bar-fill" style="width:41%;background:var(--yellow);color:var(--yellow)"></div></div><span class="bar-val">41</span></div><div class="bar" title=""><span class="bar-label">信任</span><div class="bar-track"><div class="bar-fill" style="width:55%;background:#6aa6ff;color:#6aa6ff"></div></div><span class="bar-val">55</span></div></div></div>
+  </section>
+  <button class="acc" data-component-id="narration-accordion" aria-expanded="false"><span class="row" style="gap:8px"><span class="disp">待 AI 叙述</span><span class="count">2</span></span><span class="muted small">底板 v3 交付 · 第 7 站正赛 ›</span></button>
+</main>
+<div class="scroll-hint" style="bottom:64px"></div>
+<nav class="tabbar" role="tablist" aria-label="面板页面"><button class="on" data-component-id="ptab-overview" aria-label="总览"><svg viewBox="0 0 24 24"><path d="M4 13a8 8 0 1 1 16 0"/><path d="M12 13l4-4"/><path d="M3 17h18"/></svg>总览</button><button class="" data-component-id="ptab-weekend" aria-label="比赛周末"><svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h12l-2 4 2 4H5"/></svg>比赛周末</button><button class="" data-component-id="ptab-drivers" aria-label="车手"><svg viewBox="0 0 24 24"><path d="M4 15a8 8 0 0 1 16 0v3H4z"/><path d="M4 13h9a3 3 0 0 0 3-3"/></svg>车手</button><button class="" data-component-id="ptab-car" aria-label="赛车"><svg viewBox="0 0 24 24"><path d="M3 14l2-5h14l2 5"/><path d="M3 14h18v3H3z"/><circle cx="7" cy="17.5" r="1.5"/><circle cx="17" cy="17.5" r="1.5"/></svg>赛车</button><button class="" data-component-id="ptab-rnd" aria-label="研发"><svg viewBox="0 0 24 24"><path d="M14 4l6 6-9 9H5v-6z"/><path d="M12 6l6 6"/></svg>研发</button><button class="" data-component-id="ptab-more" aria-label="更多"><svg viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/></svg>更多</button></nav>
+</div>
+
+</body>
+</html>

@@ -1,0 +1,371 @@
+:root {
+  --bg: #07080b;
+  --bg2: #101218;
+  --bg3: #181b23;
+  --bg4: #222631;
+  --line: #232733;
+  --line2: #333949;
+  --text: #f3f4f7;
+  --muted: #8e95a5;
+  --dim: #5c6373;
+  --red: #e10600;
+  --green: #1fd17a;
+  --yellow: #ffd60a;
+  --orange: #ff8a1f;
+  --blue: #3d8bfd;
+  --purple: #b05cff;
+  --cyan: #7fdcff;
+  --neg: #ff5a5f;
+  --team: #e10600;
+  --team-soft: color-mix(in srgb, var(--team) 18%, transparent);
+  --team-glow: color-mix(in srgb, var(--team) 60%, transparent);
+  --team-ink: color-mix(in srgb, var(--team) 70%, #fff);
+  --carbon: repeating-linear-gradient(45deg, rgba(255,255,255,.022) 0 2px, transparent 2px 4px), repeating-linear-gradient(-45deg, rgba(0,0,0,.5) 0 2px, transparent 2px 4px), linear-gradient(180deg, #0c0e13, #07080b);
+  --carbon-card: repeating-linear-gradient(45deg, rgba(255,255,255,.016) 0 2px, transparent 2px 4px), linear-gradient(180deg, #12151c, #0d0f14);
+  --font: 'Noto Sans CJK SC', 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-display: 'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', 'Bahnschrift SemiCondensed', 'Bahnschrift', 'DIN Condensed', 'Roboto Condensed', 'Arial Narrow', sans-serif;
+  --font-num: 'Bahnschrift', 'DIN Alternate', 'Roboto Condensed', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+  --radius: 3px;
+  --skew: -12deg;
+  --tower-w: 212px;
+  --tabbar-h: 64px;
+  --ease: cubic-bezier(.2,.8,.2,1);
+  --t-med: .35s;
+  color-scheme: dark;
+}
+* {
+  box-sizing: border-box;
+}
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--carbon);
+  color: var(--text);
+  font: 13px/1.5 var(--font);
+}
+#app {
+  height: 100%;
+}
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  border: 1px solid var(--line);
+  background: var(--bg3);
+  border-radius: 8px;
+  padding: 6px 12px;
+  transition: background 0.15s, border-color 0.15s;
+}
+button:hover:not(:disabled) {
+  border-color: #4a5160;
+  background: #262b36;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button.primary {
+  background: var(--team);
+  border-color: transparent;
+  color: #fff;
+  font-weight: 600;
+}
+button.primary:hover:not(:disabled) {
+  filter: brightness(1.12);
+  background: var(--team);
+}
+button.danger {
+  border-color: #6b1f1f;
+  color: #ff8a8a;
+}
+button.small {
+  padding: 3px 8px;
+  font-size: 12px;
+}
+button.ghost {
+  background: transparent;
+}
+select,
+input[type='text'],
+input[type='number'],
+textarea {
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  outline: none;
+}
+select:focus,
+input:focus,
+textarea:focus {
+  border-color: var(--team);
+}
+textarea {
+  width: 100%;
+  resize: vertical;
+}
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 650;
+}
+h3 {
+  font-size: 14px;
+}
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 12px;
+}
+.tiny {
+  font-size: 11px;
+}
+.mono {
+  font-variant-numeric: tabular-nums;
+  font-family: ui-monospace, 'SF Mono', Menlo, Consolas, 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', monospace;
+}
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.spread {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+/* Header team name/subtitle block: prevent it collapsing to a sliver on narrow
+   viewports when the sibling action button(s) can't shrink. Forces the
+   actions row to wrap to its own line instead of squeezing the title into a
+   near-zero-width column of single characters. */
+.top .grow {
+  min-width: 150px;
+}
+.grid {
+  width: 100%;
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.grid > * {
+  min-width: 0;
+}
+.g2 {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+.g3 {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+.g4 {
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+}
+.card {
+  position: relative;
+  background: var(--carbon-card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.card::before {
+  content: '';
+  position: absolute;
+  left: -1px;
+  top: -1px;
+  bottom: -1px;
+  width: 3px;
+  background: linear-gradient(180deg, var(--team), color-mix(in srgb, var(--team) 25%, transparent));
+}
+.card > h3 {
+  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.card > h3::before {
+  content: '';
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--team);
+}
+.stack > * + * {
+  margin-top: 12px;
+}
+.stack,
+.stack-s {
+  min-width: 0;
+}
+.stack-s > * + * {
+  margin-top: 6px;
+}
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 7px;
+  border-radius: 999px;
+  font-size: 11px;
+  background: var(--bg3);
+  border: 1px solid var(--line);
+  white-space: nowrap;
+}
+.badge.ok {
+  color: var(--green);
+  border-color: #1f5a3a;
+}
+.badge.warn {
+  color: var(--yellow);
+  border-color: #5c4a10;
+}
+.badge.bad {
+  color: #ff7b7b;
+  border-color: #6b1f1f;
+}
+.badge.team {
+  background: var(--team);
+  color: #fff;
+  border-color: transparent;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th,
+td {
+  text-align: left;
+  padding: 5px 6px;
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 12px;
+}
+tr.me td {
+  background: color-mix(in srgb, var(--team) 14%, transparent);
+}
+.table-wrap {
+  overflow-x: auto;
+}
+.swatch {
+  display: inline-block;
+  width: 4px;
+  height: 14px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+.seg button {
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: 5px 10px;
+}
+.seg button + button {
+  border-left: 1px solid var(--line);
+}
+.seg button.on {
+  background: var(--team);
+  color: #fff;
+}
+.notice {
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg3);
+  border: 1px solid var(--line);
+}
+.notice.warn {
+  border-color: #5c4a10;
+  background: #221d0c;
+}
+.notice.bad {
+  border-color: #6b1f1f;
+  background: #241010;
+}
+.notice.ok {
+  border-color: #1f5a3a;
+  background: #0f2218;
+}
+.empty {
+  color: var(--muted);
+  padding: 16px;
+  text-align: center;
+}
+.scroll {
+  overflow-y: auto;
+}
+.pos {
+  color: var(--green);
+}
+.neg {
+  color: #ff7b7b;
+}
+label.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+label.field > * {
+  color: var(--text);
+}
+@media (max-width: 640px) {
+  .g2,
+  .g3 {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}
+/* PanelHost mirrors its narrow host mode onto the iframe document. Use this
+   class rather than an iframe media query, whose layout viewport may be wide. */
+html.f1m-mobile .race-ribbon {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+html.f1m-mobile .race-ribbon > .grow { min-width: 0; }
+html.f1m-mobile .race-actions {
+  grid-column: 1 / -1;
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+html.f1m-mobile .race-actions button { min-width: 0; }
+/* The iframe keeps a desktop CSS viewport in some embedded hosts. Mirror the
+   host's narrow mode for layouts that otherwise rely on media queries. */
+html.f1m-mobile .broadcast-shell { flex-direction: column !important; }
+.broadcast-shell.tower-narrow { flex-direction: column; }
+.broadcast-shell.tower-narrow > .panel-main { width: 100%; }
+html.f1m-mobile .timing { width: 100% !important; flex: none !important; position: relative; z-index: 30; }
+html.f1m-mobile .tower-strip { width: 100%; height: 40px; padding: 0; display: flex !important; align-items: center; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: #06070a; overflow: hidden; }
+html.f1m-mobile .tower { position: fixed !important; top: 0; bottom: 0; left: 0; z-index: 41; width: min(320px, 88vw) !important; min-height: 0; transform: translateX(-105%); transition: transform var(--t-med) var(--ease); box-shadow: 12px 0 32px rgba(0,0,0,.65); }
+html.f1m-mobile .tower.tower-open { transform: translateX(0); }
+html.f1m-mobile .tower-backdrop { display: block; position: fixed; inset: 0; z-index: 40; border: 0; border-radius: 0; background: rgba(0,0,0,.42); }
+html.f1m-mobile .g2,
+html.f1m-mobile .g3 { grid-template-columns: 1fr; }

@@ -1,0 +1,436 @@
+# ═══════════════ [F1M数据] 车手 ═══════════════
+# ⚠ 测试夹具：固定的占位车手数据，只给引擎测试使用。角色卡实际数据在 src/card/worldbook/data-drivers.yaml。
+# ⚠ 除法拉利车手（hamilton / leclerc / giovinazzi，2026 真实资料）外，其余都是「虚构的占位测试数据」。
+#
+# 字段说明：
+#   id            唯一标识（AI 的数值指令用它指代车手，建议简短）
+#   name / short  姓名 / 三字母缩写
+#   number        车号
+#   nationality   国籍
+#   age           年龄（影响成长：≤24 岁成长快，≥34 岁速度开始衰退）
+#   team          所属车队 id（留空 = 自由车手）
+#   role          race 正式车手 / reserve 替补（每队 1~3 名正式车手，决定赛车数量）
+#   attrs         能力 1~100：
+#                   pace 速度 / racecraft 缠斗 / consistency 稳定 /
+#                   tyre 轮胎管理 / wet 雨战 / feedback 技术反馈（影响练习赛调校效率）
+#   potential     潜力上限（综合能力到达后成长几乎停止）
+#   morale        初始心态 0~100
+#   ego           自尊心 0~100：越高越在意升级件分配、优先车手和车队指令
+#   salary        年薪（M$）
+#   contractEnd   合同到期年份
+#   traits        性格标签（给 AI 叙事参考）
+#   description   简介
+drivers:
+  - id: a1
+    name: 测试车手A1
+    short: TA1
+    number: 1
+    nationality: 测试国
+    age: 27
+    team: team_a
+    role: race
+    attrs: { pace: 90, racecraft: 88, consistency: 87, tyre: 84, wet: 86, feedback: 82 }
+    potential: 92
+    morale: 72
+    ego: 70
+    salary: 12
+    contractEnd: 2027
+    traits: [冷静, 擅长排位, 好胜]
+    description: 占位数据：车队的头号车手，速度顶尖但对待遇非常敏感。
+
+  - id: a2
+    name: 测试车手A2
+    short: TA2
+    number: 2
+    nationality: 测试国
+    age: 22
+    team: team_a
+    role: race
+    attrs: { pace: 84, racecraft: 80, consistency: 76, tyre: 78, wet: 74, feedback: 72 }
+    potential: 91
+    morale: 68
+    ego: 55
+    salary: 3
+    contractEnd: 2026
+    traits: [年轻, 进步神速, 偶尔冒进]
+    description: 占位数据：潜力巨大的年轻车手，渴望证明自己。
+
+  - id: a3
+    name: 测试替补A3
+    short: TA3
+    number: 30
+    nationality: 测试国
+    age: 24
+    team: team_a
+    role: reserve
+    attrs: { pace: 78, racecraft: 74, consistency: 75, tyre: 74, wet: 72, feedback: 76 }
+    potential: 84
+    morale: 60
+    ego: 35
+    salary: 0.8
+    contractEnd: 2026
+    traits: [勤奋, 模拟器专家]
+    description: 占位数据：替补车手，主要负责模拟器工作。
+
+  - id: b1
+    name: 测试车手B1
+    short: TB1
+    number: 11
+    nationality: 测试国
+    age: 33
+    team: team_b
+    role: race
+    attrs: { pace: 86, racecraft: 91, consistency: 90, tyre: 89, wet: 90, feedback: 88 }
+    potential: 88
+    morale: 70
+    ego: 60
+    salary: 10
+    contractEnd: 2026
+    traits: [老将, 轮胎管理大师, 雨战高手]
+    description: 占位数据：经验丰富的老将。
+
+  - id: b2
+    name: 测试车手B2
+    short: TB2
+    number: 12
+    nationality: 测试国
+    age: 25
+    team: team_b
+    role: race
+    attrs: { pace: 85, racecraft: 83, consistency: 80, tyre: 80, wet: 79, feedback: 78 }
+    potential: 89
+    morale: 66
+    ego: 78
+    salary: 5
+    contractEnd: 2027
+    traits: [火爆, 进攻型]
+    description: 占位数据：脾气火爆的进攻型车手。
+
+  - id: c1
+    name: 测试车手C1
+    short: TC1
+    number: 21
+    nationality: 测试国
+    age: 29
+    team: team_c
+    role: race
+    attrs: { pace: 82, racecraft: 83, consistency: 84, tyre: 82, wet: 80, feedback: 81 }
+    potential: 84
+    morale: 65
+    ego: 50
+    salary: 4
+    contractEnd: 2027
+    traits: [稳健, 团队型]
+    description: 占位数据：稳定可靠的中游车手。
+
+  - id: c2
+    name: 测试车手C2
+    short: TC2
+    number: 22
+    nationality: 测试国
+    age: 20
+    team: team_c
+    role: race
+    attrs: { pace: 80, racecraft: 74, consistency: 70, tyre: 72, wet: 70, feedback: 68 }
+    potential: 90
+    morale: 70
+    ego: 45
+    salary: 1
+    contractEnd: 2027
+    traits: [新秀, 天赋型]
+    description: 占位数据：新秀车手。
+
+  - id: d1
+    name: 测试车手D1
+    short: TD1
+    number: 31
+    nationality: 测试国
+    age: 31
+    team: team_d
+    role: race
+    attrs: { pace: 79, racecraft: 81, consistency: 82, tyre: 80, wet: 78, feedback: 80 }
+    potential: 80
+    morale: 60
+    ego: 40
+    salary: 2
+    contractEnd: 2026
+    traits: [老练, 低调]
+    description: 占位数据：尾部车队的领军人物。
+
+  - id: d2
+    name: 测试车手D2
+    short: TD2
+    number: 32
+    nationality: 测试国
+    age: 26
+    team: team_d
+    role: race
+    attrs: { pace: 76, racecraft: 74, consistency: 74, tyre: 75, wet: 72, feedback: 70 }
+    potential: 80
+    morale: 62
+    ego: 50
+    salary: 1
+    contractEnd: 2026
+    traits: [付费车手]
+    description: 占位数据：带资车手。
+
+  - id: e1
+    name: 测试车手E1
+    short: TE1
+    number: 14
+    nationality: 测试国
+    age: 30
+    team: team_e
+    role: race
+    attrs: { pace: 87, racecraft: 86, consistency: 85, tyre: 84, wet: 83, feedback: 85 }
+    potential: 89
+    morale: 70
+    ego: 72
+    salary: 9
+    contractEnd: 2027
+    traits: [全能, 领袖型]
+    description: 占位数据：车队核心，速度和技术反馈都很出色。
+
+  - id: e2
+    name: 测试车手E2
+    short: TE2
+    number: 15
+    nationality: 测试国
+    age: 23
+    team: team_e
+    role: race
+    attrs: { pace: 83, racecraft: 79, consistency: 77, tyre: 78, wet: 76, feedback: 74 }
+    potential: 89
+    morale: 68
+    ego: 50
+    salary: 2
+    contractEnd: 2026
+    traits: [年轻, 稳步成长]
+    description: 占位数据：车队培养的年轻车手。
+
+  # ── 法拉利（2026 真实阵容）──
+  - id: hamilton
+    name: 刘易斯·汉密尔顿
+    short: HAM
+    number: 44
+    nationality: 英国
+    age: 41
+    team: ferrari
+    role: race
+    attrs: { pace: 88, racecraft: 92, consistency: 86, tyre: 91, wet: 93, feedback: 90 }
+    potential: 88
+    morale: 55
+    ego: 72
+    salary: 60
+    contractEnd: 2027
+    traits: [七届世界冠军, 雨战大师, 轮胎管理, 全球粉丝最多, 2025 年状态低迷]
+    description: >-
+      七届世界冠军，2025 年加盟法拉利。首个赛季车手榜第 6（156 分），赢下中国站冲刺赛，
+      却是职业生涯首次整季没有登上大奖赛领奖台；中国站还因底板磨损被取消成绩。
+      他需要一台能信任的赛车，也在意车队是否把他当作核心。
+
+  - id: leclerc
+    name: 夏尔·勒克莱尔
+    short: LEC
+    number: 16
+    nationality: 摩纳哥
+    age: 28
+    team: ferrari
+    role: race
+    attrs: { pace: 93, racecraft: 87, consistency: 84, tyre: 84, wet: 85, feedback: 83 }
+    potential: 94
+    morale: 62
+    ego: 68
+    salary: 34
+    contractEnd: 2028
+    traits: [排位单圈之王, 法拉利青训出身, 蒂弗西心头好, 偶尔失误]
+    description: >-
+      法拉利青训出身，2019 年起代表车队出赛。2025 年车手榜第 5（242 分），7 次登上领奖台但没有胜利。
+      意大利车迷视他为车队的未来，他不想再把头号地位让给任何人。
+
+  - id: giovinazzi
+    name: 安东尼奥·乔维纳兹
+    short: GIO
+    number: 99
+    nationality: 意大利
+    age: 32
+    team: ferrari
+    role: reserve
+    attrs: { pace: 79, racecraft: 76, consistency: 77, tyre: 77, wet: 76, feedback: 82 }
+    potential: 80
+    morale: 60
+    ego: 30
+    salary: 1.5
+    contractEnd: 2026
+    traits: [意大利人, 模拟器主力, 耐力赛经验]
+    description: 法拉利替补车手，同时参加法拉利的 WEC 耐力赛项目，大部分时间在模拟器里帮正式车手准备周末。
+
+  - id: g1
+    name: 测试车手G1
+    short: TG1
+    number: 61
+    nationality: 测试国
+    age: 27
+    team: team_g
+    role: race
+    attrs: { pace: 82, racecraft: 81, consistency: 83, tyre: 82, wet: 79, feedback: 80 }
+    potential: 85
+    morale: 65
+    ego: 55
+    salary: 3.5
+    contractEnd: 2027
+    traits: [稳定, 善于守位]
+    description: 占位数据：稳定拿分的中游车手。
+
+  - id: g2
+    name: 测试车手G2
+    short: TG2
+    number: 62
+    nationality: 测试国
+    age: 21
+    team: team_g
+    role: race
+    attrs: { pace: 80, racecraft: 75, consistency: 72, tyre: 73, wet: 74, feedback: 70 }
+    potential: 90
+    morale: 70
+    ego: 40
+    salary: 1
+    contractEnd: 2027
+    traits: [新秀, 雨战天赋]
+    description: 占位数据：雨天表现亮眼的新秀。
+
+  - id: h1
+    name: 测试车手H1
+    short: TH1
+    number: 71
+    nationality: 测试国
+    age: 30
+    team: team_h
+    role: race
+    attrs: { pace: 81, racecraft: 82, consistency: 82, tyre: 80, wet: 81, feedback: 80 }
+    potential: 83
+    morale: 62
+    ego: 50
+    salary: 3
+    contractEnd: 2026
+    traits: [老练, 团队型]
+    description: 占位数据：服务过多支车队的老练车手。
+
+  - id: h2
+    name: 测试车手H2
+    short: TH2
+    number: 72
+    nationality: 测试国
+    age: 24
+    team: team_h
+    role: race
+    attrs: { pace: 80, racecraft: 77, consistency: 75, tyre: 76, wet: 73, feedback: 72 }
+    potential: 86
+    morale: 66
+    ego: 65
+    salary: 1.5
+    contractEnd: 2027
+    traits: [冒进, 排位快]
+    description: 占位数据：排位赛单圈速度不错。
+
+  - id: i1
+    name: 测试车手I1
+    short: TI1
+    number: 81
+    nationality: 测试国
+    age: 34
+    team: team_i
+    role: race
+    attrs: { pace: 79, racecraft: 84, consistency: 86, tyre: 85, wet: 83, feedback: 84 }
+    potential: 80
+    morale: 60
+    ego: 45
+    salary: 2.5
+    contractEnd: 2026
+    traits: [老将, 轮胎管理]
+    description: 占位数据：即将退役的老将。
+
+  - id: i2
+    name: 测试车手I2
+    short: TI2
+    number: 82
+    nationality: 测试国
+    age: 22
+    team: team_i
+    role: race
+    attrs: { pace: 79, racecraft: 74, consistency: 72, tyre: 72, wet: 71, feedback: 70 }
+    potential: 88
+    morale: 68
+    ego: 50
+    salary: 1
+    contractEnd: 2027
+    traits: [年轻, 进步快]
+    description: 占位数据：刚升入 F1 的年轻车手。
+
+  - id: j1
+    name: 测试车手J1
+    short: TJ1
+    number: 91
+    nationality: 测试国
+    age: 29
+    team: team_j
+    role: race
+    attrs: { pace: 79, racecraft: 79, consistency: 80, tyre: 79, wet: 77, feedback: 76 }
+    potential: 81
+    morale: 61
+    ego: 55
+    salary: 1.8
+    contractEnd: 2026
+    traits: [低调, 可靠]
+    description: 占位数据：车队的稳定输出点。
+
+  - id: j2
+    name: 测试车手J2
+    short: TJ2
+    number: 92
+    nationality: 测试国
+    age: 23
+    team: team_j
+    role: race
+    attrs: { pace: 77, racecraft: 73, consistency: 71, tyre: 72, wet: 70, feedback: 69 }
+    potential: 84
+    morale: 63
+    ego: 60
+    salary: 0.8
+    contractEnd: 2026
+    traits: [付费车手, 急于证明]
+    description: 占位数据：带资加入的车手。
+
+  - id: k1
+    name: 测试车手K1
+    short: TK1
+    number: 17
+    nationality: 测试国
+    age: 31
+    team: team_k
+    role: race
+    attrs: { pace: 81, racecraft: 82, consistency: 83, tyre: 81, wet: 80, feedback: 83 }
+    potential: 82
+    morale: 68
+    ego: 55
+    salary: 3
+    contractEnd: 2027
+    traits: [经验丰富, 技术型]
+    description: 占位数据：新车队请来的经验型车手，负责带队开发。
+
+  - id: k2
+    name: 测试车手K2
+    short: TK2
+    number: 18
+    nationality: 测试国
+    age: 27
+    team: team_k
+    role: race
+    attrs: { pace: 79, racecraft: 78, consistency: 77, tyre: 77, wet: 75, feedback: 75 }
+    potential: 83
+    morale: 67
+    ego: 50
+    salary: 2
+    contractEnd: 2027
+    traits: [务实, 团队型]
+    description: 占位数据：新车队的二号车手。

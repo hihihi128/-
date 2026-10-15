@@ -1,0 +1,228 @@
+/**
+ * 冒烟测试：在 jsdom 里用「模拟的酒馆助手全局接口」加载打包后的 dist/f1m-backend.js，
+ * 验证真实的环境绑定代码（env.ts）、面板宿主与事件流程。需要先 npm run build。
+ */
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { JSDOM } from 'jsdom';
+import YAML from 'yaml';
+import { PLAYER_REPLACED_LEADERSHIP } from '../../src/tavern/controller';
+import { describe, expect, it } from 'vitest';
+import { diskWorldbook } from './fakeEnv';
+
+const BUNDLE = resolve(__dirname, '../../dist/f1m-backend.js');
+const CARD = resolve(__dirname, '../../dist/F1领队模拟器.json');
+
+interface Msg {
+  role: 'user' | 'assistant';
+  swipes: string[];
+  swipe_id: number;
+  variables: Array<Record<string, any>>;
+}
+
+function setupWindow() {
+  const dom = new JSDOM('<!doctype html><html><head></head><body></body></html>', { runScripts: 'outside-only', url: 'http://localhost/' });
+  const w = dom.window as any;
+  const clone = (v: any) => (v === undefined ? v : JSON.parse(JSON.stringify(v)));
+  const chat: Msg[] = [{ role: 'assistant', swipes: ['欢迎\n\n<F1M_HUD/>'], swipe_id: 0, variables: [{}] }];
+  let chatVars: Record<string, any> = {};
+  let scriptVars: Record<string, any> = {};
+  const listeners = new Map<string, Array<(...a: any[]) => any>>();
+  const injected: Record<string, any> = {};
+  const globals: Record<string, any> = {};
+  const worldbook = diskWorldbook().map(e => ({ name: e.name, content: e.content, enabled: false }));
+  const pagehide: Array<() => void> = [];
+
+  const $ = (arg: any) => {
+    if (typeof arg === 'function') {
+      arg();
+      return;
+    }
+    return { on: (ev: string, fn: () => void) => ev === 'pagehide' && pagehide.push(fn) };
+  };
+  Object.assign(w, {
+    $,
+    errorCatched: (fn: any) => fn,
+    getVariables: (opt: any) => {
+      if (opt.type === 'chat') return clone(chatVars);
+      if (opt.type === 'script') return clone(scriptVars);
+      if (opt.type === 'message') {
+        const m = chat.at(opt.message_id);
+        if (!m) throw new Error('out of range');
+        return clone(m.variables[m.swipe_id] ?? {});
+      }
+      return {};
+    },
+    replaceVariables: (v: any, opt: any) => {
+      if (opt.type === 'chat') chatVars = clone(v);
+      else if (opt.type === 'script') scriptVars = clone(v);
+      else if (opt.type === 'message') {
+        const m = chat.at(opt.message_id)!;
+        m.variables[m.swipe_id] = clone(v);
+      }
+    },
+    getChatMessages: (range: number, opt?: any) => {
+      const m = chat[range];
+      if (!m) return [];
+      if (opt?.include_swipes) return [{ message_id: range, role: m.role, swipes: m.swipes, swipe_id: m.swipe_id, swipes_data: clone(m.variables) }];
+      return [{ message_id: range, role: m.role, message: m.swipes[m.swipe_id], is_hidden: false, data: clone(m.variables[m.swipe_id]) }];
+    },
+    setChatMessages: async (msgs: any[]) => {
+      for (const x of msgs) chat[x.message_id].swipes[chat[x.message_id].swipe_id] = x.message;
+    },
+    createChatMessages: async (msgs: any[]) => {
+      for (const x of msgs) chat.push({ role: x.role, swipes: [x.message], swipe_id: 0, variables: [{}] });
+    },
+    getLastMessageId: () => chat.length - 1,
+    triggerSlash: async (cmd: string) => {
+      globals.lastSlash = cmd;
+      return '';
+    },
+    injectPrompts: (prompts: any[]) => {
+      for (const p of prompts) injected[p.id] = p;
+      return { uninject: () => {} };
+    },
+    uninjectPrompts: (ids: string[]) => ids.forEach(id => delete injected[id]),
+    registerMacroLike: () => ({ unregister() {} }),
+    getCharWorldbookNames: () => ({ primary: 'F1 领队模拟器', additional: [] }),
+    getGlobalWorldbookNames: () => [],
+    getWorldbook: async (name: string) => (name === 'F1 领队模拟器' ? worldbook : []),
+    eventOn: (ev: string, fn: any) => {
+      const arr = listeners.get(ev) ?? [];
+      arr.push(fn);
+      listeners.set(ev, arr);
+    },
+    eventEmit: async (ev: string, ...args: any[]) => {
+      for (const fn of listeners.get(ev) ?? []) await fn(...args);
+    },
+    getButtonEvent: (name: string) => `btn_${name}`,
+    appendInexistentScriptButtons: (b: any) => (globals.buttons = b),
+    initializeGlobal: (name: string, v: any) => (w[name] = v),
+    substitudeMacros: () => '测试玩家',
+    tavern_events: {
+      MESSAGE_RECEIVED: 'message_received',
+      MESSAGE_SENT: 'message_sent',
+      MESSAGE_SWIPED: 'message_swiped',
+      MESSAGE_DELETED: 'message_deleted',
+      MESSAGE_EDITED: 'message_edited',
+      MESSAGE_UPDATED: 'message_updated',
+      CHAT_CHANGED: 'chat_id_changed',
+      GENERATION_AFTER_COMMANDS: 'GENERATION_AFTER_COMMANDS',
+      GENERATION_ENDED: 'generation_ended',
+    },
+    builtin: { duringGenerating: () => false },
+    toastr: { info() {}, success() {}, warning() {}, error() {} },
+    YAML,
+    SillyTavern: { getCurrentChatId: () => 'chat-1', characters: [], characterId: 0 },
+  });
+  const fire = async (ev: string, ...args: any[]) => {
+    for (const fn of listeners.get(ev) ?? []) await fn(...args);
+  };
+  return { dom, w, chat, injected, globals, fire, pagehide, get chatVars() { return chatVars; } };
+}
+
+describe.skipIf(!existsSync(BUNDLE))('打包后的后端脚本（dist/f1m-backend.js）', () => {
+  it('生成卡包含车队、车手、管理层、策略组和核心组资料', () => {
+    const card = JSON.parse(readFileSync(CARD, 'utf8'));
+    const entries = card.data.character_book.entries as Array<{ id: number; insertion_order: number; comment: string; content: string; enabled: boolean; keys: string[] }>;
+    const teams = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M资料]') && entry.comment.includes('车队（2026）'));
+    const drivers = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M资料]') && entry.content.startsWith('<车手资料'));
+    const leaders = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M管理层]'));
+    const strategies = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M策略组]'));
+    const staffGroups = entries.filter(entry => entry.enabled && entry.comment.startsWith('[F1M核心组]'));
+    expect(teams).toHaveLength(11);
+    expect(drivers).toHaveLength(22);
+    expect(leaders).toHaveLength(22);
+    expect(strategies).toHaveLength(11);
+    expect(staffGroups).toHaveLength(11);
+    expect(new Set(leaders.map(entry => entry.comment.match(/^\[F1M管理层\] \[([^:]+):/)?.[1])).size).toBe(11);
+    expect(leaders.every(entry => entry.content.startsWith('<管理层资料') && entry.keys.length >= 2)).toBe(true);
+    expect(strategies.every(entry => entry.content.startsWith('<策略组资料') && entry.keys.length >= 2)).toBe(true);
+    expect(staffGroups.every(entry => entry.content.startsWith('<核心人员组资料') && entry.keys.length >= 3)).toBe(true);
+    expect(new Set(entries.map(entry => entry.id)).size).toBe(entries.length);
+    expect(new Set(entries.map(entry => entry.comment)).size).toBe(entries.length);
+    expect(new Set(entries.map(entry => entry.insertion_order)).size).toBe(entries.length);
+    const redBullStrategy = strategies.find(entry => entry.comment.includes('[red_bull]'))!;
+    const racingBullsStrategy = strategies.find(entry => entry.comment.includes('[racing_bulls]'))!;
+    const redBullStaff = staffGroups.find(entry => entry.comment.includes('[red_bull]'))!;
+    const racingBullsStaff = staffGroups.find(entry => entry.comment.includes('[racing_bulls]'))!;
+    expect(redBullStrategy.keys).not.toContain('红牛策略组');
+    expect(redBullStaff.keys).not.toContain('红牛核心组');
+    expect(redBullStrategy.keys.some(key => racingBullsStrategy.keys.some(other => other.includes(key)))).toBe(false);
+    expect(redBullStaff.keys.some(key => racingBullsStaff.keys.some(other => other.includes(key)))).toBe(false);
+    expect(redBullStrategy.keys.some(key => '小红牛车队策略组'.includes(key) || '小红牛车队策略团队'.includes(key))).toBe(false);
+    expect(redBullStaff.keys.some(key => '小红牛车队核心组'.includes(key))).toBe(false);
+    const strategyKeys = strategies.flatMap(entry => entry.keys);
+    for (const ambiguousKey of ['韦特', '辛格', '贾恩', '雷迪']) expect(strategyKeys).not.toContain(ambiguousKey);
+    expect(drivers.find(entry => entry.comment.includes('夏尔·勒克莱尔'))?.keys).not.toContain('夏尔');
+    const comments = new Set(leaders.map(entry => entry.comment));
+    for (const name of Object.values(PLAYER_REPLACED_LEADERSHIP).flat()) expect(comments.has(name), name).toBe(true);
+    expect(teams.every(entry => entry.content.includes('实时数据表明玩家执掌本队时生效'))).toBe(true);
+    expect(teams.every(entry => entry.keys.length >= 2)).toBe(true);
+    expect(drivers.every(entry => entry.keys.length >= 4)).toBe(true);
+    expect(teams.find(entry => entry.comment.includes('迈凯伦车队'))?.content).toContain('玩家执掌本队时，由 CEO 扎克·布朗任命为临时领队');
+    expect(teams.find(entry => entry.comment.includes('梅赛德斯车队'))?.content).toContain('玩家执掌本队时以副领队身份加入');
+    expect(teams.find(entry => entry.comment.includes('红牛车队'))?.content).toContain('RB22');
+    expect(drivers.find(entry => entry.comment.includes('乔治·拉塞尔'))?.content).toContain('管理触发点');
+    expect(drivers.find(entry => entry.comment.includes('塞尔吉奥·佩雷斯'))?.content).toContain('无线电与叙述指引');
+  });
+  it('能在模拟的酒馆助手环境中加载并跑通开局 → 面板 → AI 结算 → 注入', async () => {
+    const env = setupWindow();
+    const code = readFileSync(BUNDLE, 'utf8');
+    env.w.eval(code);
+    const api = env.w.F1Manager;
+    expect(api).toBeTruthy();
+    expect(api.version).toBe('0.1.0');
+    expect(env.globals.buttons.map((b: any) => b.name)).toEqual(['F1管理面板', 'AI叙述']);
+    expect(api.status().hasGame).toBe(false);
+
+    const report = await api.loadData();
+    expect(report.ok).toBe(true);
+    expect(report.teams).toHaveLength(11);
+
+    const r = await api.newGame({ playerTeamId: 'team_b' });
+    expect(r.ok).toBe(true);
+    expect(env.chat[0].variables[0].f1m_rev).toBeTruthy();
+    expect(env.chatVars.f1m_store.order).toHaveLength(1);
+    expect(api.view().player.team.name).toBe('测试车队B');
+    expect(api.status().userName).toBe('测试玩家');
+
+    // 悬浮面板宿主
+    api.openPanel('car');
+    const root = env.w.document.getElementById('f1m-panel-root');
+    expect(root).toBeTruthy();
+    expect(root.classList.contains('f1m-hidden')).toBe(false);
+    const frame = root.querySelector('iframe');
+    expect(frame.getAttribute('srcdoc') ?? frame.srcdoc).toContain('F1 领队管理面板');
+    api.closePanel();
+    expect(root.classList.contains('f1m-hidden')).toBe(true);
+
+    // 面板动作
+    expect((await api.dispatch({ type: 'START_PROJECT', partType: 'floor', ambition: 'standard' })).ok).toBe(true);
+
+    // 生成前注入
+    env.chat.push({ role: 'user', swipes: ['你好'], swipe_id: 0, variables: [{}] });
+    await env.fire('GENERATION_AFTER_COMMANDS', 'normal', {}, false);
+    expect(env.injected.f1m_state.content).toContain('测试车队B');
+    expect(env.injected.f1m_state.position).toBe('in_chat');
+
+    // AI 回复结算
+    env.chat.push({ role: 'assistant', swipes: ['好的。\n<F1M_UPDATE>\n{"op":"morale","driver":"b2","delta":4}\n</F1M_UPDATE>'], swipe_id: 0, variables: [{}] });
+    const m0 = api.view(1).drivers.find((d: any) => d.id === 'b2').morale;
+    await env.fire('message_received', 2, 'normal');
+    const m1 = api.view().drivers.find((d: any) => d.id === 'b2').morale;
+    expect(m1).toBeCloseTo(Math.min(100, m0 + 4), 1);
+    expect(env.chat[2].swipes[0]).toContain('<F1M_HUD/>');
+    const hud = api.hud(2);
+    expect(hud.changes.join()).toContain('心态');
+
+    // 请求叙述
+    await api.requestNarration();
+    expect(env.globals.lastSlash).toBe('/trigger');
+    expect(env.chat[env.chat.length - 1].role).toBe('user');
+
+    // 卸载
+    env.pagehide.forEach(fn => fn());
+    expect(env.w.document.getElementById('f1m-panel-root')).toBeNull();
+  });
+});
