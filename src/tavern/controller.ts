@@ -1410,6 +1410,11 @@ export class F1Controller {
     const rev = this.store.getRevision(id);
     if (!rev) return { ok: false, message: '找不到该存档版本' };
     const state = this.store.stateOf(rev);
+    const liveQualifying = state.weekend?.liveQualifying;
+    if (liveQualifying?.controlMode === 'manual' && !liveQualifying.paused) {
+      liveQualifying.paused = true;
+      liveQualifying.revision++;
+    }
     this.specialNegotiation = null;
     this.staleSpecialAction();
     this.invalidateStrategyReviews();
@@ -1437,6 +1442,11 @@ export class F1Controller {
       return { ok: false, message: '存档格式不正确' };
     }
     migrateState(state);
+    const liveQualifying = state.weekend?.liveQualifying;
+    if (liveQualifying?.controlMode === 'manual' && !liveQualifying.paused) {
+      liveQualifying.paused = true;
+      liveQualifying.revision++;
+    }
     this.specialNegotiation = null;
     this.staleSpecialAction();
     this.invalidateStrategyReviews();

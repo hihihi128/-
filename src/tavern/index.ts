@@ -31,18 +31,23 @@ function init(): void {
   if (doc) panel = new PanelHost(doc, PANEL_HTML);
   const updatePanelStatus = () => {
     const status = ctrl.status();
-    const hud = ctrl.hud(ctrl.latestFloor());
     const view = ctrl.view();
+    let pendingNarration = 0;
+    try {
+      pendingNarration = ctrl.hud(ctrl.latestFloor()).pending;
+    } catch {
+      // A partially restored floor must not stop future compact-status updates.
+    }
     panel?.updateStatus({
-      hasGame: status.hasGame,
-      teamLabel: hud.team?.name,
-      teamColor: hud.team?.color,
+      hasGame: !!view,
+      teamLabel: view?.player.team.name,
+      teamColor: view?.player.team.color,
       year: view?.season.year,
       round: view ? view.season.roundIndex + 1 : undefined,
       roundCount: view?.season.rounds,
-      trackLabel: hud.season?.track,
+      trackLabel: view?.round?.track.name,
       phaseLabel: view?.season.phaseLabel,
-      pendingNarration: hud.pending,
+      pendingNarration,
       generating: status.generating,
     });
   };
