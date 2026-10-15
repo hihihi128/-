@@ -159,6 +159,36 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(specialEnv.created.at(-1)).toContain('待叙述事件');
   });
 
+  it('FIA 多轮谈判拒绝无效、冲突或未选择的最终立场', async () => {
+    const specialEnv = new FakeTavern(cardWorldbook());
+    const specialCtrl = new F1Controller(specialEnv);
+    specialCtrl.init();
+    await specialCtrl.loadData();
+    expect((await specialCtrl.newGame({ playerTeamId: 'audi', seed: 881 })).ok).toBe(true);
+
+    const forced = JSON.parse(specialCtrl.exportSave()!);
+    forced.state.fiaMeeting.current = { index: 1, issue: 'cost_cap', opponents: ['ferrari'], supporters: [], forcedStance: 'support' };
+    expect((await specialCtrl.importSave(JSON.stringify(forced))).ok).toBe(true);
+    expect(specialCtrl.startSpecialNegotiation({ kind: 'fia_roundtable', preferredChoice: 'invalid' })).toMatchObject({ ok: false, message: '谈判预设选项无效' });
+    expect(specialCtrl.startSpecialNegotiation({ kind: 'fia_roundtable', preferredChoice: 'oppose' })).toMatchObject({ ok: false, message: '所选立场与车队强制立场冲突' });
+    expect(specialCtrl.startSpecialNegotiation({ kind: 'fia_roundtable' })).toMatchObject({ ok: true, session: { preferredChoice: 'support' } });
+    specialCtrl.cancelSpecialNegotiation();
+
+    const open = JSON.parse(specialCtrl.exportSave()!);
+    open.state.fiaMeeting.current.forcedStance = null;
+    expect((await specialCtrl.importSave(JSON.stringify(open))).ok).toBe(true);
+    let replies = 0;
+    specialEnv.generateText = async () => ++replies === 1
+      ? '{"speaker":"FIA 主持人","reply":"请继续说明反对理由。","status":"continue","choice":null}'
+      : '{"speaker":"FIA 主持人","reply":"多数车队决定支持议题。","status":"agreement","choice":"support"}';
+    const started = specialCtrl.startSpecialNegotiation({ kind: 'fia_roundtable', preferredChoice: 'oppose' });
+    expect(started).toMatchObject({ ok: true, session: { preferredChoice: 'oppose' } });
+    await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '我方反对该议题。' });
+    const rejected = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '我方维持反对。' });
+    expect(rejected).toMatchObject({ ok: false, message: '谈判 API 返回了未选择的结算方案', session: { status: 'active', preferredChoice: 'oppose' } });
+    expect(specialCtrl.stateAt()!.fiaMeeting!.current).not.toBeNull();
+  });
+
   it('谈判破裂、取消或等待期间换档都不会修改事件状态', async () => {
     const specialEnv = new FakeTavern(cardWorldbook());
     const specialCtrl = new F1Controller(specialEnv);
