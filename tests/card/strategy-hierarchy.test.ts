@@ -9,7 +9,7 @@ describe('2026 车队策略组层级', () => {
     const loaded = normalizeDatabase(cardSources());
     if (!loaded.db) throw new Error('card database failed to load');
     const state = createGame(loaded.db, { playerTeamId: 'cadillac', principalName: '测试领队', seed: 42, gameId: 'strategy-order', now: 1 });
-    const scores = (ids: string[]) => ids.flatMap(id => [0, 1].map(slot => strategyDecisionSkill(state.teams[id], slot)));
+    const scores = (ids: string[]) => ids.flatMap(id => [1, 2].map(slot => strategyDecisionSkill(state.teams[id], slot)));
     const tiers = [
       scores(['red_bull']),
       scores(['mercedes']),

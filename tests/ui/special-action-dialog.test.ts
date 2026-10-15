@@ -184,7 +184,7 @@ describe('special action dialog', () => {
     expect(overview).toContain('<RandomEventPanel mode="card" />');
     expect(overview).toContain('<NegotiationPanel kind="fia_roundtable" :preferred-choice="fiaChoice" />');
     expect(overview).toContain("@click=\"fiaChoice = 'support'\"");
-    expect(overview).not.toContain("openSpecialAction({ type: 'FIA_DEBATE'");
+    expect(overview).toContain('@click="submitFiaChoice"');
     expect(overview).toContain(':fallback-focus="overviewRoot"');
     expect(overview).not.toMatch(/@click="act\(\{ type: '(?:START_MCLAREN_FIX|MERCEDES_POLITICS|RED_BULL_RETAIN_GP|ASTON_CRISIS|RACING_BULLS_SELECT_RESERVE|AUDI_ALLIANCE|ALPINE_MANAGEMENT|HAAS_BALANCE|WILLIAMS_BUDGET_FOCUS|FIA_DEBATE)/);
   });

@@ -39,13 +39,23 @@ const overviewRoot = ref<HTMLElement | null>(null);
 const fiaChoice = ref<'support' | 'oppose' | 'compromise' | null>(null);
 
 watch(
-  () => [fia.value?.current?.index ?? null, fia.value?.current?.forcedStance ?? null],
+  [() => fia.value?.current?.index ?? null, () => fia.value?.current?.forcedStance ?? null],
   () => { fiaChoice.value = fia.value?.current?.forcedStance ?? null; },
   { immediate: true },
 );
 
 function openSpecialAction(action: Action, title: string, hint: string, subject?: string): void {
   specialAction.value = { action, title, hint, subject };
+}
+
+function submitFiaChoice(): void {
+  if (!fiaChoice.value || !fia.value?.current) return;
+  openSpecialAction(
+    { type: 'FIA_DEBATE', stance: fiaChoice.value },
+    `直接${fiaChoice.value === 'support' ? '支持' : fiaChoice.value === 'oppose' ? '反对' : '折中处理'} FIA 议题`,
+    '按已选择并高亮的立场直接表态。多轮 AI 谈判仍可作为另一种处理方式。',
+    fiaIssue[fia.value.current.issue],
+  );
 }
 
 async function cancelActiveNegotiation() {
@@ -201,7 +211,8 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       <div v-if="fia.current.forcedStance" class="notice warn small">{{ p.team.id === 'alpine' ? '布里亚托利已经决定支持提案。' : '车队已经公开支持提案。' }}你必须以支持立场参加正常领队谈判。</div>
       <Bar label="政治资本" :value="fia.politicalCapital" color="#355c8a" hint="董事会信心、媒体声望和政治资本共同决定说服检定" />
       <div class="row"><button :class="{ selected: fiaChoice === 'support' }" :aria-pressed="fiaChoice === 'support'" :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'support')" @click="fiaChoice = 'support'">支持议题</button><button :class="{ selected: fiaChoice === 'oppose' }" :aria-pressed="fiaChoice === 'oppose'" :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'oppose')" @click="fiaChoice = 'oppose'">反对议题</button><button :class="{ selected: fiaChoice === 'compromise' }" :aria-pressed="fiaChoice === 'compromise'" :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'compromise')" @click="fiaChoice = 'compromise'">提出折中</button></div>
-      <div class="tiny muted">先选择并高亮立场，再开始多轮 AI 谈判。</div>
+      <div class="tiny muted">先选择并高亮立场，再直接表态或开始多轮 AI 谈判。</div>
+      <button :disabled="specialActionBlocked || !fiaChoice || negotiationActiveFor('fia_roundtable')" @click="submitFiaChoice">直接以所选立场表态</button>
       <NegotiationPanel kind="fia_roundtable" :preferred-choice="fiaChoice" />
     </div>
 
