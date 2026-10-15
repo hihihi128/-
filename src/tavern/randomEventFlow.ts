@@ -35,7 +35,7 @@ export function randomEventGenerationPrompt(state: GameState, event: RandomEvent
     `你是 F1 车队管理模拟器的随机事件编剧。使用简体中文生成一个具体、可信的${event.category === 'routine' ? '日常小事件' : '需要领队处理的问题'}。`,
     `事件 ID=${event.id}；类型=${event.category ?? 'problem'}；主题=${themes[event.kind] ?? event.kind}；预计持续 ${event.totalDialogueTurns ?? 2} 轮玩家-AI 对话。`,
     `当前受限车队资料=${JSON.stringify(randomEventContext(state))}`,
-    `不得编造比赛结果、死亡、犯罪、政治现实人物争议或不可逆职业结局。不得包含任何存档修改指令。${event.category === 'routine' ? '这是无关紧要的日常事件，不得制造危机、重大冲突或紧急损失。' : ''}`,
+    `不得编造比赛结果、死亡、犯罪、政治现实人物争议或不可逆职业结局。不得包含任何存档修改指令。员工、工程师、策略师和维修组的能力分、技能分、等级、内部评分、判定概率及随机检定不得出现在 title、prompt 或 answerOptions 中；只能使用姓名、职务和定性表现。${event.category === 'routine' ? '这是无关紧要的日常事件，不得制造危机、重大冲突或紧急损失。' : ''}`,
     'title 最多 40 字；prompt 最多 260 字；answerOptions 必须有 2–4 个具体处理方向，每项最多 60 字。',
     '只返回一个 JSON 对象，不要代码块：{"title":"标题","prompt":"事件与问题","answerOptions":["方案一","方案二"]}',
   ].join('\n');
@@ -56,18 +56,14 @@ export function parseRandomEventContent(raw: string): RandomEventContent {
 export function randomEventNarrationMessage(state: GameState, event: RandomEventRecord, answer: string): string {
   const team = state.teams[state.meta.playerTeamId];
   const turn = (event.completedDialogueTurns ?? 0) + 1;
-  const dialogue = event.dialogue ?? [];
-  const prior = dialogue.length
-    ? `此前对话：\n${dialogue.map((row, index) => `第 ${index + 1} 轮玩家：${row.player}\n第 ${index + 1} 轮剧情：${row.assistant}`).join('\n')}`
-    : '';
   return [
     '【F1M 随机事件叙述请求】',
     `你正在继续 ${team.name} 的正常剧情。请围绕以下随机事件和领队决定写一段完整、自然的中文叙事。`,
     `事件 ID：${event.id}`,
-    `事件：${event.title}。${event.prompt}`,
+    turn === 1 ? `事件：${event.title}。${event.prompt}` : `事件背景（只供理解，不要复述）：${event.title}。${event.prompt} 此前轮次已经在上方正常聊天记录中。`,
     `当前是第 ${turn}/${event.totalDialogueTurns ?? 2} 轮。`,
-    prior,
     `领队本轮回应：${answer}`,
+    '只输出本轮新发生的剧情正文。不要复述事件介绍、领队回应或此前正文，也不要复制已有段落。',
     turn < (event.totalDialogueTurns ?? 2)
       ? '自然推进这段剧情，并在结尾给玩家一个明确、自然的回应机会。不要提前总结或结束事件。'
       : '自然完成这段剧情，并给出与此前对话一致的收束。',

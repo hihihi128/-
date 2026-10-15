@@ -12,13 +12,15 @@ import { activeEntries, carRatings, fittedSpec, raceSkill, trackScore } from './
 import { Rng } from './rng';
 import { raceEngineerFor, staffAbility, strategyDecisionSkill } from './staff';
 import { redBullCrashMultiplier, specialFailureChance } from './teamSpecials';
-import { applyAudiStartDrop, astonVibrationActive } from './nextTeamSpecials';
+import { applyAudiStartDrop, applyFerrariStartGain, astonVibrationActive } from './nextTeamSpecials';
 import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from './raceWeather';
 import { validOrders, validRaceChoice } from './raceDecisions';
 import { actualStationaryTime } from './pitstop';
-import { ensureDriverWeekendTyres, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
+import { PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES } from './powerunit';
+import { canRunTyreStrategy, ensureDriverWeekendTyres, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
 import {
   degFactor,
+  predictedTyreLife,
   optimizeStints,
   PACE_MODE_TIME,
   planLabel,
@@ -41,11 +43,13 @@ import type {
   LiveRaceCar,
   LiveRaceState,
   RaceDecisionWindow,
-  EnergyMode,
+  RaceDriverDecision,
+  PowerUnitPartType,
 } from './types';
 import { clamp, gapText, round3 } from './util';
 import { currentTrack, planOf } from './weekend';
 import { effectiveSetup } from './supernatural';
+import { buildPerformanceContext, practiceEffects, stepTyre } from './performance';
 
 interface SimCar {
   driver: DriverState;
@@ -122,18 +126,28 @@ function chooseCompounds(
   return options[0]?.compounds ?? [rules.dryCompounds[1], rules.dryCompounds[2] ?? rules.dryCompounds[0]];
 }
 
-/** 超车模式电能收益系数：能量回收系统越强，追近时多释放的电能越有用 */
+/** 超车模式电能收益系数：MGU-K 与储能系统越强，追近时多释放的电能越有用 */
 function ersFactor(team: TeamState, car: CarState, rules: GameState['rules']): number {
-  if (!rules.parts.ers) return 1;
-  const perf = fittedSpec(team, car, 'ers')?.perf ?? 75;
+  const values = ['mgu_k', 'energy_store'].map(type => fittedSpec(team, car, type)?.perf).filter((x): x is number => x !== undefined);
+  if (!values.length) return 1;
+  const perf = values.reduce((a, b) => a + b, 0) / values.length;
   return Math.min(1.4, Math.max(0.6, perf / 75));
 }
 
-function puWear(car: CarState, type: 'power_unit' | 'ers', specId: string | undefined): number {
+function puWear(car: CarState, type: PowerUnitPartType, specId: string | undefined): number {
   const pooled = specId ? car.puWearPool?.[type]?.[specId] : undefined;
   if (pooled !== undefined) return clamp(pooled, 0, 85);
   const stored = car.puWear?.[type];
   return stored && stored.specId === specId ? clamp(stored.wear, 0, 85) : 0;
+}
+
+function groupHealth(health: Partial<Record<PowerUnitPartType, number>>, parts: readonly PowerUnitPartType[]): number {
+  const values = parts.map(type => health[type] ?? 100);
+  return values.reduce((a, b) => a + b, 0) / values.length;
+}
+
+function minGroupHealth(health: Partial<Record<PowerUnitPartType, number>> | undefined, parts: readonly PowerUnitPartType[]): number {
+  return Math.min(...parts.map(type => health?.[type] ?? 100));
 }
 
 function puStatus(temperature: number): NonNullable<LiveRaceCar['puStatus']> {
@@ -175,8 +189,9 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
     const e = entries.find(x => x.driver.id === id)!;
     const ratings = carRatings(e.team, e.car, rules);
     const plan = e.team.isPlayer ? planOf(state, id) : { ...DEFAULT_PLAN };
-    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
-    const ctx = { driverTyre: e.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge };
+    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, thermalKnowledge: 30, trackKnowledge: 30, qualiBonus: 0 });
+    const performanceContext = buildPerformanceContext({ driverTyre: e.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
+    const ctx = { driverTyre: e.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge, performanceContext };
     const factor = degFactor(track, ctx);
     const options = strategyOptions(rules, track, totalLaps, ctx, { wet, sprint });
     const sim: SimCar = {
@@ -216,7 +231,7 @@ export function simulateRaceLegacy(state: GameState, rng: Rng, kind: 'race' | 's
       crashedOut: false,
     };
     sim.compounds = chooseCompounds(state, sim, options, wet, sprint, rng);
-    sim.stints = optimizeStints(rules, track, sim.compounds, totalLaps, factor);
+    sim.stints = optimizeStints(rules, track, sim.compounds, totalLaps, factor, { context: performanceContext, paceMode: plan.paceMode });
     // 进站时机偏好：提前（Undercut）/ 推迟（Overcut）
     const shift = plan.pitTiming === 'early' ? -2 : plan.pitTiming === 'late' ? 2 : 0;
     if (shift && sim.stints.length > 1) {
@@ -601,17 +616,21 @@ function freeRedFlagTyreChange(state: GameState, session: LiveRaceState, car: Li
   const nextStint = car.stintIndex + 1;
   const remainingLaps = Math.max(1, session.totalLaps - session.completedLaps);
   const remainingCompounds = [compound, ...car.plannedCompounds.slice(nextStint + 1)];
-  const tyreLife = (state.rules.tyres[compound]?.cliff ?? remainingLaps) * car.tyreFactor;
+  const tyreLife = predictedTyreLife(state.rules.tyres[compound], car.tyreFactor, { context: car.performanceContext, paceMode: car.plan.paceMode, rules: state.rules });
   if (!state.rules.tyres[compound]?.wet && remainingLaps > tyreLife && remainingCompounds.length === 1) {
     remainingCompounds.push(state.rules.dryCompounds.find(candidate => candidate !== compound) ?? compound);
   }
   car.plannedCompounds.splice(nextStint, car.plannedCompounds.length - nextStint, ...remainingCompounds);
-  car.stints.splice(nextStint, car.stints.length - nextStint, ...optimizeStints(state.rules, currentTrack(state), remainingCompounds, remainingLaps, car.tyreFactor));
+  // Replanning needs to stay constant-time enough for a live safety-car tick;
+  // tyre temperature remains in the actual per-lap physics below.
+  car.stints.splice(nextStint, car.stints.length - nextStint, ...optimizeStints(state.rules, currentTrack(state), remainingCompounds, remainingLaps, car.tyreFactor, { context: car.performanceContext, paceMode: car.plan.paceMode }));
   car.stintIndex = nextStint;
   car.tyre = compound;
   const replacement = takeTyreSet(state.teams[car.teamId], car.driverId, compound, weekendTyreKey(state), car.tyreSetId);
   car.tyreSetId = replacement?.id;
   car.tyreAge = replacement?.laps ?? 0;
+  car.tyreWearAge = replacement?.wearAge ?? replacement?.laps ?? 0;
+  car.tyreTemperature = (state.rules.tyres[compound]?.temperatureWindow?.[0] ?? 80) - 18;
   car.usedCompounds.push(compound);
   car.pendingPit = null;
   car.pendingCompound = null;
@@ -633,6 +652,11 @@ function playerCars(session: LiveRaceState): LiveRaceCar[] {
 
 function playerControlledCars(session: LiveRaceState): LiveRaceCar[] {
   return playerCars(session).filter(c => c.plan.strategySource !== 'engineer' && c.plan.strategySource !== 'perfect');
+}
+
+/** Wetness controls the automatic wet-grid choice; players can choose any legal tyre on every grid. */
+export function requiresWetGridTyreChoice(session: Pick<LiveRaceState, 'stage' | 'completedLaps' | 'wetness'>): boolean {
+  return session.stage === 'grid' && session.completedLaps === 0 && session.wetness >= .22;
 }
 
 function expectedLivePositions(state: GameState): Record<string, number> {
@@ -669,6 +693,7 @@ export function createRaceSession(
     if (!grid.includes(entry.driver.id)) grid.push(entry.driver.id);
   }
   const startsWet = (kind === 'race' ? w.weather.race : w.weather.sprint) === 'wet';
+  const initialWetness = startsWet ? .55 : 0;
   const rainProbability = w.supernaturalRainBias ? clamp(track.rainChance + w.supernaturalRainBias, 0.05, 0.95) : track.rainChance;
   const trajectory = createWeatherTrajectory(totalLaps, startsWet, rainProbability, weatherRng);
   const sessionId = `race-${state.season.number}-${state.season.roundIndex}-${kind}-${state.seq++}`;
@@ -683,9 +708,15 @@ export function createRaceSession(
     if (entry.team.isPlayer) {
       plan = { ...planOf(state, id) };
     } else {
-      const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
-      const baseContext = { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: 'balanced' as const, knowledge: setup.tyreKnowledge };
-      const options = strategyOptions(rules, track, totalLaps, baseContext, { wet: false, sprint: kind === 'sprint' });
+      const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, thermalKnowledge: 30, trackKnowledge: 30, qualiBonus: 0 });
+      const performanceContext = buildPerformanceContext({ driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
+      const baseContext = { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: 'balanced' as const, knowledge: setup.tyreKnowledge, performanceContext };
+      const tyreKey = weekendTyreKey(state);
+      const options = strategyOptions(rules, track, totalLaps, baseContext, {
+        wet: false,
+        sprint: kind === 'sprint',
+        isAvailable: compounds => canRunTyreStrategy(entry.team, id, tyreKey, compounds),
+      });
       const decision = strategyDecisionSkill(entry.team, entry.car.slot);
       const localIndex = decision >= 88 ? 0 : decision >= 74 ? Math.min(1, options.length - 1) : Math.min(2, options.length - 1);
       const gridPosition = index + 1;
@@ -699,7 +730,9 @@ export function createRaceSession(
         scReaction: decision >= 68,
       };
       const proposed = suppliedAiPlans[id];
-      const validTyres = Array.isArray(proposed?.tyrePlan) && !validatePlan(rules, proposed.tyrePlan, false);
+      const validTyres = Array.isArray(proposed?.tyrePlan)
+        && !validatePlan(rules, proposed.tyrePlan, false)
+        && canRunTyreStrategy(entry.team, id, tyreKey, proposed.tyrePlan);
       const validPace = proposed?.paceMode === 'conserve' || proposed?.paceMode === 'balanced' || proposed?.paceMode === 'push';
       const validTiming = proposed?.pitTiming === 'early' || proposed?.pitTiming === 'standard' || proposed?.pitTiming === 'late';
       const validReaction = typeof proposed?.scReaction === 'boolean';
@@ -712,44 +745,51 @@ export function createRaceSession(
       plan = { ...plan, paceMode: entry.driver.ego >= 50 ? 'push' : 'conserve', pitTiming: 'late', scReaction: false };
       disobedient.push(id);
     }
-    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
-    const wet = trajectory[0] > 0.18;
+    const setup = effectiveSetup(state, id, w.setup[id] ?? { confidence: 40, tyreKnowledge: 30, thermalKnowledge: 30, trackKnowledge: 30, qualiBonus: 0 });
+    const wet = initialWetness >= .22;
     const compounds = wet
-      ? [wetCompoundFor(rules, .55)]
+      ? [wetCompoundFor(rules, initialWetness)]
       : kind === 'sprint'
         ? [plan.sprintTyre !== 'auto' && rules.tyres[plan.sprintTyre] ? plan.sprintTyre : rules.dryCompounds[1] ?? rules.dryCompounds[0]]
         : plan.tyrePlan !== 'auto' && !validatePlan(rules, plan.tyrePlan, false)
           ? [...plan.tyrePlan]
           : [rules.dryCompounds[1] ?? rules.dryCompounds[0], rules.dryCompounds[0]];
-    const factor = degFactor(track, { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge });
-    const iceSpec = fittedSpec(entry.team, entry.car, 'power_unit');
-    const ersSpec = fittedSpec(entry.team, entry.car, 'ers');
+    const performanceContext = buildPerformanceContext({ driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
+    const factor = degFactor(track, { driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge, performanceContext });
+    const puSpecs = Object.fromEntries(PU_PART_TYPES.map(type => [type, fittedSpec(entry.team, entry.car, type)])) as Partial<Record<PowerUnitPartType, ReturnType<typeof fittedSpec>>>;
+    const componentHealth = Object.fromEntries(PU_PART_TYPES.map(type => {
+      const spec = puSpecs[type];
+      return [type, 100 - puWear(entry.car, type, spec?.id)];
+    })) as NonNullable<LiveRaceCar['puComponentHealth']>;
+    const componentReliability = Object.fromEntries(PU_PART_TYPES.map(type => [type, puSpecs[type]?.rel ?? ratings.reliability])) as NonNullable<LiveRaceCar['puComponentReliability']>;
     ensureDriverWeekendTyres(state, entry.team, id);
     const startingSet = takeTyreSet(entry.team, id, compounds[0], weekendTyreKey(state));
     cars[id] = {
       driverId: id, teamId: entry.team.id, slot: entry.car.slot, player: entry.team.isPlayer, grid: index + 1,
       score: trackScore(ratings, track), skill: raceSkill(entry.driver, wet), consistency: entry.driver.attrs.consistency,
       racecraft: entry.driver.attrs.racecraft, trust: entry.driver.trust, ego: entry.driver.ego, reliability: ratings.reliability, wetSkill: entry.driver.attrs.wet,
-      tyreFactor: factor, setupBonus: setup.confidence / 100 * 0.3,
+      tyreFactor: factor, setupBonus: practiceEffects(setup, rules, performanceContext.trackFit).race,
       raceEngineerReaction: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'reaction'),
       raceEngineerWeather: staffAbility(raceEngineerFor(entry.team, entry.car.slot), 'weather'),
-      plan, tyre: compounds[0], tyreAge: startingSet?.laps ?? 0, tyreSetId: startingSet?.id, usedCompounds: [compounds[0]], plannedCompounds: compounds,
-      stints: optimizeStints(rules, track, compounds, totalLaps, factor), stintIndex: 0, pits: 0, pitStops: [], cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
+      plan, tyre: compounds[0], tyreAge: startingSet?.laps ?? 0, tyreTemperature: (rules.tyres[compounds[0]]?.temperatureWindow?.[0] ?? 80) - 18, tyreWearAge: startingSet?.wearAge ?? startingSet?.laps ?? 0, performanceContext, tyreSetId: startingSet?.id, usedCompounds: [compounds[0]], plannedCompounds: compounds,
+      stints: optimizeStints(rules, track, compounds, totalLaps, factor, { context: performanceContext, paceMode: plan.paceMode }), stintIndex: 0, pits: 0, pitStops: [], cumulativeTime: index * 0.25, completedLaps: 0, status: 'running', reason: '', bestLap: null,
       damage: 0, partial: 0, repairPending: false, energy: 65, energyMode: plan.energyMode ?? 'balanced',
-      iceHealth: 100 - puWear(entry.car, 'power_unit', iceSpec?.id), electricalHealth: 100 - puWear(entry.car, 'ers', ersSpec?.id),
+      iceHealth: groupHealth(componentHealth, PU_COMBUSTION_PARTS), electricalHealth: groupHealth(componentHealth, PU_ELECTRICAL_PARTS),
+      puComponentHealth: componentHealth, puComponentReliability: componentReliability,
       puTemperature: 78, puStatus: 'normal', ersPerformance: ersFactor(entry.team, entry.car, rules),
-      iceReliability: iceSpec?.rel ?? ratings.reliability, electricalReliability: ersSpec?.rel ?? ratings.reliability,
+      iceReliability: groupHealth(componentReliability, PU_COMBUSTION_PARTS), electricalReliability: groupHealth(componentReliability, PU_ELECTRICAL_PARTS),
       pendingPit: null, pendingCompound: null, stayOutUntilLap: 0,
       engineerLightRainAssessed: false, engineerWetAssessed: false, engineerWeatherSpell: 0, engineerTyreOverride: null, engineerTyreOverrideUntilLap: 0,
+      engineerWeatherTarget: null, engineerWeatherEligibleLap: 0, lastWeatherPitLap: -99,
       neutralStopTaken: false,
     };
     if (entry.team.isPlayer) lapChart[id] = [];
   }
   const session: LiveRaceState = {
-    version: 1, id: sessionId, kind, roundIndex: state.season.roundIndex,
+    version: 1, physicsVersion: 2, id: sessionId, kind, roundIndex: state.season.roundIndex,
     totalLaps, completedLaps: 0, lap: 1, stage: 'grid', revision: 1, rngState: execution.state, weatherRngState: weatherRng.state,
     forecastRngState: forecastRng.state, strategistSkill: staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), expectedPositions, cars, order: grid, weatherTrajectory: trajectory, weatherHistory: [],
-    rain: trajectory[0] ?? 0, wetness: startsWet ? 0.55 : 0, surface: startsWet ? 'wet' : 'dry',
+    rain: trajectory[0] ?? 0, wetness: initialWetness, surface: startsWet ? 'wet' : 'dry',
     forecast: createForecast(trajectory, 0, staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), forecastRng),
     scLeft: 0, vscLeft: 0, safetyCars: 0, redFlags: 0, redFlag: null, fastestLap: null, events: [], lapChart, orderOutcomes: [], orderCooldown: {},
     teamOrders: { ...w.teamOrders }, pendingDecision: null, damageLedger: [], specialIncidents: [], norrisTeammateRollDone: false,
@@ -765,13 +805,14 @@ export function createRaceSession(
       }
     }
     applyAudiStartDrop(state, session, execution);
+    applyFerrariStartGain(state, session, execution);
     session.rngState = execution.state;
   }
   for (const driverId of disobedient) liveEvent(session, 0, 'order', `${driverId} 拒绝执行赛前策略，决定按自己的节奏比赛`, [driverId], true);
   session.weatherRngState = weatherRng.state;
   session.forecastRngState = forecastRng.state;
-  const controlled = playerControlledCars(session);
-  session.pendingDecision = controlled.length ? { id: `${session.id}:w1`, lap: 0, stage: 'grid', reasons: ['grid'], affectedDriverIds: controlled.map(c => c.driverId), eligibleDriverIds: controlled.map(c => c.driverId), observedEventIds: [] } : null;
+  const gridCars = requiresWetGridTyreChoice(session) ? playerCars(session) : playerControlledCars(session);
+  session.pendingDecision = gridCars.length ? { id: `${session.id}:w1`, lap: 0, stage: 'grid', reasons: ['grid'], affectedDriverIds: gridCars.map(c => c.driverId), eligibleDriverIds: gridCars.map(c => c.driverId), observedEventIds: [] } : null;
   return session;
 }
 
@@ -789,6 +830,34 @@ function createWindow(session: LiveRaceState, reasons: RaceDecisionWindow['reaso
 
 export function wetCompoundFor(rules: GameState['rules'], wetness: number): Compound {
   return wetness >= .82 ? rules.fullWetCompound : rules.wetCompound;
+}
+
+/** Fits grid equipment without recording a pit stop or consuming race time. */
+function fitInitialTyres(state: GameState, session: LiveRaceState, car: LiveRaceCar, compound: Compound, preserveDryStrategy = false): boolean {
+  const team = state.teams[car.teamId];
+  const set = team && takeTyreSet(team, car.driverId, compound, weekendTyreKey(state));
+  if (!set) return false;
+  const tyre = state.rules.tyres[compound];
+  const track = currentTrack(state);
+  car.tyre = compound;
+  car.tyreSetId = set.id;
+  car.tyreAge = set.laps;
+  car.tyreWearAge = set.wearAge ?? set.laps;
+  car.tyreTemperature = (tyre?.temperatureWindow?.[0] ?? 80) - 18;
+  car.usedCompounds = [compound];
+  if (preserveDryStrategy) {
+    const originalFirst = car.plannedCompounds[0];
+    const remaining = car.plannedCompounds.slice(1);
+    const duplicateIndex = remaining.indexOf(compound);
+    if (duplicateIndex >= 0 && originalFirst) remaining[duplicateIndex] = originalFirst;
+    car.plannedCompounds = [compound, ...remaining];
+  } else car.plannedCompounds = [compound];
+  car.stints = optimizeStints(state.rules, track, car.plannedCompounds, session.totalLaps, car.tyreFactor, { context: car.performanceContext, paceMode: car.plan.paceMode });
+  car.stintIndex = 0;
+  car.pendingPit = null;
+  car.pendingCompound = null;
+  car.stayOutUntilLap = 0;
+  return true;
 }
 
 export function tyreWeatherPenalty(rules: GameState['rules'], compound: Compound, wetness: number): number {
@@ -812,6 +881,47 @@ function weatherTyreChangeWorthwhile(rules: GameState['rules'], current: Compoun
   // while still allowing the full-wet → intermediate crossover after water
   // begins to drain.
   return weatherTyreCost(rules, target, wetness) + .2 < weatherTyreCost(rules, current, wetness);
+}
+
+/**
+ * Live weather calls use the simulated race engineer, not a fresh LLM request
+ * every lap. Better engineers react sooner, while each car keeps a stable,
+ * deterministic variation. Ferrari deliberately retains its instant calls.
+ */
+export function aiWeatherReactionDelay(state: GameState, session: LiveRaceState, car: LiveRaceCar, target: Compound): number {
+  if (car.player || car.plan.strategySource !== 'engineer' || car.teamId === 'ferrari') return 0;
+  const team = state.teams[car.teamId];
+  const strategistWeather = team ? staffAbility(team.staff.strategist, 'weather') : 70;
+  const skill = (car.raceEngineerWeather + car.raceEngineerReaction + strategistWeather) / 3;
+  const advantage = weatherTyreCost(state.rules, car.tyre, session.wetness) - weatherTyreCost(state.rules, target, session.wetness);
+  const base = skill >= 85 ? 0 : 1;
+  const urgent = advantage >= 2.4 ? 1 : 0;
+  const variation = engineerDecisionRoll(session, car, `weather-delay:${target}:${Math.round(session.wetness * 20)}`, .45) ? 1 : 0;
+  return clamp(base - urgent + variation, 0, 2);
+}
+
+function aiWeatherStopReady(state: GameState, session: LiveRaceState, car: LiveRaceCar, target: Compound): boolean {
+  const immediate = car.tyreAge >= 2 && weatherTyreChangeWorthwhile(state.rules, car.tyre, target, session.wetness);
+  if (car.player || car.plan.strategySource !== 'engineer' || car.teamId === 'ferrari') return immediate;
+  const currentWet = !!state.rules.tyres[car.tyre]?.wet;
+  const targetWet = !!state.rules.tyres[target]?.wet;
+  const advantage = weatherTyreCost(state.rules, car.tyre, session.wetness) - weatherTyreCost(state.rules, target, session.wetness);
+  const minimumGain = currentWet === targetWet ? .9 : .55;
+  const cooledDown = session.lap - (car.lastWeatherPitLap ?? -99) >= 4;
+  const worthwhile = car.tyreAge >= 2
+    && cooledDown
+    && advantage >= minimumGain
+    && immediate;
+  if (!worthwhile) {
+    car.engineerWeatherTarget = null;
+    car.engineerWeatherEligibleLap = 0;
+    return false;
+  }
+  if (car.engineerWeatherTarget !== target) {
+    car.engineerWeatherTarget = target;
+    car.engineerWeatherEligibleLap = session.lap + aiWeatherReactionDelay(state, session, car, target);
+  }
+  return session.lap >= (car.engineerWeatherEligibleLap ?? session.lap);
 }
 
 function replacementCompound(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound {
@@ -854,7 +964,8 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
     if (engineerDecisionRoll(session, car, `light-rain:${car.engineerWeatherSpell ?? 0}`, risk.probability)) {
       car.engineerTyreOverride = state.rules.wetCompound;
       car.engineerTyreOverrideUntilLap = session.lap + risk.holdLaps;
-      liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师对小雨反应过度，要求提前换半雨胎`, [car.driverId], car.player);
+      const call = car.teamId === 'ferrari' ? '要求' : '建议';
+      liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师对小雨反应过度，${call}提前换半雨胎`, [car.driverId], car.player);
       return true;
     }
   }
@@ -866,7 +977,8 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
       if (dry) {
         car.engineerTyreOverride = dry;
         car.engineerTyreOverrideUntilLap = session.lap + risk.holdLaps;
-        liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师误判湿地，要求换上${state.rules.tyres[dry]?.name ?? dry}`, [car.driverId], car.player);
+        const call = car.teamId === 'ferrari' ? '要求' : '建议';
+        liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师误判湿地，${call}换上${state.rules.tyres[dry]?.name ?? dry}`, [car.driverId], car.player);
         return true;
       }
     }
@@ -885,29 +997,42 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const planned = car.stintIndex < car.plannedCompounds.length - 1;
   const engineerOverride = applyEngineerWeatherDecision(state, session, car);
   const targetCompound = replacementCompound(state, session, car);
-  const weatherStop = engineerOverride || (car.tyreAge >= 2 && weatherTyreChangeWorthwhile(state.rules, car.tyre, targetCompound, session.wetness));
+  const differentCompound = targetCompound !== car.tyre;
+  const weatherReady = aiWeatherStopReady(state, session, car, targetCompound);
+  const weatherStop = differentCompound && (weatherReady || (car.teamId === 'ferrari' && engineerOverride));
+  const plannedStop = !weatherStop && planned && car.tyreAge >= pitTriggerLap(car);
   const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
   const neutralActive = session.scLeft > 0 || session.vscLeft > 0;
   if (!neutralActive) car.neutralStopTaken = false;
   const neutralOpportunity = car.plan.scReaction && neutralActive && !car.neutralStopTaken && planned
     && car.tyreAge >= Math.max(2, Math.round(pitTriggerLap(car) * .5)) && targetCompound !== car.tyre;
-  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || neutralOpportunity || (planned && car.tyreAge >= pitTriggerLap(car))));
+  const plannedAdvance = plannedStop || neutralOpportunity;
+  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || neutralOpportunity || plannedStop));
   if (!shouldPit) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
   const repair = car.repairPending;
   const stop = actualStationaryTime(state.teams[car.teamId], () => rng.next(), repair);
   const stationary = stop.actual;
   if (car.repairPending) { car.damage = 0; car.repairPending = false; const damage = [...session.damageLedger].reverse().find(d => d.driverId === car.driverId && !d.repairedInRace); if (damage) damage.repairedInRace = true; }
-  if (car.pendingPit === 'box' || planned || weatherStop) {
-    if (planned) car.stintIndex += 1;
+  if (car.pendingPit === 'box' || plannedAdvance || weatherStop) {
+    if (plannedAdvance) car.stintIndex += 1;
     // A decision can choose a compound, but it takes effect only after this car
     // has actually entered the pits. AI changes respond to the public surface.
     car.tyre = targetCompound;
+    if (weatherStop && !state.rules.tyres[targetCompound]?.wet) {
+      const matchingDryStint = car.plannedCompounds.slice(car.stintIndex + 1).findIndex(compound => compound === targetCompound);
+      if (matchingDryStint >= 0) car.stintIndex += matchingDryStint + 1;
+    }
     const replacement = takeTyreSet(state.teams[car.teamId], car.driverId, car.tyre, weekendTyreKey(state), car.tyreSetId);
     car.tyreSetId = replacement?.id;
     car.tyreAge = replacement?.laps ?? 0;
+    car.tyreWearAge = replacement?.wearAge ?? replacement?.laps ?? 0;
+    car.tyreTemperature = (state.rules.tyres[car.tyre]?.temperatureWindow?.[0] ?? 80) - 18;
   }
   car.usedCompounds.push(car.tyre); car.pits += 1; car.pitStops ??= []; car.pitStops.push({ lap: session.lap, predictedStationary: stop.predicted, actualStationary: stationary, slow: stop.slow, repair }); car.cumulativeTime += track.pitLoss * neutral + stationary;
+  car.engineerWeatherTarget = null;
+  car.engineerWeatherEligibleLap = 0;
+  if (weatherStop) car.lastWeatherPitLap = session.lap;
   if (neutralActive) car.neutralStopTaken = true;
   liveEvent(session, session.lap, stop.slow ? 'slow_stop' : 'pit', `${car.driverId} 进站，换上${state.rules.tyres[car.tyre]?.name ?? car.tyre}（预计 ${stop.predicted.toFixed(1)}s，实际 ${stationary.toFixed(1)}s${stop.slow ? '，失误' : ''}）`, [car.driverId], car.player);
   car.pendingPit = null;
@@ -943,39 +1068,52 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       const base = track.baseLap * (1 + session.wetness * 0.12) + (100 - car.score) * rules.secPerCarPoint + (100 - (wet ? (car.skill + car.wetSkill) / 2 : car.skill)) * rules.secPerDriverPoint - car.setupBonus;
       const oldPuStatus = car.puStatus ?? 'normal';
       const ersPerformance = car.ersPerformance ?? 1;
-      const electricalHealth = car.electricalHealth ?? 100;
       const cooling = scActive || vscActive ? 5 : session.wetness > .3 ? 2.8 : 1.5;
       const heatGain = car.energyMode === 'deploy' ? 5.2 : car.energyMode === 'harvest' ? -2.8 : .4;
       car.puTemperature = clamp((car.puTemperature ?? 78) + heatGain + (car.plan.paceMode === 'push' ? 1.2 : car.plan.paceMode === 'conserve' ? -.8 : 0) - cooling, 55, 122);
       car.puStatus = puStatus(car.puTemperature);
       const heatLimit = car.puStatus === 'critical' ? .38 : car.puStatus === 'protect' ? .62 : car.puStatus === 'hot' ? .86 : 1;
-      const healthLimit = clamp(electricalHealth / 70, .45, 1);
+      const healthLimit = clamp(minGroupHealth(car.puComponentHealth, PU_ELECTRICAL_PARTS) / 70, .45, 1);
       const recovery = (car.energyMode === 'harvest' ? 7.5 : 2) * ersPerformance * healthLimit * (session.wetness > .3 ? .85 : 1);
       const energyDelta = car.energyMode === 'deploy' ? -11 : recovery;
       car.energy = Math.max(0, Math.min(100, car.energy + energyDelta));
       const deployStrength = ersPerformance * healthLimit * heatLimit * clamp(car.energy / 30, .25, 1);
       const energyTime = car.energyMode === 'harvest' ? .22 + .08 / Math.max(.6, ersPerformance) : car.energyMode === 'deploy' && car.energy > 0 ? -.3 * deployStrength : 0;
-      const iceWear = .012 + Math.max(0, 88 - (car.iceReliability ?? car.reliability)) * .0012 + (car.plan.paceMode === 'push' ? .012 : 0) + Math.max(0, car.puTemperature - 102) * .003;
-      const electricalWear = .014 + Math.max(0, 88 - (car.electricalReliability ?? car.reliability)) * .0014 + (car.energyMode === 'deploy' ? .018 : 0) + Math.max(0, car.puTemperature - 102) * .004;
-      car.iceHealth = clamp((car.iceHealth ?? 100) - iceWear, 0, 100);
-      car.electricalHealth = clamp((car.electricalHealth ?? 100) - electricalWear, 0, 100);
+      car.puComponentHealth ??= {};
+      car.puComponentReliability ??= {};
+      for (const type of PU_PART_TYPES) {
+        const electrical = PU_ELECTRICAL_PARTS.includes(type);
+        const rel = car.puComponentReliability[type] ?? car.reliability;
+        const baseWear = electrical ? .014 : .012;
+        const stress = electrical ? (car.energyMode === 'deploy' ? .018 : 0) : (car.plan.paceMode === 'push' ? .012 : 0);
+        const heat = Math.max(0, car.puTemperature - 102) * (electrical ? .004 : .003);
+        const rate = type === 'exhaust' ? .7 : type === 'control_electronics' ? .8 : type === 'turbocharger' ? 1.1 : 1;
+        car.puComponentHealth[type] = clamp((car.puComponentHealth[type] ?? 100) - (baseWear + Math.max(0, 88 - rel) * (electrical ? .0014 : .0012) + stress + heat) * rate, 0, 100);
+      }
+      car.iceHealth = groupHealth(car.puComponentHealth, PU_COMBUSTION_PARTS);
+      car.electricalHealth = groupHealth(car.puComponentHealth, PU_ELECTRICAL_PARTS);
       if ((car.puStatus === 'protect' || car.puStatus === 'critical') && oldPuStatus !== 'protect' && oldPuStatus !== 'critical') {
         incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 的动力单元温度过高，进入保护模式`, [car.driverId], car.player));
       } else if (car.puStatus === 'normal' && oldPuStatus !== 'normal') {
         liveEvent(session, lap, 'damage', `${car.driverId} 的动力单元温度恢复正常`, [car.driverId], car.player);
       }
+      const v2 = session.physicsVersion === 2 && !!car.performanceContext;
+      const tyreStep = v2
+        ? stepTyre(car.performanceContext!, rules.tyres[car.tyre], { temperature: car.tyreTemperature, wearAge: car.tyreWearAge }, { paceMode: car.plan.paceMode, wetness: session.wetness, neutral: scActive || vscActive }, rules)
+        : null;
       const paceWear = car.plan.paceMode === 'push' ? 1.15 : car.plan.paceMode === 'conserve' ? .88 : 1;
       // Fuel burn preserves the legacy early-race weight penalty; ERS deployment
       // remains useful for pace and overtaking but becomes weaker when depleted.
       const fuel = (session.totalLaps - lap) * .03;
-      let lapTime = base + fuel + tyreLapDelta(rules.tyres[car.tyre], car.tyreAge + 1, car.tyreFactor) * paceWear + tyreMismatch(rules, car, session.wetness) + PACE_MODE_TIME[car.plan.paceMode] + car.damage + car.partial + energyTime + rng.normal(0, (0.12 + (100 - car.consistency) * .004) * (1 + session.wetness * .5));
+      let lapTime = base + fuel + (tyreStep ? tyreLapDelta(rules.tyres[car.tyre], tyreStep.wearAge, 1) + tyreStep.lapPenalty : tyreLapDelta(rules.tyres[car.tyre], car.tyreAge + 1, car.tyreFactor) * paceWear) + tyreMismatch(rules, car, session.wetness) + PACE_MODE_TIME[car.plan.paceMode] + car.damage + car.partial + energyTime + rng.normal(0, (0.12 + (100 - car.consistency) * .004) * (1 + session.wetness * .5));
       if (lap === 1) lapTime += 2.5 + rng.normal(0, .35);
       else if (restartType === 'standing') lapTime += 2.1 + rng.normal(0, .3) - (car.racecraft - 75) * .006;
       if (scActive) lapTime = track.baseLap * 1.35 + rng.normal(0, .05);
       else if (vscActive) lapTime = base * 1.25 + rng.normal(0, .05);
       car.cumulativeTime += lapTime; car.completedLaps = lap; car.tyreAge += 1;
+      if (tyreStep) { car.tyreTemperature = tyreStep.temperature; car.tyreWearAge = tyreStep.wearAge; }
       const tyreSet = state.teams[car.teamId]?.tyreInventory?.[car.driverId]?.find(set => set.id === car.tyreSetId);
-      useTyreSet(tyreSet, 1);
+      useTyreSet(tyreSet, 1, tyreStep?.wearMultiplier ?? 1);
       if (!scActive && !vscActive && lap > 1 && car.bestLap === null || (!scActive && !vscActive && lap > 1 && lapTime < (car.bestLap ?? Infinity))) car.bestLap = lapTime;
       const astonVibrationRetirement = !scActive && !vscActive && !session.redFlag?.active
         && car.teamId === 'aston_martin' && astonVibrationActive(state)
@@ -990,7 +1128,8 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
       if (!scActive && !vscActive && !session.redFlag?.active) {
         const paceRisk = car.plan.paceMode === 'push' ? 1.4 : car.plan.paceMode === 'conserve' ? .8 : 1;
         const energyRisk = car.energyMode === 'deploy' && car.energy < 15 ? 1.35 : car.energyMode === 'deploy' ? 1.12 : 1;
-        const puRisk = 1 + Math.max(0, 55 - Math.min(car.iceHealth ?? 100, car.electricalHealth ?? 100)) / 35 + (car.puStatus === 'critical' ? 1.4 : car.puStatus === 'protect' ? .45 : 0);
+        const weakestPuHealth = Math.min(...PU_PART_TYPES.map(type => car.puComponentHealth?.[type] ?? 100));
+        const puRisk = 1 + Math.max(0, 55 - weakestPuHealth) / 35 + (car.puStatus === 'critical' ? 1.4 : car.puStatus === 'protect' ? .45 : 0);
         const pFail = raceFailProb(car.reliability) / session.totalLaps * paceRisk * energyRisk * puRisk;
         const pCrash = (.02 + (100 - car.consistency) / 100 * .06) * (1 + session.wetness) / session.totalLaps * paceRisk * energyRisk * redBullCrashMultiplier(state, car.teamId);
         const special = session.specialIncidents?.find(incident => !incident.handled && incident.driverId === car.driverId && incident.lap <= lap);
@@ -1017,9 +1156,11 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
             incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 的动力单元进入保护模式`, [car.driverId], true));
           }
         } else if (rng.chance(pFail)) {
-          const electrical = (car.electricalHealth ?? 100) < (car.iceHealth ?? 100);
-          if (rng.chance(.35) && car.partial === 0) { car.partial = rng.range(.6, 1.2); incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 的${electrical ? 'MGU-K 与电池系统' : '内燃机与涡轮'}进入保护模式`, [car.driverId], car.player)); }
-          else { car.status = 'dnf'; car.reason = electrical ? '高压电池或控制电子故障' : '内燃机或涡轮故障'; incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因${car.reason}退赛`, [car.driverId], true)); }
+          const failureScore = (type: PowerUnitPartType) => (car.puComponentHealth?.[type] ?? 100) - (100 - (car.puComponentReliability?.[type] ?? car.reliability)) * .5;
+          const failedType = [...PU_PART_TYPES].sort((a, b) => failureScore(a) - failureScore(b))[0];
+          const failedName = rules.parts[failedType]?.name ?? failedType;
+          if (rng.chance(.35) && car.partial === 0) { car.partial = rng.range(.6, 1.2); incidentIds.push(liveEvent(session, lap, 'damage', `${car.driverId} 的${failedName}进入保护模式`, [car.driverId], car.player)); }
+          else { car.status = 'dnf'; car.reason = `${failedName}故障`; incidentIds.push(liveEvent(session, lap, 'dnf', `${car.driverId} 因${car.reason}退赛`, [car.driverId], true)); }
         } else if (rng.chance(pCrash * (lap === 1 ? 4 : 1))) {
           const dnf = rng.chance(.45);
           const incidentId = `${session.id}:i${session.damageLedger.length + 1}`;
@@ -1148,15 +1289,62 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
 }
 
 /** Applies a validated window decision. Driver-behavior rolls use a separate deterministic stream. */
-export function applyRaceDecision(state: GameState, session: LiveRaceState, windowId: string, drivers: Array<{ driverId: string; pit: 'auto' | 'stay_out' | 'box'; compound?: Compound; repairWing?: boolean; paceMode?: EnergyMode | 'conserve' | 'balanced' | 'push'; energyMode?: EnergyMode; pitTiming?: 'early' | 'standard' | 'late' }>, orders?: import('./types').TeamOrders): boolean {
+export function applyRaceDecision(state: GameState, session: LiveRaceState, windowId: string, drivers: RaceDriverDecision[], orders?: import('./types').TeamOrders): boolean {
   const window = session.pendingDecision;
   if (!window || window.id !== windowId) return false;
   const playerIds = playerCars(session).map(c => c.driverId);
+  const gridChoice = session.stage === 'grid' && session.completedLaps === 0 && window.stage === 'grid';
+  if (gridChoice) {
+    const required = window.eligibleDriverIds.map(id => session.cars[id]).filter((car): car is LiveRaceCar => !!car && car.player && car.status === 'running');
+    const requiredIds = new Set(required.map(car => car.driverId));
+    const allowedStartCompounds = requiresWetGridTyreChoice(session)
+      ? [state.rules.wetCompound, state.rules.fullWetCompound]
+      : [...state.rules.dryCompounds, state.rules.wetCompound, state.rules.fullWetCompound];
+    const seen = new Set<string>();
+    if (drivers.length !== required.length || !validOrders(orders, playerIds)) return false;
+    for (const choice of drivers) {
+      const startCompound = choice.startCompound ?? session.cars[choice.driverId]?.tyre;
+      if (!requiredIds.has(choice.driverId) || seen.has(choice.driverId) || choice.pit !== 'auto' || choice.compound !== undefined || choice.repairWing || !startCompound || !allowedStartCompounds.includes(startCompound) || !validRaceChoice(choice, state.rules.tyres)) return false;
+      const car = session.cars[choice.driverId];
+      const team = car && state.teams[car.teamId];
+      if (!car || !team || (startCompound !== car.tyre && !takeTyreSet(team, car.driverId, startCompound, weekendTyreKey(state)))) return false;
+      seen.add(choice.driverId);
+    }
+    const relationship = teammateRelationship(state, state.meta.playerTeamId);
+    const ignored = new Set<string>();
+    for (const choice of drivers) {
+      const driver = state.drivers[choice.driverId];
+      const car = session.cars[choice.driverId];
+      const changesTactics = (choice.paceMode !== undefined && choice.paceMode !== car.plan.paceMode)
+        || (choice.energyMode !== undefined && choice.energyMode !== car.energyMode)
+        || (choice.pitTiming !== undefined && choice.pitTiming !== car.plan.pitTiming);
+      if (driver && changesTactics && willDisobeyStrategy(driver, relationship, `${session.id}:${window.id}:${driver.id}`)) ignored.add(choice.driverId);
+    }
+    for (const choice of drivers) {
+      const car = session.cars[choice.driverId];
+      // The selected tyre is equipment, not a discretionary tactical instruction.
+      if (!ignored.has(choice.driverId)) {
+        if (choice.paceMode) car.plan.paceMode = choice.paceMode;
+        if (choice.energyMode) car.energyMode = choice.energyMode;
+        if (choice.pitTiming) car.plan.pitTiming = choice.pitTiming;
+      } else liveEvent(session, session.lap, 'order', `${car.driverId} 拒绝临场策略指令，但仍按领队选择安装起步轮胎`, [car.driverId], true);
+      const startCompound = choice.startCompound ?? car.tyre;
+      if (startCompound !== car.tyre) {
+        const preserveDryStrategy = !requiresWetGridTyreChoice(session) && !state.rules.tyres[startCompound]?.wet;
+        if (!fitInitialTyres(state, session, car, startCompound, preserveDryStrategy)) return false;
+      }
+    }
+    if (orders) session.teamOrders = { ...orders };
+    session.pendingDecision = null;
+    session.stage = 'ready';
+    session.revision++;
+    return true;
+  }
   const eligible = new Set(window.eligibleDriverIds);
   const seen = new Set<string>();
   for (const choice of drivers) {
     const car = session.cars[choice.driverId];
-    if (!car || !car.player || car.status !== 'running' || !eligible.has(choice.driverId) || seen.has(choice.driverId) || !validRaceChoice(choice, state.rules.tyres)) return false;
+    if (!car || !car.player || car.status !== 'running' || !eligible.has(choice.driverId) || seen.has(choice.driverId) || choice.startCompound !== undefined || !validRaceChoice(choice, state.rules.tyres)) return false;
     // A tyre is meaningful only for a valid box instruction; avoid cosmetic
     // immediate compound swaps from UI drafts or malformed controller calls.
     if ((choice.pit === 'box') !== (choice.compound !== undefined)) return false;
@@ -1226,7 +1414,10 @@ export function finishRaceSession(state: GameState, session: LiveRaceState): { r
   if (session.stage !== 'finished') return null;
   const running = liveCars(session).filter(c => c.status === 'running');
   if (session.kind === 'race' && session.weatherHistory.every(v => v < .25)) {
-    for (const car of running) if (new Set(car.usedCompounds.filter(c => !state.rules.tyres[c]?.wet)).size < state.rules.mandatoryCompounds) car.cumulativeTime += 10;
+    for (const car of running) {
+      const usedWetTyre = car.usedCompounds.some(compound => state.rules.tyres[compound]?.wet);
+      if (!usedWetTyre && new Set(car.usedCompounds.filter(compound => !state.rules.tyres[compound]?.wet)).size < state.rules.mandatoryCompounds) car.cumulativeTime += 10;
+    }
   }
   const ordered = [...running].sort((a, b) => a.cumulativeTime - b.cumulativeTime);
   const dnfs = liveCars(session).filter(c => c.status === 'dnf').sort((a, b) => b.completedLaps - a.completedLaps);
@@ -1249,7 +1440,12 @@ export function simulateRace(state: GameState, rng: Rng, kind: 'race' | 'sprint'
   const session = createRaceSession(state, rng, kind);
   while (session.stage !== 'finished') {
     if (session.pendingDecision) {
-      applyRaceDecision(state, session, session.pendingDecision.id, session.pendingDecision.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto' as const })));
+      const choices = session.pendingDecision.eligibleDriverIds.map(driverId => ({
+        driverId,
+        pit: 'auto' as const,
+        ...(session.pendingDecision?.stage === 'grid' ? { startCompound: session.cars[driverId]?.tyre ?? wetCompoundFor(state.rules, session.wetness) } : {}),
+      }));
+      if (!applyRaceDecision(state, session, session.pendingDecision.id, choices)) throw new Error('自动策略无法处理当前决策窗口');
     } else advanceRaceSession(state, session, 'next_decision');
   }
   return finishRaceSession(state, session)!;

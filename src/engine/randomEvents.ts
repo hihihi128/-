@@ -77,16 +77,18 @@ function fallbackContent(state: GameState, kind: RandomEventKind, rng: Rng): Ran
   };
 }
 
-export function beginRandomEventWeek(state: GameState, rng: Rng): void {
+export function beginRandomEventWeek(state: GameState, _rng: Rng): void {
   const key = `${state.season.number}-w${state.season.week}-r${state.season.roundIndex}`;
   state.randomEvents ??= { lastRoundKey: null, weekKey: null, weeklyQuota: 0, weeklyStarted: 0, current: null, history: [] };
-  if (state.randomEvents.weekKey === key) return;
+  const weeklyQuota = state.rules.randomEvents.maxPerWeek === 0 ? 0 : 1;
+  if (state.randomEvents.weekKey === key) {
+    state.randomEvents.weeklyQuota = weeklyQuota;
+    return;
+  }
   closeUnansweredRandomEvent(state, '本周结束前没有完成该事件，因此没有产生额外效果。');
   state.randomEvents.weekKey = key;
   state.randomEvents.lastRoundKey = key;
-  const configuredMin = Math.max(0, state.rules.randomEvents.minPerWeek ?? 3);
-  const configuredMax = Math.max(0, state.rules.randomEvents.maxPerWeek ?? 4);
-  state.randomEvents.weeklyQuota = configuredMax === 0 ? 0 : rng.int(Math.min(configuredMin, configuredMax), Math.max(configuredMin, configuredMax));
+  state.randomEvents.weeklyQuota = weeklyQuota;
   state.randomEvents.weeklyStarted = 0;
   state.randomEvents.current = null;
 }
@@ -148,10 +150,12 @@ export function setRandomEventContent(state: GameState, eventId: string, content
 
 export function randomEventContext(state: GameState): Record<string, unknown> {
   const team = playerTeam(state);
+  const staffLevel = (skill: number): string => skill >= 88 ? '顶尖' : skill >= 80 ? '资深' : skill >= 70 ? '成熟' : '尚在成长';
+  const relationship = (affinity: number): string => affinity >= 70 ? '信任领队' : affinity >= 45 ? '关系正常' : '关系紧张';
   return {
     team: { id: team.id, name: team.name, funds: round1(team.funds), aeroHours: round1(team.aeroHours) },
     drivers: Object.values(state.drivers).filter(driver => driver.teamId === team.id).map(driver => ({ id: driver.id, name: driver.name, role: driver.role, fitness: round1(driver.fitness), morale: round1(driver.morale) })),
-    staff: Object.values(team.staff).map(staff => ({ id: staff.id, name: staff.name, role: staff.role, skill: round1(staff.skill), affinity: round1(staff.affinity ?? 50) })),
+    staff: Object.values(team.staff).map(staff => ({ id: staff.id, name: staff.name, role: staff.role, experience: staffLevel(staff.skill), relationship: relationship(staff.affinity ?? 50) })),
     relationships: {
       drivers: Object.values(state.drivers).filter(driver => driver.teamId === team.id).map(driver => ({ id: driver.id, name: driver.name, affinity: round1(driver.affinity ?? 50) })),
     },

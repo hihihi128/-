@@ -4,8 +4,10 @@ import Bar from '../components/Bar.vue';
 import LapChart from '../components/LapChart.vue';
 import Tyre from '../components/Tyre.vue';
 import LiveRaceDesk from '../components/LiveRaceDesk.vue';
-import { act, call, lapTime, pct, store } from '../bridge';
-import type { DriverPlan, PaceMode, PitTiming, PracticeProgram, QualiApproach, RaceResult, QualiResult } from '../../../engine/types';
+import WeekendWeatherForecast from '../components/WeekendWeatherForecast.vue';
+import StrategyReviewDialog from '../components/StrategyReviewDialog.vue';
+import { act, call, lapTime, store } from '../bridge';
+import type { DriverPlan, PaceMode, PitTiming, PracticeProgram, PracticeSetupFocus, QualiApproach, RaceResult, QualiResult } from '../../../engine/types';
 import type { WeekendDriverView } from '../../../engine/view';
 import type { EngineerStrategyResult } from '../../../tavern/controller';
 
@@ -15,6 +17,7 @@ const phase = computed(() => v.value.season.phase);
 const isSprint = computed(() => w.value ? w.value.practiceSessionTotal === 1 : !!v.value.round?.sprint);
 const current = computed(() => !!w.value?.isCurrent);
 const generating = computed(() => !!store.status?.generating);
+const raceResultNarration = computed(() => v.value.narration.some(item => /(?:正赛|冲刺赛)结果$/.test(item.title)));
 const practiceSessions = computed(() => {
   const ww = w.value;
   return ww?.practiceSessions?.length ? ww.practiceSessions : ww?.practice ? [ww.practice] : [];
@@ -73,6 +76,13 @@ function setPlan(d: WeekendDriverView, patch: Partial<DriverPlan>) {
   return act({ type: 'SET_PLAN', driverId: d.driverId, plan: patch }, { silent: true });
 }
 
+function practiceTyreOptions(d: WeekendDriverView) {
+  return Object.keys(v.value.labels.tyres).map(compound => {
+    const available = d.tyreSets.filter(set => set.compound === compound && !set.returned);
+    return { compound, available: available.length, newSets: available.filter(set => set.state === 'new').length, leastLaps: Math.min(...available.map(set => set.laps)) };
+  }).filter(option => option.available > 0);
+}
+
 const customPlans = ref<Record<string, string[]>>({});
 const engineerApi = ref<Record<string, 'main' | 'secondary'>>({});
 const engineerSuggestions = ref<Record<string, EngineerStrategyResult>>({});
@@ -80,17 +90,72 @@ const perfectSuggestions = ref<Record<string, EngineerStrategyResult>>({});
 const perfectOpen = ref(false);
 const perfectFab = ref<HTMLButtonElement | null>(null);
 const perfectDialog = ref<HTMLElement | null>(null);
+const reviewDriver = ref<WeekendDriverView | null>(null);
+const reviewTrigger = ref<HTMLButtonElement | null>(null);
 watch(perfectOpen, async open => {
   await nextTick();
   if (open) perfectDialog.value?.querySelector<HTMLButtonElement>('button')?.focus();
   else perfectFab.value?.focus();
 });
 function closePerfect() { perfectOpen.value = false; }
+function openStrategyReview(d: WeekendDriverView, event: MouseEvent) {
+  reviewTrigger.value = event.currentTarget as HTMLButtonElement;
+  reviewDriver.value = d;
+}
+function closeStrategyReview() {
+  reviewDriver.value = null;
+  void nextTick(() => reviewTrigger.value?.focus());
+}
+function canReviewStrategy(d: WeekendDriverView): boolean {
+  return d.plan.strategySource === 'engineer';
+}
+function reviewUnavailableReason(d: WeekendDriverView): string {
+  return d.plan.strategySource === 'perfect'
+    ? '完美策略不属于工程师方案，不能作为策略点评对象。'
+    : '请先选择“听工程师”生成当前工程师策略，再请求点评。';
+}
+function currentStrategyReview(d: WeekendDriverView): DriverPlan['strategyReview'] | null {
+  const review = d.plan.strategyReview;
+  const roundKey = `${v.value.season.year}:r${(w.value?.roundIndex ?? -1) + 1}`;
+  return review?.source === 'secondary' && review.roundKey === roundKey ? review : null;
+}
+type DriverPerformanceSummary = {
+  qualiGain?: number;
+  raceGain?: number;
+  wearDelta?: number;
+  trackFit?: number;
+  trackKnowledge?: number;
+  tyres?: Record<string, { temperature?: number; temperatureWindow?: [number, number]; status?: string; wearMultiplier?: number; life?: number }>;
+};
+function performanceSummary(d: WeekendDriverView): DriverPerformanceSummary | null {
+  if (!d.performanceSummary) return null;
+  return {
+    qualiGain: d.performanceSummary.qualiGain,
+    raceGain: d.performanceSummary.raceGain,
+    wearDelta: d.performanceSummary.wearDelta / 100,
+    trackFit: d.performanceSummary.trackFit,
+    trackKnowledge: d.performanceSummary.trackKnowledge,
+    tyres: d.performanceSummary.tyres,
+  };
+}
+function primaryTyreSummary(d: WeekendDriverView): NonNullable<DriverPerformanceSummary['tyres']>[string] | null {
+  const compound = d.plan.tyrePlan?.[0];
+  const tyre = compound ? performanceSummary(d)?.tyres?.[compound] : null;
+  if (!compound || !tyre) return null;
+  return { ...tyre, life: d.tyreLife[compound] };
+}
+function gainSeconds(value: number | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `快 ${value.toFixed(2)}s/圈` : '数据待生成';
+}
+function percentChange(value: number | undefined): string {
+  return typeof value === 'number' && Number.isFinite(value) ? `${value > 0 ? '+' : ''}${Math.round(value * 100)}%` : '数据待生成';
+}
 watch(() => w.value?.roundIndex, () => {
   customPlans.value = {};
   engineerSuggestions.value = {};
   perfectSuggestions.value = {};
   perfectOpen.value = false;
+  reviewDriver.value = null;
   practiceResultIndex.value = Math.max(0, practiceSessions.value.length - 1);
 });
 watch(() => practiceSessions.value.length, length => {
@@ -168,6 +233,13 @@ const programs: Array<[PracticeProgram, string, string]> = [
   ['quali_sim', '排位模拟', '直接提升排位单圈'],
   ['parts', '新件测试', '验证新零件的真实性能，发现问题可在排位前换回旧件'],
 ];
+const setupFocuses: Array<[PracticeSetupFocus, string, string]> = [
+  ['balanced', '综合基准', '平均积累各项调校数据'],
+  ['aero_balance', '空气动力平衡', '重点调整前后翼平衡，偏向排位表现'],
+  ['mechanical', '机械抓地', '重点调整悬挂和差速器，改善慢弯与轮胎使用'],
+  ['ride_height', '车高与底板', '重点寻找车高窗口和赛道适配'],
+  ['tyre_prep', '胎压与热身', '重点积累胎温、胎压和长距离数据'],
+];
 const approaches: Array<[QualiApproach, string, string]> = [
   ['safe', '稳妥', '失误少，略慢'],
   ['standard', '标准', ''],
@@ -202,11 +274,21 @@ const chartSeries = computed(() => {
   const palette = ['var(--team)', '#ffffff', '#ffd400'];
   return Object.entries(r.lapChart).map(([id, data], i) => ({ name: name(id), color: palette[i % palette.length], data }));
 });
-const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels.weather[x as 'dry' | 'wet'] : forecast !== undefined ? `预报降雨 ${pct(forecast)}` : '未知');
 </script>
 
 <template>
   <div class="stack">
+    <StrategyReviewDialog
+      v-if="reviewDriver"
+      :driver-id="reviewDriver.driverId"
+      :driver-name="reviewDriver.driverName"
+      :plan="reviewDriver.plan"
+      :expected-revision-id="store.status?.revisionId"
+      :race-laps="v.round?.track.laps"
+      :can-review="canReviewStrategy(reviewDriver)"
+      :unavailable-reason="reviewUnavailableReason(reviewDriver)"
+      @close="closeStrategyReview"
+    />
     <button v-if="current && w && !w.liveRace" ref="perfectFab" class="codex-fab" title="打开完美策略 AI" aria-label="打开完美策略 AI" @click="perfectOpen = true">
       <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2.5 15 7l5.2.7-3.3 4.1.8 5.2-4.8-2.2L8.1 17l.8-5.2-3.3-4.1L10.8 7 12 2.5Zm0 5.1-1.2 3.1-3.3.2 2.5 2.2-.8 3.2 2.8-1.7 2.8 1.7-.8-3.2 2.5-2.2-3.3-.2L12 7.6Z" /></svg>
     </button>
@@ -233,24 +315,19 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
       </div>
       <div class="spread" style="margin-top: 10px">
         <div class="small muted">
-          <template v-if="current && w">
-            天气：练习 {{ weatherText(w.weather.practice) }} ·
-            练习进度 {{ practiceSessions.length }}/{{ practiceSessionTotal }} ·
-            <template v-if="isSprint">冲刺排位 {{ weatherText(w.weather.sprintQualifying, w.forecast.qualifying) }} · 冲刺赛 {{ weatherText(w.weather.sprint, w.forecast.race) }} · </template>
-            排位 {{ weatherText(w.weather.qualifying, w.forecast.qualifying) }} · 正赛 {{ weatherText(w.weather.race, w.forecast.race) }}
-            <span v-if="w.forecast.raceRainWindow"> · 预计第 {{ w.forecast.raceRainWindow[0] }}–{{ w.forecast.raceRainWindow[1] }} 圈可能降雨</span>
-          </template>
+          <template v-if="current && w">练习进度 {{ practiceSessions.length }}/{{ practiceSessionTotal }}</template>
           <template v-else-if="phase === 'pre_race' || phase === 'preseason'">还没进入本站比赛周末。工厂周可以先安排研发、装件和训练。</template>
           <template v-else-if="phase === 'season_end'">赛季已结束。</template>
         </div>
         <div class="row">
-          <button v-if="v.narration.length" class="small" :disabled="generating" @click="call(a => a.requestNarration())">让 AI 叙述（{{ v.narration.length }}）</button>
+          <button v-if="v.narration.length" class="small" :disabled="generating" @click="call(a => a.requestNarration())">{{ raceResultNarration ? '让 AI 叙述比赛结果' : `让 AI 叙述（${v.narration.length}）` }}</button>
           <button v-if="v.next" class="primary" :disabled="store.busy || generating" @click="act({ type: 'ADVANCE' })">▶ {{ v.next.label }}</button>
         </div>
       </div>
     </div>
 
     <template v-if="current && w">
+      <WeekendWeatherForecast :weekend="w" :sprint="isSprint" :race-laps="v.round?.track.laps ?? 1" />
       <div class="card stack-s">
         <h3>车队指令</h3>
         <div class="small" :class="w.teammateRelationship < 50 ? 'neg' : 'muted'">队友关系 {{ w.teammateRelationship.toFixed(0) }}/100<span v-if="w.teammateRelationship < 50"> · 已进入抗命风险区</span></div>
@@ -273,6 +350,25 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
             <Bar label="调校信心" :value="d.setup.confidence" color="#6aa6ff" />
             <Bar label="轮胎数据" :value="d.setup.tyreKnowledge" color="#ffb347" />
           </div>
+          <div class="performance-summary">
+            <div class="spread"><b class="small">练习、适配与轮胎预测</b><span class="tiny muted">相对本站练习基线</span></div>
+            <div class="performance-row">
+              <span class="muted">练习调校</span>
+              <span><b class="pos">排位 {{ gainSeconds(performanceSummary(d)?.qualiGain) }}</b> · 正赛 {{ gainSeconds(performanceSummary(d)?.raceGain) }}</span>
+              <span class="tiny muted">胎耗 {{ percentChange(performanceSummary(d)?.wearDelta) }}</span>
+            </div>
+            <div class="performance-row">
+              <span class="muted">赛道适配</span>
+              <span v-if="performanceSummary(d)"><b>{{ Math.round(performanceSummary(d)?.trackFit ?? 0) }}/100</b> · 练习掌握 {{ Math.round(performanceSummary(d)?.trackKnowledge ?? 0) }}/100</span>
+              <span v-else class="tiny muted">历史练习收益不可追溯</span>
+            </div>
+            <div class="performance-row" v-if="primaryTyreSummary(d)">
+              <span class="muted">首段胎温</span>
+              <span><b>{{ primaryTyreSummary(d)?.temperature?.toFixed(0) ?? '—' }}°C · {{ primaryTyreSummary(d)?.status ?? '预测中' }}</b></span>
+              <span class="tiny muted">窗口 {{ primaryTyreSummary(d)?.temperatureWindow?.[0] ?? '—' }}–{{ primaryTyreSummary(d)?.temperatureWindow?.[1] ?? '—' }}°C · 预计寿命 {{ primaryTyreSummary(d)?.life ?? '—' }} 圈</span>
+            </div>
+            <div v-else class="performance-row"><span class="muted">胎温与胎耗</span><span class="tiny muted">模型数据待生成；轮胎寿命请见下方预测。</span></div>
+          </div>
           <div v-if="w.penalties[d.driverId]" class="notice warn tiny">本站罚退 {{ w.penalties[d.driverId] }} 格</div>
           <div class="block stack-s">
             <div class="label">实体轮胎库存 <span class="tiny muted">新胎 / 已使用 · 圈数</span></div>
@@ -292,6 +388,22 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
             <div class="label">练习赛项目</div>
             <div class="seg wrap">
               <button v-for="[k, label, tip] in programs" :key="k" :title="tip" :class="{ on: d.plan.practiceProgram === k }" :disabled="done.practice || store.busy" @click="setPlan(d, { practiceProgram: k })">{{ label }}</button>
+            </div>
+          </div>
+          <div class="block">
+            <div class="label">练习赛轮胎</div>
+            <div class="seg wrap">
+              <button :class="{ on: (d.plan.practiceTyre ?? 'auto') === 'auto' }" :disabled="done.practice || store.busy" @click="setPlan(d, { practiceTyre: 'auto' })">自动</button>
+              <button v-for="option in practiceTyreOptions(d)" :key="option.compound" :class="{ on: d.plan.practiceTyre === option.compound }" :disabled="done.practice || store.busy || (v.labels.tyres[option.compound]?.wet && w.weather.practice !== 'wet')" @click="setPlan(d, { practiceTyre: option.compound })">
+                <Tyre :c="option.compound" /> {{ option.newSets ? `${option.newSets} 组新胎` : `旧胎，最少 ${option.leastLaps}L` }}
+              </button>
+            </div>
+            <div class="tiny muted">选择配方后，引擎优先使用该配方的新胎，再使用圈数最少的旧胎。干地练习不能使用半雨胎或全雨胎。</div>
+          </div>
+          <div class="block">
+            <div class="label">调校方向</div>
+            <div class="seg wrap">
+              <button v-for="[k, label, tip] in setupFocuses" :key="k" :title="tip" :class="{ on: (d.plan.practiceSetupFocus ?? 'balanced') === k }" :disabled="done.practice || store.busy" @click="setPlan(d, { practiceSetupFocus: k })">{{ label }}</button>
             </div>
           </div>
           <div class="block">
@@ -336,17 +448,28 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                 <button class="small" :disabled="done.race || store.busy" @click="setPlan(d, { strategySource: 'player', tyrePlan: [...customFor(d)] })">采用</button>
               </div>
               <div v-else class="plan engineer-plan on">
-                <span class="badge">工程师</span>
+                <span v-if="currentStrategyReview(d)" class="badge warn">副 API 点评更正</span>
+                <span v-else class="badge">工程师</span>
                 <span class="grow stack-s">
-                  <b class="small">{{ d.plan.strategySource === 'perfect' ? '完美 AI 策略已自动执行' : '工程师策略已自动执行' }}</b>
+                  <b class="small">{{ currentStrategyReview(d) ? '副 API 点评更正的工程师策略已执行' : d.plan.strategySource === 'perfect' ? '完美 AI 策略已自动执行' : '工程师策略已自动执行' }}</b>
+                  <span v-if="currentStrategyReview(d)" class="tiny">{{ currentStrategyReview(d)?.summary }}</span>
                   <span v-if="engineerSuggestions[d.driverId]?.explanation" class="tiny">{{ engineerSuggestions[d.driverId].explanation }}</span>
                   <span v-if="engineerSuggestions[d.driverId]?.weatherResponse && !engineerSuggestions[d.driverId]?.explanation?.includes(engineerSuggestions[d.driverId].weatherResponse!)" class="tiny muted">{{ engineerSuggestions[d.driverId].weatherResponse }}</span>
                   <span v-if="!engineerSuggestions[d.driverId]?.explanation && !engineerSuggestions[d.driverId]?.weatherResponse" class="tiny muted">{{ d.plan.strategySource === 'perfect' ? '当前使用已保存的完美策略，不受车队策略人员水平影响。' : '当前使用已保存的工程师方案。建议质量取决于车队策略部门水平。' }}</span>
                 </span>
                 <span class="engineer-actions">
+                  <button v-if="d.plan.strategySource === 'engineer'" class="small review-entry" :disabled="done.race || store.busy" @click="openStrategyReview(d, $event)">策略点评</button>
                   <button class="small" :disabled="done.race || store.busy" @click="askEngineer(d)">重新询问并应用</button>
                 </span>
               </div>
+            </div>
+            <div v-if="d.plan.strategySource !== 'engineer' && d.plan.strategySource !== 'perfect'" class="engineer-actions">
+              <button class="small review-entry" :disabled="done.race || store.busy" @click="openStrategyReview(d, $event)">策略点评</button>
+              <span class="tiny muted">仅点评当前工程师策略；不会自动修改方案。</span>
+            </div>
+            <div v-if="d.plan.strategySource === 'perfect'" class="engineer-actions">
+              <button class="small review-entry" :disabled="done.race || store.busy" @click="openStrategyReview(d, $event)">策略点评</button>
+              <span class="tiny muted">点评只适用于工程师策略，完美策略不会被改写。</span>
             </div>
             <div class="tiny muted row">
               轮胎寿命（悬崖圈数）：
@@ -389,12 +512,13 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
 
       <div v-if="shownResult === 'practice' && shownPractice" class="table-wrap">
         <table>
-          <thead><tr><th>#</th><th>车手</th><th>圈速</th><th>圈数</th><th>项目收益</th></tr></thead>
+          <thead><tr><th>#</th><th>车手</th><th>圈速</th><th>轮胎</th><th>圈数</th><th>项目收益</th></tr></thead>
           <tbody>
             <tr v-for="(e, i) in shownPractice.timesheet" :key="e.driverId" :class="{ me: teamOf(e.driverId).mine }">
               <td class="mono">{{ i + 1 }}</td>
               <td><span class="swatch" :style="{ background: teamOf(e.driverId).color }"></span>{{ name(e.driverId) }}</td>
               <td class="mono">{{ lapTime(e.time) }}</td>
+              <td><span v-if="e.compound" class="row" style="gap:4px"><Tyre :c="e.compound" />{{ e.tyreStartedNew ? '新胎' : '旧胎' }}</span></td>
               <td class="mono">{{ e.laps }}</td>
               <td class="tiny">
                 <template v-if="teamOf(e.driverId).mine && shownPractice.gains[e.driverId]">
@@ -421,6 +545,7 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
                 <td v-for="s in qualiLike.sessions" :key="s.name" class="mono">
                   <template v-for="e in s.entries.filter(x => x.driverId === id)" :key="e.driverId">
                     {{ e.time ? lapTime(e.time) : e.note ?? '无成绩' }}<span v-if="e.eliminated" class="neg tiny"> ✗</span>
+                    <span v-if="e.tyreRuns?.length" class="tiny muted"><br /><span v-for="(run, runIndex) in e.tyreRuns" :key="`${runIndex}-${run.setId}`"><Tyre :c="run.compound" />{{ run.startedNew ? '新' : `旧${run.lapsBefore}L` }}<template v-if="runIndex < e.tyreRuns.length - 1"> · </template></span></span>
                   </template>
                 </td>
               </tr>
@@ -562,6 +687,24 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
   gap: 6px;
   margin-top: 6px;
 }
+.review-entry {
+  border-color: color-mix(in srgb, var(--team) 55%, var(--line));
+  background: color-mix(in srgb, var(--team) 12%, var(--bg3));
+}
+.performance-summary {
+  padding: 9px 10px;
+  border: 1px solid var(--line);
+  background: var(--bg);
+}
+.performance-summary > * + * { border-top: 1px solid var(--line); }
+.performance-row {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 3px 8px;
+  padding: 6px 0;
+  font-size: 12px;
+}
+.performance-row > :last-child { grid-column: 2; }
 .events {
   max-height: 260px;
   margin-top: 6px;
@@ -616,5 +759,11 @@ const weatherText = (x: string | null, forecast?: number) => (x ? v.value.labels
   border-radius: 10px;
 }
 .perfect-driver { padding: 10px; border: 1px solid var(--line); background: var(--bg); }
-@media (max-width: 767px) { .codex-fab { right: 12px; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 12px); } .perfect-backdrop { padding: 8px; } .perfect-window { max-height: calc(100vh - 16px); } }
+@media (max-width: 767px) {
+  .codex-fab { right: 12px; bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 12px); }
+  .perfect-backdrop { padding: 8px; }
+  .perfect-window { max-height: calc(100vh - 16px); }
+  .performance-row { grid-template-columns: 68px minmax(0, 1fr); }
+  .engineer-actions { grid-column: 1 / -1; }
+}
 </style>

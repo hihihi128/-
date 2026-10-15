@@ -19,6 +19,13 @@ const teamFiles: Record<string, string> = {
 const prohibited = /——|似乎|仿佛|宛如|如同|几乎|近似|不是.*?(?:而是|只是)|极其|极大|本卡|写作要点|暂不展开|素材池|戏剧用途|核心冲突_/;
 
 describe('2026 世界书资料', () => {
+  it('forbids narration from exposing internal staff ratings', () => {
+    const rules = readFileSync(resolve(ROOT, 'narrator-rules.md'), 'utf8');
+    expect(rules).toContain('能力分、技能分、等级、内部评分');
+    expect(rules).toContain('某个 XX 分水平的工程师做了某事');
+    expect(rules).toContain('只能用姓名、职务、实际言行和定性表现来叙述');
+  });
+
   it('为 11 支车队提供统一结构的独立条目', () => {
     expect(teams).toHaveLength(11);
     expect(Object.keys(teamFiles)).toEqual(expect.arrayContaining(teams.map(team => team.id)));

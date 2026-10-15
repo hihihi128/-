@@ -109,6 +109,8 @@ export function effectiveSetup(state: GameState, driverId: string, natural: Setu
     ...natural,
     confidence: round1(clamp(natural.confidence + effect.confidence, 0, 100)),
     tyreKnowledge: round1(clamp(natural.tyreKnowledge + effect.tyreKnowledge, 0, 100)),
+    thermalKnowledge: round1(clamp(natural.thermalKnowledge ?? natural.tyreKnowledge * .75, 0, 100)),
+    trackKnowledge: round1(clamp(natural.trackKnowledge ?? natural.confidence * .75, 0, 100)),
   };
 }
 

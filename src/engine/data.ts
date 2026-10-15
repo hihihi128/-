@@ -167,6 +167,8 @@ const GENERIC_TYRE: TyreDef = {
   cliff: 27,
   wet: false,
   color: '#888888',
+  temperatureWindow: [80, 105],
+  warmupRate: 0.32,
 };
 
 /** 允许为负数的规则字段（路径里的通配符 * 代表任意零件 / 配方 / 方案） */
@@ -202,6 +204,16 @@ const RULE_RANGES: Record<string, { min?: number; max?: number; int?: boolean }>
   'mercedes.banPoliticalPressure': { min: 1, max: 120 },
   'mercedes.pressurePerRace': { min: 0, max: 120 },
   'mercedes.aduoProgressPerLobby': { min: 1, max: 100 },
+  'ferrari.turboStartGainMin': { min: 0, max: 10, int: true },
+  'ferrari.turboStartGainMax': { min: 0, max: 10, int: true },
+  'ferrari.turboSpoolSeconds': { min: 0, max: 30 },
+  'performance.qualiSetupMax': { min: 0, max: 2 },
+  'performance.raceSetupMax': { min: 0, max: 2 },
+  'performance.qualiBonusMax': { min: 0, max: 1 },
+  'performance.practiceWearKnowledgeMax': { min: 0, max: .5 },
+  'performance.temperatureLapMax': { min: 0, max: 3 },
+  'performance.overheatWearMax': { min: 0, max: 1 },
+  'performance.trackFitMax': { min: 0, max: .5 },
   'redBull.mistakeMultiplier': { min: 1, max: 5 },
   'redBull.startGpRetention': { min: 0, max: 100 },
   'redBull.gpLossPerRace': { min: 0, max: 100 },
@@ -367,6 +379,9 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
   if (rules.audi.startDropMin > rules.audi.startDropMax) {
     ctx.err('rules.audi.startDropMin', '奥迪起步掉位下限不能大于上限');
   }
+  if (rules.ferrari.turboStartGainMin > rules.ferrari.turboStartGainMax) {
+    ctx.err('rules.ferrari.turboStartGainMin', '法拉利起步提升下限不能大于上限');
+  }
 
   for (const [key, def] of Object.entries(rules.parts)) {
     for (const [attr, w] of Object.entries(def.weights)) {
@@ -386,6 +401,24 @@ function normalizeRules(ctx: Ctx, patches: Array<{ source: string; data: unknown
   }
   for (const c of rules.dryCompounds) {
     if (!rules.tyres[c]) ctx.err('rules.dryCompounds', `干地配方「${c}」未在 rules.tyres 中定义`);
+  }
+  for (const [key, tyre] of Object.entries(rules.tyres)) {
+    const raw = tyre.temperatureWindow;
+    const fallback: [number, number] = tyre.wet ? [58, 78] : [80, 105];
+    if (!Array.isArray(raw) || raw.length !== 2 || !raw.every(value => typeof value === 'number' && Number.isFinite(value)) || raw[0] < 20 || raw[1] > 140 || raw[0] >= raw[1]) {
+      ctx.warn(`rules.tyres.${key}.temperatureWindow`, '胎温窗口无效，已使用安全默认值');
+      tyre.temperatureWindow = fallback;
+    } else tyre.temperatureWindow = [raw[0], raw[1]];
+    if (!Number.isFinite(tyre.warmupRate) || tyre.warmupRate! < .05 || tyre.warmupRate! > 1) {
+      ctx.warn(`rules.tyres.${key}.warmupRate`, '暖胎率无效，已使用安全默认值');
+      tyre.warmupRate = tyre.wet ? .4 : .32;
+    }
+  }
+  const dryWindows: Record<string, [number, number]> = { soft: [80, 100], medium: [85, 105], hard: [90, 110] };
+  const namedDry = ['soft', 'medium', 'hard'].map(key => rules.tyres[key]);
+  if (namedDry.every(Boolean) && !(namedDry[0].temperatureWindow![0] < namedDry[1].temperatureWindow![0] && namedDry[1].temperatureWindow![0] < namedDry[2].temperatureWindow![0])) {
+    ctx.warn('rules.tyres', '软、中、硬胎最低温窗必须依次升高，已恢复平衡默认值');
+    for (const [key, window] of Object.entries(dryWindows)) rules.tyres[key].temperatureWindow = window;
   }
   if (!rules.tyres[rules.wetCompound]) ctx.err('rules.wetCompound', `雨地配方「${rules.wetCompound}」未定义`);
   if (!rules.tyres[rules.fullWetCompound]) ctx.err('rules.fullWetCompound', `全雨胎配方「${rules.fullWetCompound}」未定义`);
@@ -623,6 +656,8 @@ function normalizeTrack(ctx: Ctx, raw: unknown, index: number): TrackDef | null 
     weights,
     overtaking: ctx.num(raw, 'overtaking', path, { def: 55, min: 0, max: 100 }),
     tyreStress: ctx.num(raw, 'tyreStress', path, { def: 50, min: 0, max: 100 }),
+    surfaceTemperature: ctx.num(raw, 'surfaceTemperature', path, { def: 32, min: 10, max: 65 }),
+    thermalDemand: ctx.num(raw, 'thermalDemand', path, { def: ctx.num(raw, 'tyreStress', path, { def: 50, min: 0, max: 100 }), min: 0, max: 100 }),
     rainChance: ctx.num(raw, 'rainChance', path, { def: 0.15, min: 0, max: 1 }),
     scChance: ctx.num(raw, 'scChance', path, { def: 0.5, min: 0, max: 1 }),
     description: ctx.str(raw, 'description', path),

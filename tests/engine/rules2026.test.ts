@@ -38,32 +38,33 @@ describe('2026 规则', () => {
     expect(count(1.2)).toBeGreaterThan(count(0));
   });
 
-  it('默认零件包含内燃机与能量回收系统，每台车都装了两者', () => {
+  it('默认零件包含六类官方动力单元部件，每台车都装齐', () => {
     const s = newTestGame();
-    expect(s.rules.parts.power_unit.name).toBe('内燃机');
-    expect(s.rules.parts.ers.name).toBe('能量回收系统');
-    for (const t of Object.values(s.teams)) for (const c of t.cars) expect(c.fitted.ers).toBeTruthy();
-    expect(s.drivers.c1.puUsed).toEqual({ power_unit: 1, ers: 1 });
+    expect(s.rules.parts.ice.name).toContain('ICE');
+    expect(s.rules.parts.mgu_k.name).toContain('MGU-K');
+    const types = ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust'];
+    for (const t of Object.values(s.teams)) for (const c of t.cars) for (const type of types) expect(c.fitted[type]).toBeTruthy();
+    expect(s.drivers.c1.puUsed).toEqual({ ice: 1, turbocharger: 1, mgu_k: 1, energy_store: 1, control_electronics: 1, exhaust: 1 });
   });
 
   it('动力单元配额：第 5 台内燃机罚退 10 位，之后每台罚退 5 位，换回旧件不计数', () => {
     const s = advanceUntil(newTestGame(12), x => x.season.phase === 'practice');
-    for (const spec of ['pu2', 'pu3', 'pu4']) expect(recordPuFit(s, 'c1', 'power_unit', spec)).toBe('');
-    expect(s.drivers.c1.puUsed!.power_unit).toBe(4);
+    for (const spec of ['pu2', 'pu3', 'pu4']) expect(recordPuFit(s, 'c1', 'ice', spec)).toBe('');
+    expect(s.drivers.c1.puUsed!.ice).toBe(4);
     // 换回已经用过的规格：不计数
-    expect(recordPuFit(s, 'c1', 'power_unit', 'pu2')).toBe('');
-    expect(s.drivers.c1.puUsed!.power_unit).toBe(4);
-    expect(recordPuFit(s, 'c1', 'power_unit', 'pu5')).toContain('罚退 10 位');
+    expect(recordPuFit(s, 'c1', 'ice', 'pu2')).toBe('');
+    expect(s.drivers.c1.puUsed!.ice).toBe(4);
+    expect(recordPuFit(s, 'c1', 'ice', 'pu5')).toContain('罚退 10 位');
     expect(s.weekend!.penalties.c1).toBe(10);
-    expect(recordPuFit(s, 'c1', 'power_unit', 'pu6')).toContain('罚退 5 位');
+    expect(recordPuFit(s, 'c1', 'ice', 'pu6')).toContain('罚退 5 位');
     expect(s.weekend!.penalties.c1).toBe(15);
     // 事故后换上的新件（同规格）也计数
-    expect(recordPuFit(s, 'c1', 'power_unit', 'pu6', { fresh: true, replaced: 'pu6' })).toContain('罚退 5 位');
+    expect(recordPuFit(s, 'c1', 'ice', 'pu6', { fresh: true, replaced: 'pu6' })).toContain('罚退 5 位');
     // 不计配额的零件
     expect(recordPuFit(s, 'c1', 'floor', 'x')).toBe('');
     expect(s.news.some(n => n.tag === '罚退')).toBe(true);
     const pu = buildView(s).drivers.find(d => d.id === 'c1')!.pu;
-    expect(pu.find(p => p.type === 'power_unit')).toMatchObject({ used: 7, limit: 4 });
+    expect(pu.find(p => p.type === 'ice')).toMatchObject({ used: 7, limit: 4 });
   });
 
   it('旧存档缺少动力单元计数时，第一次装件从第一件开始计算', () => {
@@ -71,40 +72,53 @@ describe('2026 规则', () => {
     const driver = s.drivers.c1;
     delete driver.puUsed;
     delete driver.puPool;
-    expect(recordPuFit(s, driver.id, 'power_unit', 'legacy-first')).toBe('');
-    expect(driver.puUsed!.power_unit).toBe(1);
-    expect(driver.puPool!.power_unit).toEqual(['legacy-first']);
+    expect(recordPuFit(s, driver.id, 'ice', 'legacy-first')).toBe('');
+    expect(driver.puUsed!.ice).toBe(1);
+    expect(driver.puPool!.ice).toEqual(['legacy-first']);
+  });
+
+  it('六类动力单元部件独立记录配额和磨损', () => {
+    const s = newTestGame();
+    const car = s.teams.team_c.cars.find(item => item.driverId === 'c1')!;
+    const iceUsed = s.drivers.c1.puUsed!.ice;
+    const mguUsed = s.drivers.c1.puUsed!.mgu_k;
+    recordPuFit(s, 'c1', 'turbocharger', 'tc-new');
+    expect(s.drivers.c1.puUsed!.turbocharger).toBe(2);
+    expect(s.drivers.c1.puUsed!.ice).toBe(iceUsed);
+    expect(s.drivers.c1.puUsed!.mgu_k).toBe(mguUsed);
+    expect(car.puWear?.turbocharger).toEqual({ specId: 'tc-new', wear: 0 });
+    expect(car.puWear?.ice).toBeUndefined();
   });
 
   it('动力单元磨损随物理规格保存，新件和新赛季会重置', () => {
     const s = newTestGame();
     const car = s.teams.team_c.cars.find(car => car.driverId === 'c1')!;
-    const original = car.fitted.power_unit;
-    car.puWear = { power_unit: { specId: original, wear: 24 } };
-    car.puWearPool = { power_unit: { [original]: 24, alternate: 7 } };
-    recordPuFit(s, 'c1', 'power_unit', 'alternate');
-    expect(car.puWear.power_unit).toEqual({ specId: 'alternate', wear: 7 });
-    recordPuFit(s, 'c1', 'power_unit', original);
-    expect(car.puWear.power_unit).toEqual({ specId: original, wear: 24 });
-    recordPuFit(s, 'c1', 'power_unit', original, { fresh: true, replaced: original });
-    expect(car.puWear.power_unit).toEqual({ specId: original, wear: 0 });
+    const original = car.fitted.ice;
+    car.puWear = { ice: { specId: original, wear: 24 } };
+    car.puWearPool = { ice: { [original]: 24, alternate: 7 } };
+    recordPuFit(s, 'c1', 'ice', 'alternate');
+    expect(car.puWear.ice).toEqual({ specId: 'alternate', wear: 7 });
+    recordPuFit(s, 'c1', 'ice', original);
+    expect(car.puWear.ice).toEqual({ specId: original, wear: 24 });
+    recordPuFit(s, 'c1', 'ice', original, { fresh: true, replaced: original });
+    expect(car.puWear.ice).toEqual({ specId: original, wear: 0 });
   });
 
   it('排位后的配额罚退留到下一站', () => {
     const s = advanceUntil(newTestGame(12), x => x.season.phase === 'post_race');
-    s.drivers.c2.puUsed!.ers = 3;
-    expect(recordPuFit(s, 'c2', 'ers', 'ersX')).toContain('下一站生效');
+    s.drivers.c2.puUsed!.mgu_k = 3;
+    expect(recordPuFit(s, 'c2', 'mgu_k', 'ersX')).toContain('下一站生效');
     expect(JSON.parse(String(s.flags.pendingPenalties)).c2).toBe(10);
   });
 
   it('新赛季重置配额', () => {
     let s: GameState = advanceUntil(newTestGame(77), x => x.season.phase === 'season_end');
-    s.drivers.c1.puUsed!.power_unit = 9;
+    s.drivers.c1.puUsed!.ice = 9;
     const car = s.teams.team_c.cars.find(car => car.driverId === 'c1')!;
-    car.puWear = { power_unit: { specId: car.fitted.power_unit, wear: 40 } };
-    car.puWearPool = { power_unit: { [car.fitted.power_unit]: 40 } };
+    car.puWear = { ice: { specId: car.fitted.ice, wear: 40 } };
+    car.puWearPool = { ice: { [car.fitted.ice]: 40 } };
     s = advanceUntil(s, x => x.season.phase === 'preseason');
-    expect(s.drivers.c1.puUsed!.power_unit).toBe(1);
+    expect(s.drivers.c1.puUsed!.ice).toBe(1);
     const nextCar = s.teams.team_c.cars.find(car => car.driverId === 'c1')!;
     expect(nextCar.puWear).toEqual({});
     expect(nextCar.puWearPool).toEqual({});
@@ -126,10 +140,10 @@ describe('数据校验（2026 新字段）', () => {
   it('动力单元配额：未知零件警告，非法数值报错', () => {
     const src = placeholderSources();
     const rules = src[0].data as { rules: Record<string, unknown> };
-    rules.rules.puAllocation = { foo: 2, ers: 0 };
+    rules.rules.puAllocation = { foo: 2, mgu_k: 0 };
     const res = normalizeDatabase(src);
     expect(res.issues.some(i => i.level === 'warning' && i.path === 'rules.puAllocation.foo')).toBe(true);
-    expect(res.issues.some(i => i.level === 'error' && i.path.startsWith('rules.puAllocation.ers'))).toBe(true);
+    expect(res.issues.some(i => i.level === 'error' && i.path.startsWith('rules.puAllocation.mgu_k'))).toBe(true);
   });
 });
 

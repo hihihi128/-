@@ -8,7 +8,7 @@
  * - 每次生成前把「实时数据」注入提示词。
  * - 在 AI 回复末尾补上 <F1M_HUD/> 占位符（正则会把它渲染成状态条）。
  */
-import { dispatch } from '../engine/actions';
+import { createReviewedPlanAction, dispatch, type InternalReviewedPlanAction } from '../engine/actions';
 import { normalizeDatabase, type NormalizeResult } from '../engine/data';
 import { LABELS } from '../engine/defaults';
 import {
@@ -19,15 +19,18 @@ import {
   type ProjectPreview,
 } from '../engine/development';
 import { createGame, type NewGameOptions } from '../engine/newgame';
+import { addNarration } from '../engine/log';
 import { migrateState } from '../engine/migrate';
 import { previewContractOffer } from '../engine/market';
 import { buildStatePrompt } from '../engine/prompt';
 import { applyAiCommands, describeLog, parseAiCommands, stripAiCommands } from '../engine/protocol';
 import { carRatings, driverOverall, moraleLabel, trackScore } from '../engine/ratings';
+import { buildPerformanceContext } from '../engine/performance';
 import { applyRandomEventResolution, setRandomEventContent, triggerNextWeeklyRandomEvent } from '../engine/randomEvents';
 import { Rng } from '../engine/rng';
 import { raceEngineerFor, strategyDecisionSkill } from '../engine/staff';
-import { strategyOptions } from '../engine/strategy';
+import { degFactor, optimizeStints, stintLoss, strategyOptions } from '../engine/strategy';
+import { canRunTyreStrategy, weekendTyreKey } from '../engine/tyres';
 import { applySupernaturalCommands, effectiveSetup, parseSupernaturalCommands, SUPERNATURAL_LIMITS } from '../engine/supernatural';
 import { dismissalReason } from '../engine/teamSpecials';
 import type { Action, Ambition, ContractOfferTerms, DataIssue, DriverAttr, DriverPlan, FacilityType, GameState, RandomEventRecord, StaffRole, TeamSelectionDifficulty } from '../engine/types';
@@ -48,6 +51,15 @@ import {
   randomEventNarrationMessage,
   randomEventResolutionPrompt,
 } from './randomEventFlow';
+import { parseStrategyReview, strategyReviewPrompt, type RacePlanFields, type StrategyReview } from './strategyReview';
+import {
+  isSpecialActionNarrationMarker,
+  specialActionNarrationMessage,
+  SPECIAL_ACTION_NARRATION_VAR,
+  type SpecialAction,
+  type SpecialActionNarrationMarker,
+  validateSpecialActionRequest,
+} from './specialActionContext';
 import { AI_PTR, GAME_PTR, PTR, SaveStore, type RevisionInfo } from './store';
 
 export const HUD_TAG = '<F1M_HUD/>';
@@ -78,6 +90,16 @@ export const PLAYER_REPLACED_LEADERSHIP: Readonly<Record<string, readonly string
   cadillac: [],
 };
 export const MANAGED_LEADERSHIP_ENTRIES = [...new Set(Object.values(PLAYER_REPLACED_LEADERSHIP).flat())];
+
+export function principalRole(special: string | null | undefined): string {
+  return special === 'ferrari' ? '过渡领队'
+    : special === 'mclaren' || special === 'aston_martin' ? '临时领队'
+      : special === 'mercedes' || special === 'racing_bulls' || special === 'audi' || special === 'alpine' ? '副领队'
+        : special === 'haas' ? '共同领队'
+          : special === 'williams' ? '接班人'
+            : special === 'red_bull' ? '助理领队'
+              : '领队';
+}
 
 interface ProcessOptions {
   type?: string;
@@ -177,6 +199,24 @@ export interface EngineerStrategyResult extends Outcome {
   mode?: 'engineer' | 'perfect';
 }
 
+export interface StrategyReviewPrediction {
+  compounds: string[];
+  stints: number[];
+  stops: number;
+  cost: number;
+  delta: number;
+}
+
+export interface StrategyReviewResult extends Outcome {
+  api: 'secondary';
+  reviewId?: string;
+  originalPlan?: RacePlanFields;
+  correctedPlan?: RacePlanFields | null;
+  review?: StrategyReview;
+  originalPrediction?: StrategyReviewPrediction;
+  correctedPrediction?: StrategyReviewPrediction | null;
+}
+
 export interface SupernaturalInterventionResult extends Outcome {
   api: 'main' | 'secondary';
   revisionId: string | null;
@@ -190,6 +230,31 @@ export interface NegotiationResult extends Outcome {
 export interface RandomEventResolutionResult extends Outcome {
   event: RandomEventRecord | null;
   mainReply: string | null;
+}
+
+export type SpecialActionNarrationStatus = 'not_requested' | 'pending' | 'completed' | 'failed' | 'stale';
+
+export interface SpecialActionResult extends Outcome {
+  requestId: string;
+  actionApplied: boolean;
+  actionRevisionId?: string;
+  narrationStatus: SpecialActionNarrationStatus;
+}
+
+interface SpecialActionReceipt {
+  requestId: string;
+  action: SpecialAction;
+  contextText: string;
+  chatId: string;
+  gameId: string;
+  floor: number;
+  actionRevisionId: string;
+  appliedMessage: string;
+  userFloor: number | null;
+  narrationFloor: number | null;
+  expectedReplyFloor: number | null;
+  narrationStatus: SpecialActionNarrationStatus;
+  message: string;
 }
 
 interface PendingRandomEventNarration {
@@ -214,6 +279,26 @@ interface ActiveNegotiation extends NegotiationSessionView {
   roundIndex: number;
 }
 
+interface PendingStrategyReview {
+  id: string;
+  token: number;
+  chatId: string;
+  gameId: string;
+  revisionId: string;
+  revisionData: string;
+  floor: number;
+  phase: GameState['season']['phase'];
+  year: number;
+  roundIndex: number;
+  driverId: string;
+  planFingerprint: string;
+  apiFingerprint: string;
+  originalPlan: RacePlanFields;
+  review: StrategyReview;
+  originalPrediction: StrategyReviewPrediction;
+  correctedPrediction: StrategyReviewPrediction | null;
+}
+
 function safeWeatherAdvice(text: string, hasRainWindow: boolean): boolean {
   if (!hasRainWindow) return true;
   const mentionsWetTyre = /(半雨胎|全雨胎|雨胎|intermediate|\binter\b|wet tyre)/i.test(text);
@@ -228,6 +313,7 @@ export interface DataReport {
   issues: DataIssue[];
   teams: Array<{ id: string; name: string; color: string; targetPosition: number; selectionDifficulty: TeamSelectionDifficulty; description: string; special: string; drivers: string[] }>;
   specialRules?: {
+    ferrari: { turboStartGainMin: number; turboStartGainMax: number; turboSpoolSeconds: number };
     astonMartin: { vibrationInterval: number; vibrationRetireChance: number };
     racingBulls: { recallChance: number };
     audi: { startDropMin: number; startDropMax: number };
@@ -267,9 +353,20 @@ export class F1Controller {
   private busy = false;
   private leadershipSyncQueue: Promise<void> = Promise.resolve();
   private specialNegotiation: ActiveNegotiation | null = null;
+  private pendingStrategyReviews = new Map<string, PendingStrategyReview>();
+  private strategyReviewTokens = new Map<string, number>();
+  private strategyReviewSerial = 0;
   private pendingRandomEventNarration: PendingRandomEventNarration | null = null;
+  private specialActionReceipt: SpecialActionReceipt | null = null;
+  private readonly specialActionReceipts = new Map<string, SpecialActionReceipt>();
   private adjudicatingRandomEventId: string | null = null;
   private preparingWeeklyRandomEvent = false;
+  /**
+   * Tavern Helper can briefly keep duringGenerating() true after the final
+   * assistant text is already committed. Once lifecycle events are observed,
+   * trust them instead of leaving every panel action permanently locked.
+   */
+  private generationState: 'unknown' | 'active' | 'settled' = 'unknown';
   /** 「继续生成」开始时被续写楼层的原文（用于只结算新续写的部分） */
   private continuing: { floor: number; text: string } | null = null;
   private listeners = new Set<(reason: string) => void>();
@@ -288,6 +385,7 @@ export class F1Controller {
     const e = this.env.events;
     this.env.on(e.MESSAGE_RECEIVED, (id: number, type?: string) => void this.onMessageReceived(Number(id), type));
     this.env.on(e.GENERATION_ENDED, () => void this.onGenerationEnded());
+    this.env.on(e.GENERATION_STOPPED, () => this.onGenerationStopped());
     this.env.on(e.GENERATION_AFTER_COMMANDS, (type: string, _opts: unknown, dryRun: boolean) => this.onGenerationStart(type, dryRun));
     this.env.on(e.MESSAGE_EDITED, (id: number) => void this.onMessageEdited(Number(id)));
     this.env.on(e.CHAT_CHANGED, () => this.onChatChanged());
@@ -352,6 +450,7 @@ export class F1Controller {
       || next.engineerProxyPreset !== this.settings.engineerProxyPreset
       || next.engineerApiUrl !== this.settings.engineerApiUrl
       || next.engineerModel !== this.settings.engineerModel;
+    const apiKeyChanged = clearEngineerApiKey || (typeof engineerApiKey === 'string' && engineerApiKey.trim() !== '' && engineerApiKey.trim() !== this.engineerApiKey);
     const settingsError = !clearEngineerApiKey && apiSettingsChanged && next.engineerApi === 'secondary' ? this.secondaryApiError(next) : null;
     if (settingsError) throw new Error(settingsError);
     if (clearEngineerApiKey) {
@@ -363,6 +462,7 @@ export class F1Controller {
       this.engineerApiKey = nextKey;
     }
     this.settings = next;
+    if (apiSettingsChanged || apiKeyChanged) this.invalidateStrategyReviews();
     this.store.opts.maxRevisions = next.maxRevisions;
     const vars = this.env.getScriptVars() ?? {};
     this.env.setScriptVars({ ...vars, settings: next });
@@ -402,6 +502,121 @@ export class F1Controller {
     };
   }
 
+  private strategyReviewApiFingerprint(): string {
+    const { engineerProxyPreset, engineerApiUrl, engineerModel } = this.settings;
+    return hashString(JSON.stringify({ engineerProxyPreset, engineerApiUrl, engineerModel }));
+  }
+
+  private invalidateStrategyReviews(): void {
+    for (const [driverId, token] of this.strategyReviewTokens) this.strategyReviewTokens.set(driverId, token + 1);
+    this.pendingStrategyReviews.clear();
+  }
+
+  private strategyReviewPlanFingerprint(plan: RacePlanFields): string {
+    return hashString(JSON.stringify(plan));
+  }
+
+  private strategyReviewContext(pending: Pick<PendingStrategyReview, 'chatId' | 'gameId' | 'revisionId' | 'revisionData' | 'floor' | 'phase' | 'year' | 'roundIndex' | 'driverId' | 'planFingerprint' | 'apiFingerprint'>) {
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    const state = current?.state;
+    const plan = state?.weekend?.plans[pending.driverId];
+    if (!current || !state || !plan
+      || this.env.chatId() !== pending.chatId
+      || floor !== pending.floor
+      || state.gameId !== pending.gameId
+      || current.rev.id !== pending.revisionId
+      || current.rev.data !== pending.revisionData
+      || state.season.phase !== pending.phase
+      || state.season.year !== pending.year
+      || state.season.roundIndex !== pending.roundIndex
+      || state.weekend?.liveRace
+      || this.strategyReviewApiFingerprint() !== pending.apiFingerprint
+      || !Array.isArray(plan.tyrePlan)
+      || plan.strategySource !== 'engineer'
+      || this.strategyReviewPlanFingerprint(this.racePlanFields(plan)) !== pending.planFingerprint) return null;
+    return { current, state, plan };
+  }
+
+  private racePlanFields(plan: DriverPlan): RacePlanFields {
+    if (!Array.isArray(plan.tyrePlan)) throw new Error('当前工程师策略没有可点评的干地配方');
+    return {
+      tyrePlan: [...plan.tyrePlan],
+      paceMode: plan.paceMode,
+      pitTiming: plan.pitTiming,
+      scReaction: plan.scReaction,
+    };
+  }
+
+  private strategyReviewPrediction(state: GameState, driverId: string, plan: RacePlanFields, originalCost?: number): StrategyReviewPrediction | null {
+    const weekend = state.weekend;
+    const team = state.teams[state.meta.playerTeamId];
+    const driver = state.drivers[driverId];
+    const car = team?.cars.find(value => value.driverId === driverId);
+    const round = weekend && state.calendar[weekend.roundIndex];
+    const track = round && state.tracks[round.trackId];
+    if (!weekend || !team || !driver || !car || !track) return null;
+    const setup = effectiveSetup(state, driverId, weekend.setup[driverId] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
+    const ratings = carRatings(team, car, state.rules, 'disclosed');
+    const performanceContext = buildPerformanceContext({
+      driverTyre: driver.attrs.tyre,
+      carTyre: ratings.tyre,
+      setup,
+      ratings,
+      track,
+    });
+    const context = {
+      driverTyre: driver.attrs.tyre,
+      carTyre: ratings.tyre,
+      paceMode: plan.paceMode,
+      knowledge: setup.tyreKnowledge,
+      performanceContext,
+    };
+    const factor = degFactor(track, context);
+    const model = { context: performanceContext, paceMode: plan.paceMode };
+    const stints = optimizeStints(state.rules, track, plan.tyrePlan, track.laps, factor, model);
+    if (stints.some(laps => !Number.isInteger(laps) || laps <= 0) || stints.reduce((sum, laps) => sum + laps, 0) !== track.laps) return null;
+    const candidate = strategyOptions(state.rules, track, track.laps, context, { wet: false, sprint: false })
+      .find(option => option.compounds.length === plan.tyrePlan.length && option.compounds.every((compound, index) => compound === plan.tyrePlan[index]));
+    const cost = candidate?.cost ?? stints.reduce((sum, laps, index) => sum + stintLoss(state.rules.tyres[plan.tyrePlan[index]], laps, factor, { ...model, rules: state.rules }), 0) + (plan.tyrePlan.length - 1) * (track.pitLoss + 2.6);
+    const roundedCost = round1(cost);
+    return { compounds: [...plan.tyrePlan], stints, stops: plan.tyrePlan.length - 1, cost: roundedCost, delta: originalCost === undefined ? 0 : round1(roundedCost - originalCost) };
+  }
+
+  private reviewTyreSetCount(compounds: string[], compound: string): number {
+    let longest = 0;
+    let run = 0;
+    for (const value of compounds) {
+      run = value === compound ? run + 1 : 0;
+      longest = Math.max(longest, run);
+    }
+    // After the second consecutive stint, the first set is no longer fitted
+    // and can be reused. The live race therefore needs at most two sets.
+    return Math.min(longest, 2);
+  }
+
+  private validateReviewedPlan(state: GameState, driverId: string, plan: RacePlanFields): string | null {
+    const weekend = state.weekend;
+    const team = state.teams[state.meta.playerTeamId];
+    if (!weekend || !team || plan.tyrePlan.length < 2 || plan.tyrePlan.length > 5) return '更正策略必须有 2–5 段干地配方';
+    for (const compound of plan.tyrePlan) {
+      const tyre = state.rules.tyres[compound];
+      if (!tyre || tyre.wet || !state.rules.dryCompounds.includes(compound)) return `更正策略包含不可用的干地配方「${compound}」`;
+    }
+    if (new Set(plan.tyrePlan).size < state.rules.mandatoryCompounds) return `更正策略至少需要 ${state.rules.mandatoryCompounds} 种不同干地配方`;
+    const key = `${state.season.year}:r${weekend.roundIndex + 1}`;
+    const inventory = team.tyreInventory?.[driverId] ?? [];
+    for (const compound of new Set(plan.tyrePlan)) {
+      // takeTyreSet excludes only the current set. A set may legally return
+      // after another compound stint, so only a consecutive run needs distinct
+      // physical sets.
+      const needed = this.reviewTyreSetCount(plan.tyrePlan, compound);
+      const available = inventory.filter(set => set.weekendKey === key && !set.returned && set.compound === compound).length;
+      if (available < needed) return `更正策略需要 ${needed} 组「${compound}」轮胎，但只剩 ${available} 组可用`;
+    }
+    return this.strategyReviewPrediction(state, driverId, plan) ? null : '更正策略无法生成本地预测';
+  }
+
   subscribe(fn: (reason: string) => void): () => void {
     this.listeners.add(fn);
     return () => this.listeners.delete(fn);
@@ -416,6 +631,24 @@ export class F1Controller {
       }
     }
     this.env.emit(CHANGE_EVENT, reason);
+  }
+
+  private generationInProgress(): boolean {
+    return this.generationState === 'unknown'
+      ? this.env.isGenerating()
+      : this.generationState === 'active' && this.env.isGenerating();
+  }
+
+  private startWeeklyRandomEvent(state: GameState): RandomEventRecord | null {
+    const weekKey = `${state.season.number}-w${state.season.week}-r${state.season.roundIndex}`;
+    const ordinal = (state.randomEvents?.weekKey === weekKey ? state.randomEvents.weeklyStarted : 0) + 1;
+    const seed = (state.rng
+      ^ Math.imul(state.season.year, 0x45d9f3b)
+      ^ Math.imul(state.season.number, 0x27d4eb2d)
+      ^ Math.imul(state.season.week + 1, 0x165667b1)
+      ^ Math.imul(state.season.roundIndex + 1, 0x119de1f3)
+      ^ Math.imul(ordinal, 0x3449f1d)) >>> 0;
+    return triggerNextWeeklyRandomEvent(state, new Rng(seed));
   }
 
   // ───────────────────────────── 查询 ─────────────────────────────
@@ -442,10 +675,11 @@ export class F1Controller {
       ready: true,
       chatId: this.env.chatId(),
       hasGame: !!resolved,
-      generating: this.env.isGenerating(),
+      generating: this.generationInProgress(),
       latestFloor: last,
       anchorFloor: resolved?.floor ?? null,
       revisionId: resolved?.rev.id ?? null,
+      specialAction: this.specialActionStatus(),
       fallback: resolved?.fallback ?? false,
       revisions: this.store.revisionCount,
       storeSize: this.store.totalSize,
@@ -460,6 +694,18 @@ export class F1Controller {
           }
         : null,
       userName: this.env.userName(),
+    };
+  }
+
+  private specialActionStatus(): Omit<SpecialActionResult, 'ok'> | null {
+    const receipt = this.specialActionReceipt;
+    if (!receipt) return null;
+    return {
+      requestId: receipt.requestId,
+      message: receipt.message,
+      actionApplied: true,
+      actionRevisionId: receipt.actionRevisionId,
+      narrationStatus: this.specialActionCurrent(receipt) ? receipt.narrationStatus : 'stale',
     };
   }
 
@@ -638,6 +884,7 @@ export class F1Controller {
         drivers: (db?.drivers ?? []).filter(d => d.teamId === t.id && d.role === 'race').map(d => d.name),
       })),
       specialRules: db ? {
+        ferrari: { turboStartGainMin: db.rules.ferrari.turboStartGainMin, turboStartGainMax: db.rules.ferrari.turboStartGainMax, turboSpoolSeconds: db.rules.ferrari.turboSpoolSeconds },
         astonMartin: { vibrationInterval: db.rules.astonMartin.vibrationInterval, vibrationRetireChance: db.rules.astonMartin.vibrationRetireChance },
         racingBulls: { recallChance: db.rules.racingBulls.recallChance },
         audi: { startDropMin: db.rules.audi.startDropMin, startDropMax: db.rules.audi.startDropMax },
@@ -647,7 +894,7 @@ export class F1Controller {
   }
 
   async newGame(opts: Partial<NewGameOptions> & { playerTeamId: string }): Promise<Outcome> {
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成，请稍后再开局' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成，请稍后再开局' };
     const report = await this.loadData();
     if (!report.ok || !this.data?.db) {
       const first = report.issues.find(i => i.level === 'error');
@@ -669,20 +916,23 @@ export class F1Controller {
     }
     this.store.reset(state.gameId);
     this.specialNegotiation = null;
+    this.staleSpecialAction();
     const floor = Math.max(0, this.latestFloor());
     this.store.commit(state, { floor, kind: 'new', label: `新开局：${state.teams[state.meta.playerTeamId].name}`, parent: null });
+    this.invalidateStrategyReviews();
     await this.syncLeadershipWorldbook(state);
     this.notify('new_game');
-    const role = state.ferrari ? '过渡领队' : state.mclaren || state.astonMartin ? '临时领队' : state.mercedes || state.racingBulls || state.audi || state.alpine ? '副领队' : state.haas ? '共同领队' : state.williams ? '接班人' : state.redBull ? '助理领队' : '领队';
+    const role = principalRole(state.teams[state.meta.playerTeamId].special);
     return { ok: true, message: `已开局：你现在是 ${state.teams[state.meta.playerTeamId].name} 的${role}` };
   }
 
   // ───────────────────────────── 动作 ─────────────────────────────
 
-  async dispatch(action: Action): Promise<Outcome> {
+  async dispatch(action: Action | InternalReviewedPlanAction): Promise<Outcome> {
     if (this.busy) return { ok: false, message: '上一个操作还在处理中' };
     if (this.adjudicatingRandomEventId) return { ok: false, message: '副 API 正在判定随机事件，请等待判定结束后再操作' };
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成回复，请等待生成结束后再操作' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成回复，请等待生成结束后再操作' };
+    if (this.preparingWeeklyRandomEvent) return { ok: false, message: '正在准备随机事件，请稍候' };
     const floor = this.latestFloor();
     let cur = this.store.resolve(floor);
     if (!cur) return { ok: false, message: '还没有开局' };
@@ -705,6 +955,7 @@ export class F1Controller {
       }
       const res = dispatch(cur.state, preparedAction);
       if (!res.ok) return { ok: false, message: res.message };
+      if (res.state.season.phase === 'pre_race') this.startWeeklyRandomEvent(res.state);
       const pendingEvent = res.state.randomEvents?.current;
       if (pendingEvent?.status === 'pending_generation') {
         const guard = { chatId: this.env.chatId(), gameId: cur.state.gameId, revisionId: cur.rev.id, revisionData: cur.rev.data, floor };
@@ -716,13 +967,129 @@ export class F1Controller {
         }
       }
       this.store.commit(res.state, { floor: Math.max(0, floor), kind: 'ui', label: res.message });
+      this.staleSpecialAction();
+      this.invalidateStrategyReviews();
       this.notify('action');
-      if (this.settings.autoNarrate && isSimulation(action) && res.state.narration.length) {
+      if (this.settings.autoNarrate && isSimulation(action as Action) && res.state.narration.length) {
         void this.requestNarration();
       }
       return { ok: true, message: `${res.message}${strategySummary}` };
     } finally {
       this.busy = false;
+    }
+  }
+
+  async executeSpecialAction(request: unknown): Promise<SpecialActionResult> {
+    const invalid = validateSpecialActionRequest(request);
+    if (!invalid.ok) return this.specialActionFailure('', invalid.message);
+    const existing = this.specialActionReceipts.get(invalid.requestId);
+    if (existing?.requestId === invalid.requestId) return this.specialActionResult(existing, this.specialActionCurrent(existing));
+    if (this.busy || this.generationInProgress() || this.adjudicatingRandomEventId || this.preparingWeeklyRandomEvent) return this.specialActionFailure(invalid.requestId, '当前已有生成或存档操作，请稍后再试');
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    if (!current || current.rev.id !== invalid.expectedRevisionId) return this.specialActionFailure(invalid.requestId, '存档版本已经变化，请重新选择动作');
+    const guard = { chatId: this.env.chatId(), gameId: current.state.gameId, floor };
+    this.busy = true;
+    try {
+      const applied = dispatch(current.state, invalid.action);
+      if (!applied.ok) return this.specialActionFailure(invalid.requestId, applied.message);
+      const revision = this.store.commit(applied.state, { floor: Math.max(0, floor), kind: 'ui', label: applied.message });
+      const receipt: SpecialActionReceipt = {
+        requestId: invalid.requestId, action: invalid.action, contextText: invalid.contextText,
+        chatId: guard.chatId, gameId: guard.gameId, floor: guard.floor, actionRevisionId: revision.id, appliedMessage: applied.message, userFloor: null, narrationFloor: null, expectedReplyFloor: null,
+        narrationStatus: invalid.contextText ? 'pending' : 'not_requested',
+        message: invalid.contextText ? '动作已执行，正在请求主聊天叙述' : applied.message,
+      };
+      this.specialActionReceipt = receipt;
+      this.specialActionReceipts.set(receipt.requestId, receipt);
+      if (this.specialActionReceipts.size > 64) this.specialActionReceipts.delete(this.specialActionReceipts.keys().next().value!);
+      this.invalidateStrategyReviews();
+      this.notify('special_action');
+      if (!invalid.contextText) return this.specialActionResult(receipt, true);
+      return await this.startSpecialActionNarration(receipt);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  async retrySpecialActionNarration(request: unknown): Promise<SpecialActionResult> {
+    if (!isObjectWithExactKeys(request, ['requestId', 'expectedRevisionId']) || typeof request.requestId !== 'string' || typeof request.expectedRevisionId !== 'string') return this.specialActionFailure('', '重试请求字段无效');
+    const receipt = this.specialActionReceipts.get(request.requestId);
+    if (!receipt || receipt.requestId !== request.requestId) return this.specialActionFailure(request.requestId, '找不到可重试的特殊动作叙述');
+    if (receipt.narrationStatus !== 'failed') return this.specialActionResult(receipt, this.specialActionCurrent(receipt));
+    if (this.busy || this.generationInProgress() || this.adjudicatingRandomEventId || this.preparingWeeklyRandomEvent) return this.specialActionFailure(receipt.requestId, '当前已有生成或存档操作，请稍后再试', true, receipt);
+    if (request.expectedRevisionId !== receipt.actionRevisionId) return this.specialActionFailure(receipt.requestId, '存档版本已经变化，请刷新后重试', true, receipt);
+    if (!this.specialActionCurrent(receipt)) return this.staleSpecialActionResult(receipt);
+    this.busy = true;
+    try {
+      receipt.narrationStatus = 'pending';
+      receipt.message = '正在重试主聊天叙述';
+      this.notify('special_action');
+      return await this.startSpecialActionNarration(receipt);
+    } finally {
+      this.busy = false;
+    }
+  }
+
+  private async startSpecialActionNarration(receipt: SpecialActionReceipt): Promise<SpecialActionResult> {
+    try {
+      if (receipt.userFloor === null) {
+        await this.env.createUserMessage(specialActionNarrationMessage(receipt.action, receipt.appliedMessage, receipt.contextText));
+        const createdFloor = this.latestFloor();
+        if (this.env.chatId() === receipt.chatId && createdFloor > receipt.floor && this.env.getMessage(createdFloor)?.role === 'user') {
+          receipt.userFloor = createdFloor;
+          this.store.patchFloorVars(createdFloor, { [SPECIAL_ACTION_NARRATION_VAR]: this.specialActionMarker(receipt) });
+        } else return this.staleSpecialActionResult(receipt);
+      }
+      if (!this.specialActionCurrent(receipt)) return this.staleSpecialActionResult(receipt);
+      receipt.expectedReplyFloor = this.latestFloor() + 1;
+      this.generationState = 'active';
+      await this.env.triggerGeneration();
+      if (receipt.narrationStatus === 'pending') receipt.message = '动作已执行，等待主聊天叙述完成';
+      this.notify('special_action');
+      return this.specialActionResult(receipt, true);
+    } catch (error) {
+      this.generationState = 'settled';
+      receipt.narrationStatus = 'failed';
+      receipt.message = `动作已执行，叙述未完成：${error instanceof Error ? error.message : '主聊天请求失败'}`;
+      this.notify('special_action');
+      return this.specialActionResult(receipt, this.specialActionCurrent(receipt));
+    }
+  }
+
+  private specialActionMarker(receipt: SpecialActionReceipt): SpecialActionNarrationMarker {
+    return { version: 1, requestId: receipt.requestId, gameId: receipt.gameId, actionRevisionId: receipt.actionRevisionId, mode: 'narration_only' };
+  }
+
+  private specialActionCurrent(receipt: SpecialActionReceipt): boolean {
+    const latest = this.latestFloor();
+    const current = this.store.resolve(latest);
+    return this.env.chatId() === receipt.chatId && !!current && current.state.gameId === receipt.gameId && current.rev.id === receipt.actionRevisionId
+      && (receipt.userFloor === null ? latest === receipt.floor : latest === receipt.userFloor || latest === receipt.narrationFloor || latest === receipt.expectedReplyFloor)
+      && (receipt.userFloor === null || isSpecialActionNarrationMarker(this.env.getMessageVars(receipt.userFloor)[SPECIAL_ACTION_NARRATION_VAR]));
+  }
+
+  private specialActionResult(receipt: SpecialActionReceipt, current: boolean): SpecialActionResult {
+    const narrationStatus = current ? receipt.narrationStatus : 'stale';
+    return { ok: narrationStatus !== 'failed' && narrationStatus !== 'stale', message: narrationStatus === 'stale' ? '动作结果已过期' : receipt.message, requestId: receipt.requestId, actionApplied: true, actionRevisionId: receipt.actionRevisionId, narrationStatus };
+  }
+
+  private specialActionFailure(requestId: string, message: string, actionApplied = false, receipt?: SpecialActionReceipt): SpecialActionResult {
+    return { ok: false, message, requestId, actionApplied, ...(receipt ? { actionRevisionId: receipt.actionRevisionId } : {}), narrationStatus: receipt?.narrationStatus ?? 'failed' };
+  }
+
+  private staleSpecialActionResult(receipt: SpecialActionReceipt): SpecialActionResult {
+    receipt.narrationStatus = 'stale';
+    receipt.message = '动作已执行，但聊天或存档已变化，未继续叙述';
+    this.notify('special_action');
+    return this.specialActionResult(receipt, false);
+  }
+
+  private staleSpecialAction(): void {
+    const receipt = this.specialActionReceipt;
+    if (receipt && receipt.narrationStatus === 'pending') {
+      receipt.narrationStatus = 'stale';
+      receipt.message = '动作已执行，但后续操作已使叙述过期';
     }
   }
 
@@ -753,7 +1120,7 @@ export class F1Controller {
       event: this.stateAt()?.randomEvents?.current ?? null,
       mainReply,
     });
-    if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
+    if (this.busy || this.generationInProgress()) return fail('当前已有生成或存档操作，请稍后再试');
     if (typeof request.eventId !== 'string' || typeof request.expectedRevisionId !== 'string') return fail('随机事件请求缺少有效标识');
     if (typeof request.answer !== 'string' || !request.answer.trim() || request.answer.trim().length > 1000) return fail('事件回答必须为 1–1000 个非空字符');
     const secondaryError = this.secondaryApiError();
@@ -783,10 +1150,12 @@ export class F1Controller {
       await this.env.createUserMessage(randomEventNarrationMessage(current.state, event, answer));
       pending.userFloor = this.latestFloor();
       if (pending.userFloor <= floor) throw new Error('主 API 事件叙述消息未写入正常聊天');
+      this.generationState = 'active';
       await this.env.triggerGeneration();
       this.notify('random_event');
       return { ok: true, message: '已发送处理方案；主 API 正在正常聊天中叙述事件，完成后将自动交给副 API 判定。', event: this.stateAt()?.randomEvents?.current ?? null, mainReply: null };
     } catch (error) {
+      this.generationState = 'settled';
       if (this.pendingRandomEventNarration?.eventId === event.id) this.pendingRandomEventNarration = null;
       this.restoreRandomEventForRetry(event.id, error instanceof Error ? error.message : '主 API 事件叙述请求失败');
       return fail(error instanceof Error ? error.message : '随机事件处理失败');
@@ -915,7 +1284,7 @@ export class F1Controller {
     const floor = this.latestFloor();
     const current = this.store.resolve(floor);
     const event = current?.state.randomEvents?.current;
-    if (this.busy || this.env.isGenerating()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', event: event ?? null, mainReply: null };
+    if (this.busy || this.generationInProgress()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', event: event ?? null, mainReply: null };
     if (!current || typeof request.expectedRevisionId !== 'string' || current.rev.id !== request.expectedRevisionId) return { ok: false, message: '存档版本已经变化，请刷新事件后重试', event: event ?? null, mainReply: null };
     if (!event || typeof request.eventId !== 'string' || event.id !== request.eventId || event.status !== 'awaiting_player') return { ok: false, message: '随机事件已经变化或完成', event: event ?? null, mainReply: null };
     const next = deepClone(current.state);
@@ -951,8 +1320,9 @@ export class F1Controller {
     const aiEntries = entries.filter(entry => !entry.team.isPlayer);
     const candidates: AiGridStrategyCandidate[] = aiEntries
       .map(entry => {
-        const setup = weekend.setup[entry.driver.id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 };
+        const setup = effectiveSetup(state, entry.driver.id, weekend.setup[entry.driver.id] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
         const ratings = carRatings(entry.team, entry.car, state.rules, 'disclosed');
+        const performanceContext = buildPerformanceContext({ driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
         return {
           driverId: entry.driver.id,
           options: strategyOptions(state.rules, track, track.laps, {
@@ -960,7 +1330,12 @@ export class F1Controller {
             carTyre: ratings.tyre,
             paceMode: 'balanced',
             knowledge: setup.tyreKnowledge,
-          }, { wet: false, sprint: false }).slice(0, 5),
+            performanceContext,
+          }, {
+            wet: false,
+            sprint: false,
+            isAvailable: compounds => canRunTyreStrategy(entry.team, entry.driver.id, weekendTyreKey(state), compounds),
+          }).slice(0, 5),
         };
       });
     const byDriver = new Map(candidates.map(candidate => [candidate.driverId, candidate]));
@@ -1025,11 +1400,13 @@ export class F1Controller {
   }
 
   async restoreRevision(id: string): Promise<Outcome> {
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成，请稍后' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成，请稍后' };
     const rev = this.store.getRevision(id);
     if (!rev) return { ok: false, message: '找不到该存档版本' };
     const state = this.store.stateOf(rev);
     this.specialNegotiation = null;
+    this.staleSpecialAction();
+    this.invalidateStrategyReviews();
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'restore', label: `读档：${rev.label}` });
     await this.syncLeadershipWorldbook(state);
     this.notify('restore');
@@ -1042,7 +1419,7 @@ export class F1Controller {
   }
 
   async importSave(text: string): Promise<Outcome> {
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成，请稍后' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成，请稍后' };
     let parsed: any;
     try {
       parsed = JSON.parse(text);
@@ -1055,6 +1432,8 @@ export class F1Controller {
     }
     migrateState(state);
     this.specialNegotiation = null;
+    this.staleSpecialAction();
+    this.invalidateStrategyReviews();
     this.store.reset(state.gameId);
     this.store.commit(state, { floor: Math.max(0, this.latestFloor()), kind: 'import', label: '导入存档', parent: null });
     await this.syncLeadershipWorldbook(state);
@@ -1067,7 +1446,7 @@ export class F1Controller {
    * 方案排名严格按车队策略水平选择，避免强队与弱队得到同样聪明的建议。
    */
   async requestEngineerStrategy(driverId: string, requestedApi?: 'main' | 'secondary', perfect = false): Promise<EngineerStrategyResult> {
-    if (this.env.isGenerating()) return { ok: false, message: '当前正在生成内容，请稍后再请求工程师建议' };
+    if (this.generationInProgress()) return { ok: false, message: '当前正在生成内容，请稍后再请求工程师建议' };
     const state = this.stateAt();
     if (!state?.weekend) return { ok: false, message: '比赛周末开始后才能请求工程师建议' };
     if (state.weekend.liveRace) return { ok: false, message: '比赛进行中，不能重新生成赛前策略' };
@@ -1079,9 +1458,23 @@ export class F1Controller {
     const car = team.cars.find(value => value.driverId === driverId);
     const round = state.calendar[state.weekend.roundIndex];
     const track = round ? state.tracks[round.trackId] : null;
-    const perfectOptions = perfect && car && track
-      ? strategyOptions(state.rules, track, track.laps, { driverTyre: driver.attrs.tyre, carTyre: carRatings(team, car, state.rules, 'disclosed').tyre, paceMode: 'balanced', knowledge: effectiveSetup(state, driverId, state.weekend.setup[driverId] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 }).tyreKnowledge }, { wet: false, sprint: false }).slice(0, 6)
-      : null;
+    let perfectOptions: ReturnType<typeof strategyOptions> | null = null;
+    if (perfect && car && track) {
+      const setup = effectiveSetup(state, driverId, state.weekend.setup[driverId] ?? { confidence: 40, tyreKnowledge: 30, qualiBonus: 0 });
+      const ratings = carRatings(team, car, state.rules, 'disclosed');
+      const performanceContext = buildPerformanceContext({ driverTyre: driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
+      perfectOptions = strategyOptions(state.rules, track, track.laps, {
+        driverTyre: driver.attrs.tyre,
+        carTyre: ratings.tyre,
+        paceMode: 'balanced',
+        knowledge: setup.tyreKnowledge,
+        performanceContext,
+      }, {
+        wet: false,
+        sprint: false,
+        isAvailable: compounds => canRunTyreStrategy(team, driverId, weekendTyreKey(state), compounds),
+      }).slice(0, 6);
+    }
     const availableOptions = perfectOptions ?? driverView.options;
     if (!availableOptions.length) return { ok: false, message: '当前没有可用的干地策略方案' };
 
@@ -1155,6 +1548,150 @@ export class F1Controller {
     return this.requestEngineerStrategy(driverId, requestedApi, true);
   }
 
+  /**
+   * Generates a read-only review through the configured secondary API. Unlike
+   * engineer advice, no local fallback is applied and the response only becomes
+   * a memory-only candidate until applyStrategyReview is explicitly called.
+   */
+  async requestStrategyReview(request: { driverId: string; expectedRevisionId: string }): Promise<StrategyReviewResult> {
+    const fail = (message: string): StrategyReviewResult => ({ ok: false, message, api: 'secondary' });
+    if (!request || typeof request.driverId !== 'string' || !request.driverId) return fail('缺少有效的本队车手 ID');
+    if (typeof request.expectedRevisionId !== 'string' || !request.expectedRevisionId) return fail('缺少当前存档版本号');
+    const token = (this.strategyReviewTokens.get(request.driverId) ?? 0) + 1;
+    this.strategyReviewTokens.set(request.driverId, token);
+    this.pendingStrategyReviews.delete(request.driverId);
+    if (this.generationInProgress()) return fail('当前正在生成内容，请稍后再请求策略点评');
+    const secondaryError = this.secondaryApiError();
+    if (secondaryError) return fail(secondaryError);
+    const floor = this.latestFloor();
+    const current = this.store.resolve(floor);
+    const state = current?.state;
+    if (!current || !state?.weekend) return fail('比赛周末开始后才能请求策略点评');
+    if (request.expectedRevisionId !== current.rev.id) return fail('当前存档版本已变化，请刷新后重试');
+    if (state.season.phase !== 'race' || state.weekend.liveRace || state.weekend.race) return fail('只有正赛开始前才能点评策略');
+    const team = state.teams[state.meta.playerTeamId];
+    const driver = state.drivers[request.driverId];
+    const car = team?.cars.find(value => value.driverId === request.driverId);
+    const round = state.calendar[state.weekend.roundIndex];
+    const track = round && state.tracks[round.trackId];
+    const plan = state.weekend.plans[request.driverId];
+    if (!team || !driver || !car || !track || driver.teamId !== team.id) return fail('找不到本队正式车手');
+    if (!plan || plan.strategySource !== 'engineer' || !Array.isArray(plan.tyrePlan)) return fail('请先使用“听工程师”生成当前车手的工程师正赛策略');
+    let originalPlan: RacePlanFields;
+    try {
+      originalPlan = this.racePlanFields(plan);
+    } catch (error) {
+      return fail(error instanceof Error ? error.message : '当前工程师策略不可点评');
+    }
+    const originalPrediction = this.strategyReviewPrediction(state, request.driverId, originalPlan);
+    if (!originalPrediction) return fail('当前工程师策略无法生成本地预测');
+    const activeIds = new Set(Object.values(state.teams).flatMap(currentTeam => currentTeam.cars.map(value => value.driverId).filter((id): id is string => !!id)));
+    const grid = (state.weekend.qualifying?.grid ?? []).filter(id => activeIds.has(id));
+    const tyreKey = `${state.season.year}:r${state.weekend.roundIndex + 1}`;
+    const availableTyres = Object.fromEntries(state.rules.dryCompounds.map(compound => [compound, (team.tyreInventory?.[request.driverId] ?? []).filter(set => set.weekendKey === tyreKey && !set.returned && set.compound === compound).length]));
+    const pendingBase = {
+      chatId: this.env.chatId(), gameId: state.gameId, revisionId: current.rev.id, revisionData: current.rev.data, floor,
+      phase: state.season.phase, year: state.season.year, roundIndex: state.season.roundIndex, driverId: request.driverId,
+      planFingerprint: this.strategyReviewPlanFingerprint(originalPlan), apiFingerprint: this.strategyReviewApiFingerprint(),
+    };
+    const prompt = strategyReviewPrompt({
+      teamName: team.name,
+      driverName: driver.name,
+      driverId: request.driverId,
+      trackName: track.name,
+      laps: track.laps,
+      gridPosition: grid.includes(request.driverId) ? grid.indexOf(request.driverId) + 1 : null,
+      rainChance: state.weekend.forecast.race,
+      rainWindow: state.weekend.forecast.raceRainWindow ?? null,
+      originalPlan,
+      originalPrediction,
+      dryCompounds: [...state.rules.dryCompounds],
+      mandatoryCompounds: state.rules.mandatoryCompounds,
+      availableTyres,
+    });
+    try {
+      const generated = await withTimeout(this.env.generateText(prompt, this.secondaryApiOptions()), 25_000, '策略点评副 API 请求超时');
+      if (this.strategyReviewTokens.get(request.driverId) !== token) return fail('该点评请求已被新的请求替代，结果已丢弃');
+      const review = parseStrategyReview(generated, request.driverId);
+      const latest = this.strategyReviewContext(pendingBase);
+      if (!latest || this.generationInProgress()) return fail('等待副 API 时存档、聊天或配置已变化，点评结果已安全丢弃');
+      const correctedPlan = review.correctedPlan;
+      const validation = correctedPlan ? this.validateReviewedPlan(latest.state, request.driverId, correctedPlan) : null;
+      if (validation) return fail(validation);
+      const correctedPrediction = correctedPlan ? this.strategyReviewPrediction(latest.state, request.driverId, correctedPlan, originalPrediction.cost) : null;
+      if (correctedPlan && !correctedPrediction) return fail('更正策略无法生成本地预测');
+      const id = `review-${(++this.strategyReviewSerial).toString(36)}`;
+      const pending: PendingStrategyReview = { id, token, ...pendingBase, originalPlan, review, originalPrediction, correctedPrediction };
+      this.pendingStrategyReviews.set(request.driverId, pending);
+      return {
+        ok: true,
+        message: correctedPlan ? '策略点评已生成；当前策略未改变，请确认是否使用更正方案' : '策略点评已生成；当前策略未改变',
+        api: 'secondary', reviewId: id, originalPlan: deepClone(originalPlan), correctedPlan: correctedPlan ? deepClone(correctedPlan) : null,
+        review: deepClone(review), originalPrediction: deepClone(originalPrediction), correctedPrediction: correctedPrediction ? deepClone(correctedPrediction) : null,
+      };
+    } catch (error) {
+      return fail(error instanceof Error ? `${error.message}；当前策略未改变` : '策略点评副 API 请求失败；当前策略未改变');
+    }
+  }
+
+  async applyStrategyReview(request: { reviewId: string; expectedRevisionId: string }): Promise<StrategyReviewResult> {
+    const fail = (message: string): StrategyReviewResult => ({ ok: false, message, api: 'secondary' });
+    if (!request || typeof request.reviewId !== 'string' || !request.reviewId) return fail('缺少有效的点评 ID');
+    if (typeof request.expectedRevisionId !== 'string' || !request.expectedRevisionId) return fail('缺少当前存档版本号');
+    const pending = [...this.pendingStrategyReviews.values()].find(value => value.id === request.reviewId);
+    if (!pending) return fail('点评已过期、已保留原策略或不存在');
+    const latest = this.strategyReviewContext(pending);
+    if (!latest) {
+      this.pendingStrategyReviews.delete(pending.driverId);
+      return fail('点评已过期：存档、聊天、策略或副 API 配置已变化');
+    }
+    if (request.expectedRevisionId !== latest.current.rev.id) return fail('当前存档版本已变化，请刷新后重试');
+    const correctedPlan = pending.review.correctedPlan;
+    if (!correctedPlan || !pending.correctedPrediction) return fail('该点评没有可应用的更正策略');
+    const validation = this.validateReviewedPlan(latest.state, pending.driverId, correctedPlan);
+    if (validation) return fail(validation);
+    // Remove before awaiting dispatch so double clicks cannot create two revisions.
+    this.pendingStrategyReviews.delete(pending.driverId);
+    const applied = await this.dispatch(createReviewedPlanAction(
+      pending.driverId,
+      {
+        strategySource: 'engineer',
+        tyrePlan: [...correctedPlan.tyrePlan],
+        paceMode: correctedPlan.paceMode,
+        pitTiming: correctedPlan.pitTiming,
+        scReaction: correctedPlan.scReaction,
+      },
+      {
+          source: 'secondary',
+          originalPlan: deepClone(pending.originalPlan),
+          summary: pending.review.summary,
+          issues: pending.review.issues.map(issue => ({
+            code: issue.code,
+            severity: issue.severity === 'error' ? 'high' : issue.severity === 'warning' ? 'medium' : 'low',
+            message: issue.message,
+          })),
+          modelLabel: 'performance-v2',
+          roundKey: `${latest.state.season.year}:r${latest.state.weekend!.roundIndex + 1}`,
+      },
+    ));
+    if (!applied.ok) return fail(`更正策略未应用：${applied.message}`);
+    return {
+      ok: true, message: '已应用副 API 更正的工程师策略', api: 'secondary', reviewId: pending.id,
+      originalPlan: deepClone(pending.originalPlan), correctedPlan: deepClone(correctedPlan), review: deepClone(pending.review),
+      originalPrediction: deepClone(pending.originalPrediction), correctedPrediction: deepClone(pending.correctedPrediction),
+    };
+  }
+
+  discardStrategyReview(request: { reviewId: string }): StrategyReviewResult {
+    const fail = (message: string): StrategyReviewResult => ({ ok: false, message, api: 'secondary' });
+    if (!request || typeof request.reviewId !== 'string' || !request.reviewId) return fail('缺少有效的点评 ID');
+    const pending = [...this.pendingStrategyReviews.values()].find(value => value.id === request.reviewId);
+    if (!pending) return fail('点评已过期或不存在');
+    this.pendingStrategyReviews.delete(pending.driverId);
+    this.strategyReviewTokens.set(pending.driverId, pending.token + 1);
+    return { ok: true, message: '已保留原策略；比赛状态未改变', api: 'secondary' };
+  }
+
   getSpecialNegotiation(): NegotiationSessionView | null {
     if (!this.specialNegotiation) return null;
     const { chatId: _chatId, gameId: _gameId, revisionId: _revisionId, revisionData: _revisionData, floor: _floor, phase: _phase, year: _year, roundIndex: _roundIndex, ...view } = this.specialNegotiation;
@@ -1166,7 +1703,7 @@ export class F1Controller {
     if (!definition) return { ok: false, message: '未知的特殊谈判事件', session: this.getSpecialNegotiation() };
     const selected = request.api === undefined ? this.settings.engineerApi : request.api;
     if (selected !== 'main' && selected !== 'secondary') return { ok: false, message: 'API 必须是 main 或 secondary', session: this.getSpecialNegotiation() };
-    if (this.busy || this.env.isGenerating()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', session: this.getSpecialNegotiation() };
+    if (this.busy || this.generationInProgress()) return { ok: false, message: '当前已有生成或存档操作，请稍后再试', session: this.getSpecialNegotiation() };
     if (this.specialNegotiation?.status === 'active') return { ok: false, message: '请先完成或取消当前谈判', session: this.getSpecialNegotiation() };
     const secondaryError = selected === 'secondary' ? this.secondaryApiError() : null;
     if (secondaryError) return { ok: false, message: secondaryError, session: this.getSpecialNegotiation() };
@@ -1203,6 +1740,7 @@ export class F1Controller {
   cancelSpecialNegotiation(): NegotiationResult {
     if (!this.specialNegotiation) return { ok: true, message: '当前没有谈判', session: null };
     this.specialNegotiation = null;
+    this.pendingStrategyReviews.clear();
     return { ok: true, message: '已取消谈判，存档没有变化', session: null };
   }
 
@@ -1213,6 +1751,11 @@ export class F1Controller {
     return current;
   }
 
+  private negotiationNarrationDetail(session: ActiveNegotiation, outcome: string): string {
+    const transcript = session.messages.map(message => `${message.speaker}：${message.text}`).join('\n');
+    return `${transcript}\n谈判结果：${outcome}`;
+  }
+
   async sendSpecialNegotiationTurn(request: { text: unknown; sessionId: unknown }): Promise<NegotiationResult> {
     const fail = (message: string): NegotiationResult => ({ ok: false, message, session: this.getSpecialNegotiation() });
     const session = this.specialNegotiation;
@@ -1220,7 +1763,7 @@ export class F1Controller {
     if (request.sessionId !== session.id) return fail('谈判会话已经变化，请刷新后重试');
     if (typeof request.text !== 'string' || !request.text.trim() || request.text.trim().length > 1000) return fail('谈判发言必须为 1–1000 个非空字符');
     if (session.round >= session.maxRounds) return fail('谈判轮数已经用完');
-    if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
+    if (this.busy || this.generationInProgress()) return fail('当前已有生成或存档操作，请稍后再试');
     const definition = NEGOTIATIONS[session.kind];
     const current = this.resolveNegotiationContext(session);
     if (!current) {
@@ -1242,8 +1785,10 @@ export class F1Controller {
       );
       if (new TextEncoder().encode(generated).byteLength > 16 * 1024) return fail('谈判 API 返回超过 16 KiB');
       const reply = parseNegotiationReply(generated, definition, nextRound, session.minRounds, session.maxRounds);
+      const forcedStance = session.kind === 'fia_roundtable' ? current.state.fiaMeeting?.current?.forcedStance : null;
+      if (reply.status === 'agreement' && forcedStance && reply.choice !== forcedStance) throw new Error('谈判 API 返回了车队禁止的立场');
       const latest = this.resolveNegotiationContext(session);
-      if (this.env.isGenerating() || !latest) {
+      if (this.generationInProgress() || !latest) {
         session.status = 'breakdown';
         session.outcome = '等待 API 时存档或聊天已经变化，结果已安全丢弃。';
         return fail(session.outcome);
@@ -1255,6 +1800,10 @@ export class F1Controller {
       if (reply.status === 'breakdown') {
         session.status = 'breakdown';
         session.outcome = '谈判破裂，存档没有变化。';
+        const narrated = deepClone(latest.state);
+        addNarration(narrated, 'special_negotiation', `${definition.title}破裂`, this.negotiationNarrationDetail(session, session.outcome));
+        this.store.commit(narrated, { floor: Math.max(0, session.floor), kind: 'ui', label: `${definition.title}：谈判破裂` });
+        this.notify('negotiation');
         return { ok: true, message: session.outcome, session: this.getSpecialNegotiation() };
       }
       const choice = definition.choices[reply.choice!];
@@ -1263,11 +1812,16 @@ export class F1Controller {
       if (!applied.ok) {
         session.status = 'breakdown';
         session.outcome = `协议无法执行：${applied.message}`;
+        const narrated = deepClone(latest.state);
+        addNarration(narrated, 'special_negotiation', `${definition.title}未能执行`, this.negotiationNarrationDetail(session, session.outcome));
+        this.store.commit(narrated, { floor: Math.max(0, session.floor), kind: 'ui', label: `${definition.title}：协议未执行` });
+        this.notify('negotiation');
         return { ok: true, message: session.outcome, session: this.getSpecialNegotiation() };
       }
-      this.store.commit(applied.state, { floor: Math.max(0, session.floor), kind: 'ui', label: `${definition.title}：${choice.label}` });
       session.status = 'agreement';
       session.outcome = `${choice.label}。${applied.message}`;
+      addNarration(applied.state, 'special_negotiation', `${definition.title}达成协议`, this.negotiationNarrationDetail(session, session.outcome));
+      this.store.commit(applied.state, { floor: Math.max(0, session.floor), kind: 'ui', label: `${definition.title}：${choice.label}` });
       this.notify('negotiation');
       return { ok: true, message: session.outcome, session: this.getSpecialNegotiation() };
     } catch (error) {
@@ -1289,7 +1843,7 @@ export class F1Controller {
     if (selected !== 'main' && selected !== 'secondary') return fail('API 必须是 main 或 secondary');
     if (typeof request.description !== 'string' || !request.description.trim() || request.description.trim().length > 1000) return fail('干预描述必须为 1–1000 个非空字符');
     if (typeof request.expectedRevisionId !== 'string' || !request.expectedRevisionId) return fail('缺少当前存档版本号');
-    if (this.busy || this.env.isGenerating()) return fail('当前已有生成或存档操作，请稍后再试');
+    if (this.busy || this.generationInProgress()) return fail('当前已有生成或存档操作，请稍后再试');
     const secondaryError = api === 'secondary' ? this.secondaryApiError() : null;
     if (secondaryError) return fail(secondaryError);
     const floor = this.latestFloor();
@@ -1341,7 +1895,7 @@ export class F1Controller {
       const latestFloor = this.latestFloor();
       const latest = this.store.resolve(latestFloor);
       const latestState = latest?.state;
-      if (this.env.isGenerating() || this.env.chatId() !== guard.chatId || latestFloor !== guard.floor || !latest || !latestState || latest.rev.id !== guard.revisionId || latestState.gameId !== guard.gameId || latestState.season.phase !== guard.phase || latestState.season.year !== guard.year || latestState.season.roundIndex !== guard.roundIndex || (latestState.weekend?.liveRace?.id ?? null) !== guard.liveId || !latestState.meta.supernaturalMode) return fail('等待 API 时存档或聊天已变化，结果已安全丢弃');
+      if (this.generationInProgress() || this.env.chatId() !== guard.chatId || latestFloor !== guard.floor || !latest || !latestState || latest.rev.id !== guard.revisionId || latestState.gameId !== guard.gameId || latestState.season.phase !== guard.phase || latestState.season.year !== guard.year || latestState.season.roundIndex !== guard.roundIndex || (latestState.weekend?.liveRace?.id ?? null) !== guard.liveId || !latestState.meta.supernaturalMode) return fail('等待 API 时存档或聊天已变化，结果已安全丢弃');
       const next = JSON.parse(JSON.stringify(latestState)) as GameState;
       const applied = applySupernaturalCommands(next, parsed.commands, invocationId);
       if (!applied.changed) return { ok: false, message: '没有可应用的干预；存档未改变', api, revisionId: null, results: applied.logs };
@@ -1357,12 +1911,18 @@ export class F1Controller {
 
   /** 发送一条用户消息并触发 AI 叙述待叙述事件 */
   async requestNarration(text?: string): Promise<Outcome> {
-    if (this.env.isGenerating()) return { ok: false, message: 'AI 正在生成中' };
+    if (this.generationInProgress()) return { ok: false, message: 'AI 正在生成中' };
     const s = this.stateAt();
     if (!s) return { ok: false, message: '还没有开局' };
     await this.syncLeadershipWorldbook(s);
     await this.env.createUserMessage((text ?? this.settings.narrationText).trim() || DEFAULT_SETTINGS.narrationText);
-    await this.env.triggerGeneration();
+    this.generationState = 'active';
+    try {
+      await this.env.triggerGeneration();
+    } catch (error) {
+      this.generationState = 'settled';
+      throw error;
+    }
     return { ok: true, message: '已请求 AI 叙述' };
   }
 
@@ -1373,8 +1933,11 @@ export class F1Controller {
     this.data = null;
     this.continuing = null;
     this.specialNegotiation = null;
+    this.invalidateStrategyReviews();
     this.pendingRandomEventNarration = null;
+    this.staleSpecialAction();
     this.adjudicatingRandomEventId = null;
+    this.generationState = 'unknown';
     this.recoverInterruptedRandomEvent();
     this.env.uninject(INJECT_ID);
     void this.syncLeadershipWorldbook();
@@ -1388,6 +1951,7 @@ export class F1Controller {
       this.adjudicatingRandomEventId = null;
     }
     this.recoverInterruptedRandomEvent();
+    this.staleSpecialAction();
     this.notify('chat');
   }
 
@@ -1396,6 +1960,7 @@ export class F1Controller {
     let floor = last;
     const lastMsg = this.env.getMessage(last);
     if (!dryRun) {
+      this.generationState = 'active';
       this.continuing = type === 'continue' && lastMsg?.role === 'assistant' ? { floor: last, text: lastMsg.message ?? '' } : null;
     }
     if (type === 'swipe' || (type === 'regenerate' && lastMsg?.role === 'assistant')) floor = last - 1;
@@ -1413,12 +1978,15 @@ export class F1Controller {
    * 空回复（例如在第一个字之前就停止生成留下的空楼层）不会被结算，见 processAssistantMessageInner。
    */
   async onGenerationEnded(): Promise<void> {
+    this.generationState = 'settled';
     const last = this.latestFloor();
     const msg = this.env.getMessage(last);
     if (msg?.role === 'assistant') {
       const randomEventNarration = this.isPendingRandomEventNarrationMessage(last);
+      const specialActionNarration = this.isSpecialActionNarrationMessage(last);
       const visibleReply = stripAiCommands(stripHud(msg.message ?? '')).trim();
-      await this.processAssistantMessage(last, { fallback: true, ignoreCommands: randomEventNarration });
+      await this.processAssistantMessage(last, { fallback: true, ignoreCommands: randomEventNarration || specialActionNarration });
+      this.finishSpecialActionNarration(last, visibleReply);
       if (randomEventNarration) {
         // A cancelled stream can leave SillyTavern's placeholder without ever
         // emitting MESSAGE_RECEIVED. It is not narration and must never reach
@@ -1431,34 +1999,53 @@ export class F1Controller {
           }
         } else await this.settleRandomEventNarration(last);
       }
-      if (!randomEventNarration) await this.maybeStartRandomEventAfterChat(last);
+      if (!randomEventNarration && !specialActionNarration) await this.maybeStartRandomEventAfterChat(last);
+    } else {
+      const receipt = this.specialActionReceipt;
+      if (receipt?.narrationStatus === 'pending' && receipt.userFloor === last && receipt.expectedReplyFloor === last + 1 && this.specialActionCurrent(receipt)) {
+        receipt.narrationStatus = 'failed';
+        receipt.expectedReplyFloor = null;
+        receipt.message = '动作已执行，主聊天没有返回叙述；可仅重试叙述';
+        this.notify('special_action');
+      }
     }
   }
 
+  onGenerationStopped(): void {
+    this.generationState = 'settled';
+    const receipt = this.specialActionReceipt;
+    if (receipt?.narrationStatus === 'pending' && this.specialActionCurrent(receipt)) {
+      receipt.narrationStatus = 'failed';
+      receipt.message = '动作已执行，主聊天生成已停止；可仅重试叙述';
+    }
+    this.notify('generation-stopped');
+  }
+
   async onMessageReceived(id: number, type?: string): Promise<void> {
+    this.generationState = 'settled';
     if (type === 'impersonate' || type === 'quiet' || type === 'first_message') return;
     const pendingNarration = this.isPendingRandomEventNarrationMessage(id);
+    const specialActionNarration = this.isSpecialActionNarrationMessage(id);
     const orphanedEvent = !this.pendingRandomEventNarration && this.store.resolve(id)?.state.randomEvents?.current?.status === 'awaiting_narration';
     if (orphanedEvent) {
       const event = this.store.resolve(id)?.state.randomEvents?.current;
       if (event) this.restoreRandomEventForRetry(event.id, '主 API 剧情被重新生成、切换或删除；请重新提交处理方案。', stripAiCommands(stripHud(this.env.getMessage(id)?.message ?? '')).trim() || null);
     }
-    await this.processAssistantMessage(id, { type, ignoreCommands: pendingNarration || orphanedEvent });
+    await this.processAssistantMessage(id, { type, ignoreCommands: pendingNarration || orphanedEvent || specialActionNarration });
+    this.finishSpecialActionNarration(id, stripAiCommands(stripHud(this.env.getMessage(id)?.message ?? '')).trim());
     if (orphanedEvent) return;
     await this.settleRandomEventNarration(id);
-    if (!pendingNarration) await this.maybeStartRandomEventAfterChat(id);
+    if (!pendingNarration && !specialActionNarration) await this.maybeStartRandomEventAfterChat(id);
   }
 
   private async maybeStartRandomEventAfterChat(id: number): Promise<void> {
-    if (this.preparingWeeklyRandomEvent || this.busy || this.env.isGenerating() || id !== this.latestFloor()) return;
+    if (this.preparingWeeklyRandomEvent || this.busy || this.generationInProgress() || id !== this.latestFloor()) return;
     const current = this.store.resolve(id);
     if (!current || current.state.season.phase !== 'pre_race') return;
     const active = current.state.randomEvents?.current;
     if (active && !['none', 'resolved', 'unresolved'].includes(active.status)) return;
     const next = deepClone(current.state);
-    const rng = new Rng(next.rng);
-    const event = triggerNextWeeklyRandomEvent(next, rng);
-    next.rng = rng.state;
+    const event = this.startWeeklyRandomEvent(next);
     if (!event) return;
     const guard = { chatId: this.env.chatId(), revisionData: current.rev.data, floor: id };
     this.preparingWeeklyRandomEvent = true;
@@ -1486,7 +2073,7 @@ export class F1Controller {
     }
     // 只有最新楼层的编辑会重新结算（中间楼层的修改不重算后续楼层）
     if (id !== this.latestFloor()) return;
-    await this.processAssistantMessage(id, { type: 'edit' });
+    await this.processAssistantMessage(id, { type: 'edit', ignoreCommands: this.isSpecialActionNarrationMessage(id) });
   }
 
   private processing = new Set<number>();
@@ -1494,6 +2081,35 @@ export class F1Controller {
   private isPendingRandomEventNarrationMessage(id: number): boolean {
     const pending = this.pendingRandomEventNarration;
     return !!pending && !!this.randomEventNarrationCurrent(pending, id);
+  }
+
+  private isSpecialActionNarrationMessage(id: number): boolean {
+    const marker = this.specialActionNarrationMarkerForAssistant(id);
+    if (!marker) return false;
+    const own = this.env.getMessageVars(id)[SPECIAL_ACTION_NARRATION_VAR];
+    if (!isSpecialActionNarrationMarker(own)) this.store.patchFloorVars(id, { [SPECIAL_ACTION_NARRATION_VAR]: marker });
+    return true;
+  }
+
+  private specialActionNarrationMarkerForAssistant(id: number): SpecialActionNarrationMarker | null {
+    if (this.env.getMessage(id)?.role !== 'assistant') return null;
+    let userFloor = id - 1;
+    while (userFloor >= 0 && this.env.getMessage(userFloor)?.role === 'assistant') userFloor--;
+    if (userFloor < 0 || this.env.getMessage(userFloor)?.role !== 'user') return null;
+    const marker = this.env.getMessageVars(userFloor)[SPECIAL_ACTION_NARRATION_VAR];
+    if (!isSpecialActionNarrationMarker(marker)) return null;
+    const resolved = this.store.resolve(userFloor);
+    return resolved?.state.gameId === marker.gameId && resolved.rev.id === marker.actionRevisionId ? marker : null;
+  }
+
+  private finishSpecialActionNarration(id: number, visibleReply: string): void {
+    const receipt = this.specialActionReceipt;
+    if (!receipt || receipt.narrationStatus !== 'pending' || !this.isSpecialActionNarrationMessage(id) || !this.specialActionCurrent(receipt)) return;
+    receipt.narrationFloor = id;
+    receipt.expectedReplyFloor = null;
+    receipt.narrationStatus = visibleReply && visibleReply !== STREAM_PLACEHOLDER ? 'completed' : 'failed';
+    receipt.message = receipt.narrationStatus === 'completed' ? '动作已执行，主聊天叙述已完成' : '动作已执行，主聊天没有返回叙述；可仅重试叙述';
+    this.notify('special_action');
   }
 
   /** 解析并结算一条 AI 回复（幂等：同样的文本不会重复结算） */
@@ -1554,10 +2170,11 @@ export class F1Controller {
       await this.ensureHud(id, text);
       return;
     }
-    const { commands, errors } = parseAiCommands(opts.ignoreCommands ? stripAiCommands(text) : text);
+    const narrationOnly = opts.ignoreCommands || this.isSpecialActionNarrationMessage(id);
+    const { commands, errors } = parseAiCommands(narrationOnly ? stripAiCommands(text) : text);
     const next = base.state;
     const logs = applyAiCommands(next, commands, { messageId: id });
-    const narrated = takeNarration(next);
+    const narrated = narrationOnly ? [] : takeNarration(next);
     const changes = describeChanges(next, logs, errors);
     if (logs.length === 0 && narrated.length === 0) {
       // 无状态变化：不生成新版本，清掉可能残留的旧指针（例如重新编辑去掉了指令）
@@ -1583,10 +2200,11 @@ export class F1Controller {
     const cur = this.store.resolve(id);
     const vars = this.env.getMessageVars(id);
     if (!cur) return;
-    const { commands, errors } = parseAiCommands(suffix);
+    const narrationOnly = this.isSpecialActionNarrationMessage(id);
+    const { commands, errors } = parseAiCommands(narrationOnly ? stripAiCommands(suffix) : suffix);
     const next = cur.state;
     const logs = applyAiCommands(next, commands, { messageId: id, prior: parseAiCommands(original).commands });
-    const narrated = takeNarration(next);
+    const narrated = narrationOnly ? [] : takeNarration(next);
     const changes = [...(Array.isArray(vars.f1m_changes) ? vars.f1m_changes : []), ...describeChanges(next, logs, errors)];
     const allNarrated = [...(Array.isArray(vars.f1m_narrated) ? vars.f1m_narrated : []), ...narrated];
     if (logs.length === 0 && narrated.length === 0) {
@@ -1617,6 +2235,12 @@ export class F1Controller {
 
 function stripHud(text: string): string {
   return text.split(HUD_TAG).join('');
+}
+
+function isObjectWithExactKeys(value: unknown, keys: readonly string[]): value is Record<string, unknown> {
+  if (!value || Object.prototype.toString.call(value) !== '[object Object]') return false;
+  const actual = Object.keys(value as Record<string, unknown>);
+  return actual.length === keys.length && actual.every(key => keys.includes(key) && key !== '__proto__' && key !== 'constructor' && key !== 'prototype');
 }
 
 const UPDATE_BLOCK = /<F1M_UPDATE>[\s\S]*?<\/F1M_UPDATE>/gi;

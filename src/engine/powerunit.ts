@@ -8,8 +8,16 @@
  * 超出配额：第一次罚退 puPenaltyFirst 位，之后每次 puPenaltyNext 位。
  */
 import { addNews, driverName } from './log';
-import type { CarState, DriverState, GameState, PartType } from './types';
+import type { CarState, DriverState, GameState, PartType, PowerUnitPartType } from './types';
 import { addGridPenalty } from './weekend';
+
+export const PU_PART_TYPES: readonly PowerUnitPartType[] = ['ice', 'turbocharger', 'mgu_k', 'energy_store', 'control_electronics', 'exhaust'];
+export const PU_COMBUSTION_PARTS: readonly PowerUnitPartType[] = ['ice', 'turbocharger', 'exhaust'];
+export const PU_ELECTRICAL_PARTS: readonly PowerUnitPartType[] = ['mgu_k', 'energy_store', 'control_electronics'];
+
+export function isPowerUnitPart(type: PartType): type is PowerUnitPartType {
+  return PU_PART_TYPES.includes(type as PowerUnitPartType);
+}
 
 /** 本赛季最后一场正赛已经开始：配额将在新赛季重置，超额不再罚退到下一站（即下赛季首站） */
 function seasonOver(state: GameState): boolean {
@@ -57,7 +65,7 @@ export function recordPuFit(
   ensure(driver, partType);
   const pool = driver.puPool![partType];
   const car = driver.teamId ? state.teams[driver.teamId]?.cars.find(candidate => candidate.driverId === driverId) : undefined;
-  if ((partType === 'power_unit' || partType === 'ers') && car) {
+  if (isPowerUnitPart(partType) && car) {
     car.puWear ??= {};
     car.puWearPool ??= {};
     const wearPool = car.puWearPool[partType] ??= {};

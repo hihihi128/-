@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { createPreRaceRainWindow } from '../../src/engine/raceWeather';
 import { DEFAULT_RULES } from '../../src/engine/defaults';
-import { tyreWeatherPenalty, wetCompoundFor } from '../../src/engine/race';
+import { requiresWetGridTyreChoice, tyreWeatherPenalty, wetCompoundFor } from '../../src/engine/race';
 import { Rng } from '../../src/engine/rng';
 
 describe('赛前公开降雨窗口', () => {
@@ -28,6 +28,13 @@ describe('半雨胎与全雨胎', () => {
     expect(DEFAULT_RULES.tyres[DEFAULT_RULES.fullWetCompound].name).toBe('全雨胎');
     expect(wetCompoundFor(DEFAULT_RULES, .45)).toBe(DEFAULT_RULES.wetCompound);
     expect(wetCompoundFor(DEFAULT_RULES, .9)).toBe(DEFAULT_RULES.fullWetCompound);
+  });
+
+  it('只在零圈湿地发车使用积水阈值，而非当前雨强', () => {
+    expect(requiresWetGridTyreChoice({ stage: 'grid', completedLaps: 0, wetness: .219 })).toBe(false);
+    expect(requiresWetGridTyreChoice({ stage: 'grid', completedLaps: 0, wetness: .22 })).toBe(true);
+    expect(requiresWetGridTyreChoice({ stage: 'ready', completedLaps: 0, wetness: 1 })).toBe(false);
+    expect(requiresWetGridTyreChoice({ stage: 'grid', completedLaps: 1, wetness: 1 })).toBe(false);
   });
 
   it('半雨胎适合潮湿赛道，全雨胎适合严重积水', () => {

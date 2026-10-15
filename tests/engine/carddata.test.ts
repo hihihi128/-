@@ -13,12 +13,12 @@ function cardDb(): Database {
   return res.db!;
 }
 
-/** 2026 赛季实测：相对梅赛德斯的平均单圈差距（秒） */
+/** 2026 开局平衡值：包含开局特殊机制后，相对梅赛德斯的平均单圈差距（秒）。 */
 const REAL_GAPS: Record<string, number> = {
   ferrari: 0.422,
   mclaren: 0.502,
   red_bull: 0.676,
-  alpine: 1.657,
+  alpine: 1.717,
   audi: 1.866,
   racing_bulls: 1.877,
   haas: 2.242,
@@ -72,13 +72,13 @@ describe('角色卡数据：2026 真实阵容', () => {
     const team = (id: string) => db.teams.find(t => t.id === id)!;
     for (const [works, customers] of Object.entries(PU_SUPPLIERS)) {
       for (const c of customers) {
-        expect(team(c).parts.power_unit, `${c} 内燃机`).toEqual(team(works).parts.power_unit);
-        expect(team(c).parts.ers, `${c} 能量回收系统`).toEqual(team(works).parts.ers);
+        expect(team(c).parts.ice, `${c} 内燃机`).toEqual(team(works).parts.ice);
+        expect(team(c).parts.mgu_k, `${c} 能量回收系统`).toEqual(team(works).parts.mgu_k);
       }
     }
   });
 
-  it('平均单圈差距符合 2026 实测（误差 < 0.05 秒）', () => {
+  it('开局平均单圈差距符合 2026 平衡值（误差 < 0.05 秒）', () => {
     const state = createGame(cardDb(), { playerTeamId: 'ferrari', principalName: '测试', seed: 1, gameId: 'g', now: 1 });
     const r = (id: string) => carRatings(state.teams[id], state.teams[id].cars[0], state.rules);
     // 均衡赛道上的单圈损失：赛车综合分与车手正赛能力（两台车平均）
@@ -93,7 +93,7 @@ describe('角色卡数据：2026 真实阵容', () => {
       expect(loss(id) - loss('mercedes'), id).toBeCloseTo(gap, 1);
     }
     // 动力单元排序：梅赛德斯 > 法拉利 > 红牛-福特 > 奥迪 > 本田
-    const pu = (id: string) => state.teams[id].parts.power_unit.specs[0].perf;
+    const pu = (id: string) => state.teams[id].parts.ice.specs[0].perf;
     const order = ['mercedes', 'ferrari', 'red_bull', 'audi', 'aston_martin'].map(pu);
     expect([...order].sort((x, y) => y - x)).toEqual(order);
     expect(r('ferrari').downforce).toBeGreaterThan(r('williams').downforce);

@@ -4,11 +4,23 @@ import { previewPitTraining } from '../../src/engine/development';
 import { actualStationaryTime, adjustPitCrewTraining, predictedStationaryTime } from '../../src/engine/pitstop';
 import { createRaceSession } from '../../src/engine/race';
 import { Rng } from '../../src/engine/rng';
-import { provisionWeekendTyres, takeTyreSet, weekendTyreKey } from '../../src/engine/tyres';
+import { canRunTyreStrategy, provisionWeekendTyres, takeTyreSet, weekendTyreKey } from '../../src/engine/tyres';
+import { createWeekend } from '../../src/engine/weekend';
 import type { TyreSet } from '../../src/engine/types';
 import { advanceUntil, act, newTestGame, tryAct } from '../helpers';
 
 describe('physical tyre sets and pit crew timing', () => {
+  it('provisions the real 2026 standard-weekend 2-3-8 dry allocation and 4-3 wet allocation', () => {
+    const state = newTestGame(12);
+    state.weekend = createWeekend(state, new Rng(12));
+    const inventory = state.teams[state.meta.playerTeamId].tyreInventory!.c1;
+    const count = (compound: string) => inventory.filter(set => set.compound === compound).length;
+    expect(count('soft')).toBe(8);
+    expect(count('medium')).toBe(3);
+    expect(count('hard')).toBe(2);
+    expect(count('inter')).toBe(4);
+    expect(count('wet')).toBe(3);
+  });
   it('requires each player driver to return the configured number of sets after practice', () => {
     let state = advanceUntil(newTestGame(41), s => s.season.phase === 'practice');
     const allocatedDriver = state.teams[state.meta.playerTeamId].cars[0].driverId!;
@@ -16,16 +28,16 @@ describe('physical tyre sets and pit crew timing', () => {
     expect(state.teams[state.meta.playerTeamId].tyreInventory![allocatedDriver].some(set => set.compound === state.rules.fullWetCompound)).toBe(true);
     state = act(state, { type: 'RUN_PRACTICE' });
     const request = state.weekend!.practiceReturn!;
-    expect(request.required).toBe(1);
+    expect(request.required).toBe(2);
     expect(request.driverIds).toHaveLength(2);
     const [firstDriver, secondDriver] = request.driverIds;
-    const firstSet = state.teams[state.meta.playerTeamId].tyreInventory![firstDriver].find(set => !set.returned)!;
+    const firstSets = request.eligibleSetIds[firstDriver].slice(0, request.required);
     expect(tryAct(state, { type: 'RETURN_PRACTICE_TYRES', driverId: firstDriver, setIds: [] }).ok).toBe(false);
-    state = act(state, { type: 'RETURN_PRACTICE_TYRES', driverId: firstDriver, setIds: [firstSet.id] });
+    state = act(state, { type: 'RETURN_PRACTICE_TYRES', driverId: firstDriver, setIds: firstSets });
     expect(state.weekend!.practiceReturn!.driverIds).toEqual([secondDriver]);
-    const secondSet = state.teams[state.meta.playerTeamId].tyreInventory![secondDriver].find(set => !set.returned)!;
-    state = act(state, { type: 'RETURN_PRACTICE_TYRES', driverId: secondDriver, setIds: [secondSet.id] });
-    expect(state.teams[state.meta.playerTeamId].tyreInventory![firstDriver].find(set => set.id === firstSet.id)?.returned).toBe(true);
+    const secondSets = request.eligibleSetIds[secondDriver].slice(0, request.required);
+    state = act(state, { type: 'RETURN_PRACTICE_TYRES', driverId: secondDriver, setIds: secondSets });
+    expect(firstSets.every(id => state.teams[state.meta.playerTeamId].tyreInventory![firstDriver].find(set => set.id === id)?.returned)).toBe(true);
     expect(state.season.phase).toBe('practice'); // normal weekends continue to FP2
   });
 
@@ -86,6 +98,23 @@ describe('physical tyre sets and pit crew timing', () => {
     }
   });
 
+  it('protects two new medium sets for sprint qualifying', () => {
+    let state = newTestGame(46);
+    state.season.roundIndex = state.calendar.findIndex(round => round.sprint);
+    state.weekend = createWeekend(state, new Rng(46));
+    state.season.phase = 'practice';
+    const team = state.teams[state.meta.playerTeamId];
+    const driverId = team.cars[0].driverId!;
+    state.weekend.plans[driverId].practiceTyre = 'medium';
+    state.weekend.weather.practice = 'dry';
+    state = act(state, { type: 'RUN_PRACTICE' });
+    const request = state.weekend!.practiceReturn!;
+    const eligibleMediums = team.tyreInventory![driverId].filter(set => set.compound === 'medium' && request.eligibleSetIds[driverId].includes(set.id));
+    expect(eligibleMediums).toHaveLength(2);
+    const protectedNewMediums = team.tyreInventory![driverId].filter(set => set.compound === 'medium' && set.state === 'new' && !request.eligibleSetIds[driverId].includes(set.id));
+    expect(protectedNewMediums).toHaveLength(2);
+  });
+
   it('issues and wears the correct tyre allocation in round two', () => {
     let state = advanceUntil(newTestGame(48), s => s.season.roundIndex === 1 && s.season.phase === 'practice');
     const team = state.teams[state.meta.playerTeamId];
@@ -127,6 +156,11 @@ describe('physical tyre sets and pit crew timing', () => {
     const team = state.teams[state.meta.playerTeamId];
     const driverId = team.cars[0].driverId!;
     const compound = state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0];
+    state.weekend!.weather.race = 'dry';
+    state.weekend!.forecast.race = 0;
+    state.weekend!.forecast.raceRainWindow = null;
+    state.weekend!.raceWeatherSeed = 1;
+    state.tracks[state.calendar[state.season.roundIndex].trackId].rainChance = 0;
     const key = weekendTyreKey(state);
     const target = team.tyreInventory![driverId].find(set => set.compound === compound)!;
     for (const set of team.tyreInventory![driverId]) if (set.compound === compound && set.id !== target.id) set.returned = true;
@@ -136,5 +170,26 @@ describe('physical tyre sets and pit crew timing', () => {
     expect(car.tyreSetId).toBe(target.id);
     expect(car.tyreAge).toBe(9);
     expect(takeTyreSet(team, driverId, compound, key, target.id)).toBeNull();
+  });
+
+  it('rejects strategies that require returned or unavailable physical sets', () => {
+    const state = advanceUntil(newTestGame(49), s => s.season.phase === 'race');
+    const team = state.teams[state.meta.playerTeamId];
+    const driverId = team.cars[0].driverId!;
+    const key = weekendTyreKey(state);
+    const [soft, medium] = state.rules.dryCompounds;
+    expect(canRunTyreStrategy(team, driverId, key, [soft, medium])).toBe(true);
+    const softs = team.tyreInventory![driverId].filter(set => set.compound === soft && !set.returned);
+    for (const set of softs.slice(1)) set.returned = true;
+    expect(canRunTyreStrategy(team, driverId, key, [soft, medium, soft])).toBe(true);
+    expect(canRunTyreStrategy(team, driverId, key, [soft, soft])).toBe(false);
+    const mediums = team.tyreInventory![driverId].filter(set => set.compound === medium && !set.returned);
+    for (const set of mediums.slice(2)) set.returned = true;
+    expect(canRunTyreStrategy(team, driverId, key, [medium, medium, medium])).toBe(true);
+    softs[0].returned = true;
+    expect(canRunTyreStrategy(team, driverId, key, [soft, medium])).toBe(false);
+    expect(canRunTyreStrategy(team, driverId, key, [medium, medium])).toBe(true);
+    mediums[1].returned = true;
+    expect(canRunTyreStrategy(team, driverId, key, [medium, medium])).toBe(false);
   });
 });

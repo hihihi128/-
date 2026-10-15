@@ -4,6 +4,16 @@
 rules:
   seasonYear: 2026          # 起始赛季年份
 
+  # 统一性能模型（仅为游戏平衡参考值，并非真实 F1 测量数据）
+  performance:
+    qualiSetupMax: 0.65
+    raceSetupMax: 0.50
+    qualiBonusMax: 0.20
+    practiceWearKnowledgeMax: 0.12
+    temperatureLapMax: 0.80
+    overheatWearMax: 0.28
+    trackFitMax: 0.12
+
   # ── 积分（2026 规则：与 2025 相同，最快圈不加分）──
   # pointsRace: [25, 18, 15, 12, 10, 8, 6, 4, 2, 1]   # 正赛积分
   # pointsSprint: [8, 7, 6, 5, 4, 3, 2, 1]            # 冲刺赛积分
@@ -45,11 +55,12 @@ rules:
   #     aeroHours: 24            # 风洞时长消耗
   #     unitCost: 0.8            # 额外生产一件的成本
   #     crashDamage: 0.3         # 撞车退赛时损毁概率
-  #   power_unit:
-  #     name: 内燃机             # 2026：取消 MGU-H，内燃机与电能约 50:50
-  #     developable: false       # 例：禁止研发内燃机
-  #   ers:
-  #     name: 能量回收系统       # 2026：MGU-K 提升到 350kW；影响动力和超车模式的收益
+  #   ice: { name: 内燃机（ICE）, weights: { power: 0.24 } }
+  #   turbocharger: { name: 涡轮增压器（TC）, weights: { power: 0.16 } }
+  #   mgu_k: { name: 动能回收电机（MGU-K）, weights: { power: 0.22, efficiency: 0.03 } }
+  #   energy_store: { name: 储能系统（ES）, weights: { power: 0.12, efficiency: 0.01 } }
+  #   control_electronics: { name: 控制电子（CE）, weights: { power: 0.06, efficiency: 0.01 } }
+  #   exhaust: { name: 排气系统（EXH）, weights: { power: 0.1 } }
 
   # ── 2026 赛事规则 ──
   # qualiFinalists: 10        # Q3 保留几台车；其余平均分到 Q1/Q2 淘汰（22 台车 → 6/6/10）
@@ -58,15 +69,19 @@ rules:
   # boostAttack: 0.12         # 「进攻」驾驶模式（Boost 按钮）进攻时的额外优势
   # boostDefence: 0.1         # 前车同样处于「进攻」模式时可抵消的优势
   # puAllocation:             # 每位车手每赛季可用的动力单元元件数（超出罚退）
-  #   power_unit: 4           #   内燃机（含涡轮、排气）
-  #   ers: 3                  #   能量回收系统（MGU-K、电池、控制电子）
+  #   ice: 4                  # 内燃机
+  #   turbocharger: 4         # 涡轮增压器
+  #   mgu_k: 3                # 动能回收电机
+  #   energy_store: 3         # 储能系统
+  #   control_electronics: 3  # 控制电子
+  #   exhaust: 4              # 排气系统总成
   # puPenaltyFirst: 10        # 第一次超出配额罚退位数
   # puPenaltyNext: 5          # 之后每次超出罚退位数
   # aduo:                     # ADUO 动力单元追赶机制（车队数据中 worksTeam 标记厂商车队）
   #   enabled: true
-  #   parts: [power_unit, ers] # 计入认证升级次数、由厂商供应给客户车队的零件
-  #   measurePart: power_unit  # 评估用的零件（2026 规则只评估内燃机）
-  #   baseUpgrades: 1          # 每赛季基础认证升级次数（开工即计数，取消返还）
+  #   parts: [ice, turbocharger, mgu_k, energy_store, control_electronics, exhaust]
+  #   measurePart: ice         # ADUO 评估基准
+  #   baseUpgrades: 0          # 赛季开始没有基础机会；研发和生产不受限，首次装车时消耗 ADUO 认证机会
   #   evalRounds: [6, 12, 18]  # 第几站正赛后评估（最后一站不评估：之后进入赛季结束，补偿重置）
   #   pctPerPoint: 0.5         # 1 点零件性能差距折合的百分比
   #   tier1Deficit: 2          # 落后 >= 2% 为一档
@@ -80,11 +95,11 @@ rules:
 
   # ── 轮胎 ──
   # tyres:
-  #   soft:   { name: 软胎, short: S, pace: -0.65, deg: 0.095, cliff: 17, wet: false, color: '#e10600' }
-  #   medium: { name: 中性胎, short: M, pace: 0, deg: 0.06, cliff: 27, wet: false, color: '#ffd400' }
-  #   hard:   { name: 硬胎, short: H, pace: 0.5, deg: 0.04, cliff: 40, wet: false, color: '#f2f2f2' }
-  #   inter:  { name: 半雨胎, short: I, pace: 0.15, deg: 0.055, cliff: 34, wet: true, color: '#3fb950' }
-  #   wet:    { name: 全雨胎, short: W, pace: 0.75, deg: 0.04, cliff: 42, wet: true, color: '#2387d9' }
+  #   soft:   { name: 软胎, short: S, pace: -0.65, deg: 0.095, cliff: 17, wet: false, color: '#e10600', temperatureWindow: [80, 100], warmupRate: 0.42 }
+  #   medium: { name: 中性胎, short: M, pace: 0, deg: 0.06, cliff: 27, wet: false, color: '#ffd400', temperatureWindow: [85, 105], warmupRate: 0.34 }
+  #   hard:   { name: 硬胎, short: H, pace: 0.5, deg: 0.04, cliff: 40, wet: false, color: '#f2f2f2', temperatureWindow: [90, 110], warmupRate: 0.27 }
+  #   inter:  { name: 半雨胎, short: I, pace: 0.15, deg: 0.055, cliff: 34, wet: true, color: '#3fb950', temperatureWindow: [62, 82], warmupRate: 0.38 }
+  #   wet:    { name: 全雨胎, short: W, pace: 0.75, deg: 0.04, cliff: 42, wet: true, color: '#2387d9', temperatureWindow: [58, 78], warmupRate: 0.40 }
   # dryCompounds: [soft, medium, hard]
   # wetCompound: inter
   # fullWetCompound: wet
@@ -137,7 +152,7 @@ rules:
   #   pressurePerRace: 8
   #   aduoProgressPerLobby: 34
   # redBull:
-  #   mistakeMultiplier: 1.65  # RB23 准备不足造成的车手失误概率倍率
+  #   mistakeMultiplier: 1.65  # RB22 准备不足造成的车手失误概率倍率
   #   startGpRetention: 58
   #   gpLossPerRace: 12
   #   gpNegotiationGain: 25
@@ -153,7 +168,7 @@ rules:
   #   aduoPressureGain: 28
   #   mediationGain: 20
   #   neweyProgressGain: 25
-  #   aduoPuBuff: 8
+  #   aduoPuBuff: 4.2
   #   chassisBuff: 2
   # racingBulls:
   #   recallChance: 0.05
@@ -184,9 +199,9 @@ rules:
   #   startSuccessionReadiness: 25
   #   successionThreshold: 55
   #   dismissVowlesConfidence: 20
-  # randomEvents:              # 每周 3–4 次；约 80% 是日常小事；每次持续 2–3 轮对话
-  #   minPerWeek: 3
-  #   maxPerWeek: 4
+  # randomEvents:              # 每周最多 1 次；约 80% 是日常小事；每次持续 2–3 轮对话
+  #   minPerWeek: 1
+  #   maxPerWeek: 1
   #   routineWeight: 80
   #   noneWeight: 0            # 仅保留旧存档兼容
   #   driverInjuryWeight: 7
@@ -194,4 +209,4 @@ rules:
   #   partIssueWeight: 7
   #   minDialogueTurns: 2
   #   maxDialogueTurns: 3
-  # 若要关闭随机事件，请同时把 minPerWeek 与 maxPerWeek 设为 0。
+  # 随机事件每周最多一次。若要关闭，请同时把 minPerWeek 与 maxPerWeek 设为 0。

@@ -13,6 +13,8 @@ import {
   worksTeamFor,
 } from './aduo';
 import { AMBITIONS, FACILITIES, LABELS, STAFF_ROLES } from './defaults';
+import { ferrariTurboAdvantageActive } from './nextTeamSpecials';
+import { isPowerUnitPart } from './powerunit';
 import {
   allocationGap,
   previewFacility,
@@ -27,10 +29,13 @@ import { fanCamps, fanGap } from './ferrari';
 import { dismissalReason } from './teamSpecials';
 import { effectiveSetup, SUPERNATURAL_LIMITS } from './supernatural';
 import { teammateRelationship } from './driverBehavior';
+import { requiresWetGridTyreChoice } from './race';
 import { describeLog } from './protocol';
 import { carRatings, disclosedPerf, driverOverall, findSpec, moraleLabel, teamPaceRanking, trackScore, type CarRatings } from './ratings';
 import { nextActionFor, sortedDrivers, sortedTeams, type NextAction } from './season';
-import { degFactor, effectiveCliff, strategyOptions, type StrategyOption } from './strategy';
+import { degFactor, predictedTyreLife, strategyOptions, type StrategyOption } from './strategy';
+import { canRunTyreStrategy, weekendTyreKey } from './tyres';
+import { buildPerformanceContext, practiceEffects } from './performance';
 import type {
   DriverState,
   GameState,
@@ -49,7 +54,6 @@ import type {
 } from './types';
 import { round1 } from './util';
 import { predictedStationaryTime } from './pitstop';
-import { weekendTyreKey } from './tyres';
 import { currentRound } from './weekend';
 import { marketCloseBlockers } from './market';
 
@@ -63,6 +67,7 @@ export interface PartView {
   rel: number;
   verified: boolean;
   expected: [number, number] | null;
+  homologated: boolean;
 }
 
 export interface CarView {
@@ -84,6 +89,7 @@ export interface StockView {
   rel: number;
   verified: boolean;
   expected: [number, number] | null;
+  homologated: boolean;
   fittedOn: number[];
 }
 
@@ -139,6 +145,12 @@ export interface FerrariView {
   /** 还剩几站适应期（适应期内不会被撤职） */
   graceLeft: number;
   log: Array<{ at: string; text: string }>;
+  aduoAlliance: boolean;
+  aduoLobbyGranted: boolean;
+  turboStartGainMin: number;
+  turboStartGainMax: number;
+  turboSpoolSeconds: number;
+  turboAdvantageActive: boolean;
 }
 
 export interface AduoView {
@@ -183,11 +195,19 @@ export interface WeekendDriverView {
   driverName: string;
   plan: DriverPlan;
   setup: SetupState;
+  performance?: { trackFit: number; practice: { quali: number; race: number; wearMultiplier: number } };
+  performanceSummary?: { qualiGain: number; raceGain: number; wearDelta: number; trackFit: number; trackKnowledge: number; tyres: Record<string, { temperatureWindow: [number, number]; warmupRate: number }> };
   supernaturalSetup?: { base: SetupState; offset: { confidence: number; tyreKnowledge: number }; expires: string };
   options: StrategyOption[];
   sprintOptions: StrategyOption[];
   tyreLife: Record<string, number>;
   tyreSets: Array<{ id: string; compound: string; state: 'new' | 'used'; laps: number; returned: boolean; returnEligible: boolean }>;
+}
+
+function tyreThermalState(state: GameState, car: import('./types').LiveRaceCar): 'cold' | 'optimal' | 'hot' {
+  const [low, high] = state.rules.tyres[car.tyre]?.temperatureWindow ?? [80, 105];
+  const temperature = car.tyreTemperature ?? low;
+  return temperature < low ? 'cold' : temperature > high ? 'hot' : 'optimal';
 }
 
 export type RevealedWeather = Record<keyof WeekendState['weather'], Weather | null>;
@@ -217,10 +237,10 @@ export interface LiveRaceView {
   raceControl: 'sc' | 'vsc' | 'red_flag' | null;
   restart: 'standing' | 'rolling' | null;
   weather: { rain: number; surface: 'dry' | 'damp' | 'wet'; forecast: import('./types').RaceForecast };
-  timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; pits: number }>;
-  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; iceHealth: number; electricalHealth: number; puTemperature: number; puStatus: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
+  timing: Array<{ driverId: string; teamId: string; pos: number | null; status: 'running' | 'dnf'; gap: string; tyre: string; tyreAge: number; tyreTemperature?: number; tyreState?: 'cold' | 'optimal' | 'hot' | 'legacy'; pits: number }>;
+  playerCars: Array<{ driverId: string; tyre: string; tyreAge: number; tyreTemperature?: number; tyreThermalState?: 'cold' | 'optimal' | 'hot' | 'legacy'; tyreState: 'new' | 'used'; damage: boolean; partial: boolean; energy: number; paceMode: string; energyMode: string; pitTiming: string; iceHealth: number; electricalHealth: number; weakestPuHealth: number; weakestPuName: string; puTemperature: number; puStatus: string; predictedStationary: number; lastPit: import('./types').PitStopRecord | null }>;
   events: Array<{ id: string; lap: number; type: string; text: string; drivers: string[]; driverNames: string[]; key: boolean }>;
-  pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number } | null;
+  pendingDecision: { id: string; lap: number; reasons: string[]; eligibleDriverIds: string[]; expectedPitLoss: number; startTyreOptions?: import('./types').Compound[] } | null;
   teamOrders: import('./types').TeamOrders;
 }
 
@@ -314,7 +334,7 @@ export interface GameView {
   mclaren: GameState['mclaren'];
   mercedes: GameState['mercedes'];
   redBull: (GameState['redBull'] & { verstappenPosition?: number }) | null;
-  specialRules: Pick<GameState['rules'], 'mclaren' | 'mercedes' | 'redBull'>;
+  specialRules: Pick<GameState['rules'], 'ferrari' | 'mclaren' | 'mercedes' | 'redBull'>;
   astonMartin: GameState['astonMartin'];
   racingBulls: (GameState['racingBulls'] & { candidates?: Array<{ id: string; name: string }> }) | null;
   audi: GameState['audi'];
@@ -339,6 +359,7 @@ export interface GameView {
     fullWetCompound: string;
     mandatoryCompounds: number;
     aiLimits: GameState['rules']['aiLimits'];
+    tyres: Record<string, { temperatureWindow: [number, number]; warmupRate: number }>;
   };
 }
 
@@ -354,6 +375,7 @@ function partView(team: TeamState, type: string, specId: string, name: string): 
     rel: s?.rel ?? 0,
     verified: s?.verified ?? true,
     expected: s?.expected ?? null,
+    homologated: s?.homologated !== false,
   };
 }
 
@@ -398,7 +420,7 @@ function driverView(state: GameState, d: DriverState, positions: Map<string, num
       name: state.rules.parts[type]?.name ?? type,
       used: d.puUsed?.[type] ?? 1,
       limit,
-      health: type === 'power_unit' || type === 'ers'
+      health: isPowerUnitPart(type)
         ? Math.max(0, 100 - (car && car.puWear?.[type]?.specId === car.fitted[type] ? car.puWear[type]!.wear : 0))
         : 100,
     })),
@@ -446,7 +468,7 @@ function aduoView(state: GameState): AduoView {
 
 function ferrariView(state: GameState): FerrariView | null {
   const f = state.ferrari;
-  if (!f) return null;
+  if (!f || state.teams[state.meta.playerTeamId]?.special !== 'ferrari') return null;
   const r = state.rules.ferrari;
   return {
     media: state.teams[state.meta.playerTeamId].mediaReputation,
@@ -462,6 +484,12 @@ function ferrariView(state: GameState): FerrariView | null {
         ? Math.max(0, r.graceRounds - state.season.roundIndex - (state.weekend?.roundIndex === state.season.roundIndex && state.weekend.race ? 1 : 0))
         : 0,
     log: [...f.log].reverse(),
+    aduoAlliance: f.aduoAlliance,
+    aduoLobbyGranted: f.aduoLobbyGranted,
+    turboStartGainMin: r.turboStartGainMin,
+    turboStartGainMax: r.turboStartGainMax,
+    turboSpoolSeconds: state.fiaMeeting?.ferrariTurboSpoolSeconds ?? 0,
+    turboAdvantageActive: ferrariTurboAdvantageActive(state),
   };
 }
 
@@ -538,6 +566,7 @@ export function buildView(state: GameState): GameView {
         rel: s.rel,
         verified: s.verified,
         expected: s.expected,
+        homologated: s.homologated !== false,
         fittedOn,
       });
     }
@@ -681,26 +710,27 @@ export function buildView(state: GameState): GameView {
     supernatural: supernaturalView(state),
     flags: state.flags,
     ferrari: ferrariView(state),
-    mclaren: state.mclaren ?? null,
-    mercedes: state.mercedes ?? null,
-    redBull: state.redBull ? {
+    mclaren: team.special === 'mclaren' ? state.mclaren ?? null : null,
+    mercedes: team.special === 'mercedes' ? state.mercedes ?? null : null,
+    redBull: team.special === 'red_bull' && state.redBull ? {
       ...state.redBull,
       verstappenPosition: driverPos.get('verstappen') ?? 0,
     } : null,
     specialRules: {
+      ferrari: { ...rules.ferrari },
       mclaren: { ...rules.mclaren },
       mercedes: { ...rules.mercedes },
       redBull: { ...rules.redBull },
     },
-    astonMartin: state.astonMartin ?? null,
-    racingBulls: state.racingBulls ? {
+    astonMartin: team.special === 'aston_martin' ? state.astonMartin ?? null : null,
+    racingBulls: team.special === 'racing_bulls' && state.racingBulls ? {
       ...state.racingBulls,
       candidates: state.racingBulls.pendingRecall?.candidateIds.map(id => ({ id, name: state.drivers[id]?.name ?? id })) ?? [],
     } : null,
-    audi: state.audi ?? null,
-    alpine: state.alpine ?? null,
-    haas: state.haas ?? null,
-    williams: state.williams ?? null,
+    audi: team.special === 'audi' ? state.audi ?? null : null,
+    alpine: team.special === 'alpine' ? state.alpine ?? null : null,
+    haas: team.special === 'haas' ? state.haas ?? null : null,
+    williams: team.special === 'williams' ? state.williams ?? null : null,
     randomEvents: state.randomEvents,
     fiaMeeting: state.fiaMeeting,
     nextSpecialRules: {
@@ -728,6 +758,7 @@ export function buildView(state: GameState): GameView {
       fullWetCompound: rules.fullWetCompound,
       mandatoryCompounds: rules.mandatoryCompounds,
       aiLimits: rules.aiLimits,
+      tyres: Object.fromEntries(Object.entries(rules.tyres).map(([compound, tyre]) => [compound, { temperatureWindow: (tyre.temperatureWindow ?? (tyre.wet ? [58, 78] : [80, 105])) as [number, number], warmupRate: tyre.warmupRate ?? (tyre.wet ? .4 : .32) }])),
     },
   };
 }
@@ -749,7 +780,11 @@ function buildWeekendView(state: GameState): WeekendView | null {
       if (!plan || !naturalSetup) continue;
       const setup = effectiveSetup(state, d.id, naturalSetup);
       const ratings = carRatings(team, car, state.rules, 'disclosed');
-      const ctx = { driverTyre: d.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge };
+      const performanceContext = buildPerformanceContext({ driverTyre: d.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
+      const practice = practiceEffects(setup, state.rules, performanceContext.trackFit);
+      const baselineSetup = w.practiceBaseline?.[d.id];
+      const baselinePractice = baselineSetup ? practiceEffects(baselineSetup, state.rules, performanceContext.trackFit) : null;
+      const ctx = { driverTyre: d.attrs.tyre, carTyre: ratings.tyre, paceMode: plan.paceMode, knowledge: setup.tyreKnowledge, performanceContext };
       const sprintLaps = Math.max(3, Math.round(track.laps * state.rules.sprintLapsFactor));
       const factor = degFactor(track, ctx);
       drivers.push({
@@ -757,11 +792,30 @@ function buildWeekendView(state: GameState): WeekendView | null {
         driverName: d.name,
         plan,
         setup,
+        performance: { trackFit: performanceContext.trackFit, practice },
+        performanceSummary: baselinePractice ? {
+          qualiGain: round1(practice.quali - baselinePractice.quali),
+          raceGain: round1(practice.race - baselinePractice.race),
+          wearDelta: round1((practice.wearMultiplier - baselinePractice.wearMultiplier) * 100),
+          trackFit: performanceContext.trackFit,
+          trackKnowledge: setup.trackKnowledge ?? 0,
+          tyres: Object.fromEntries(Object.entries(state.rules.tyres).map(([compound, tyre]) => [compound, { temperatureWindow: (tyre.temperatureWindow ?? (tyre.wet ? [58, 78] : [80, 105])) as [number, number], warmupRate: tyre.warmupRate ?? (tyre.wet ? .4 : .32) }])),
+        } : undefined,
         supernaturalSetup: w.supernaturalCarEffects?.[d.id] ? { base: naturalSetup, offset: w.supernaturalCarEffects[d.id], expires: '本站周末结束后失效' } : undefined,
         // 玩家看到的是「干地」策略预测（雨战由引擎自动换雨胎）
-        options: strategyOptions(state.rules, track, track.laps, ctx, { wet: false, sprint: false }).slice(0, 6),
-        sprintOptions: roundDef?.sprint ? strategyOptions(state.rules, track, sprintLaps, ctx, { wet: false, sprint: true }) : [],
-        tyreLife: Object.fromEntries(Object.entries(state.rules.tyres).map(([k, t]) => [k, round1(effectiveCliff(t, factor))])),
+        options: strategyOptions(state.rules, track, track.laps, ctx, {
+          wet: false,
+          sprint: false,
+          isAvailable: compounds => canRunTyreStrategy(team, d.id, weekendTyreKey(state, w.roundIndex), compounds),
+        }).slice(0, 6),
+        sprintOptions: roundDef?.sprint
+          ? strategyOptions(state.rules, track, sprintLaps, ctx, {
+            wet: false,
+            sprint: true,
+            isAvailable: compounds => canRunTyreStrategy(team, d.id, weekendTyreKey(state, w.roundIndex), compounds),
+          })
+          : [],
+        tyreLife: Object.fromEntries(Object.entries(state.rules.tyres).map(([k, t]) => [k, round1(predictedTyreLife(t, factor, { context: performanceContext, paceMode: plan.paceMode, rules: state.rules }))])),
         tyreSets: (team.tyreInventory?.[d.id] ?? []).filter(set => set.weekendKey === weekendTyreKey(state, w.roundIndex)).map(set => ({ id: set.id, compound: set.compound, state: set.state, laps: set.laps, returned: set.returned, returnEligible: !!w.practiceReturn?.eligibleSetIds?.[d.id]?.includes(set.id) })),
       });
     }
@@ -775,14 +829,17 @@ function buildWeekendView(state: GameState): WeekendView | null {
         const timing = [...running, ...Object.values(live.cars).filter(c => c.status === 'dnf').map(car => ({ id: car.driverId, index: -1, car }))].map(({ car, index }) => ({
           driverId: car.driverId, teamId: car.teamId, pos: car.status === 'running' ? index + 1 : null, status: car.status,
           gap: car.status === 'dnf' ? 'DNF' : index === 0 ? '领跑' : `+${Math.max(0, car.cumulativeTime - (leader?.cumulativeTime ?? car.cumulativeTime)).toFixed(1)}s`,
-          tyre: car.tyre, tyreAge: car.tyreAge, pits: car.pits,
+          tyre: car.tyre, tyreAge: car.tyreAge, tyreTemperature: live.physicsVersion === 2 ? car.tyreTemperature : undefined, tyreState: (live.physicsVersion === 2 ? tyreThermalState(state, car) : 'legacy') as 'cold' | 'optimal' | 'hot' | 'legacy', pits: car.pits,
         }));
         return {
           id: live.id, revision: live.revision, kind: live.kind, completedLaps: live.completedLaps, totalLaps: live.totalLaps, stage: live.stage,
           raceControl: live.redFlag?.active ? 'red_flag' : live.scLeft > 0 ? 'sc' : live.vscLeft > 0 ? 'vsc' : null,
           restart: live.redFlag?.restartPending ? live.redFlag.restart : null,
           weather: { rain: live.rain, surface: live.surface, forecast: live.forecast }, timing,
-          playerCars: Object.values(live.cars).filter(c => c.player).map(c => ({ driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, tyreState: state.teams[c.teamId]?.tyreInventory?.[c.driverId]?.find(set => set.id === c.tyreSetId)?.state ?? 'used', damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming, iceHealth: c.iceHealth ?? 100, electricalHealth: c.electricalHealth ?? 100, puTemperature: c.puTemperature ?? 78, puStatus: c.puStatus ?? 'normal', predictedStationary: predictedStationaryTime(state.teams[c.teamId], c.repairPending), lastPit: c.pitStops?.at(-1) ?? null })),
+          playerCars: Object.values(live.cars).filter(c => c.player).map(c => {
+            const weakest = Object.entries(c.puComponentHealth ?? {}).sort((a, b) => (a[1] ?? 100) - (b[1] ?? 100))[0];
+            return { driverId: c.driverId, tyre: c.tyre, tyreAge: c.tyreAge, tyreTemperature: live.physicsVersion === 2 ? c.tyreTemperature : undefined, tyreThermalState: live.physicsVersion === 2 ? tyreThermalState(state, c) : 'legacy', tyreState: state.teams[c.teamId]?.tyreInventory?.[c.driverId]?.find(set => set.id === c.tyreSetId)?.state ?? 'used', damage: c.damage > 0, partial: c.partial > 0, energy: c.energy, paceMode: c.plan.paceMode, energyMode: c.energyMode, pitTiming: c.plan.pitTiming, iceHealth: c.iceHealth ?? 100, electricalHealth: c.electricalHealth ?? 100, weakestPuHealth: weakest?.[1] ?? 100, weakestPuName: state.rules.parts[weakest?.[0] ?? '']?.name ?? '动力单元', puTemperature: c.puTemperature ?? 78, puStatus: c.puStatus ?? 'normal', predictedStationary: predictedStationaryTime(state.teams[c.teamId], c.repairPending), lastPit: c.pitStops?.at(-1) ?? null };
+          }),
           events: live.events.slice(-20).map(event => {
             const names = event.drivers.map(id => state.drivers[id]?.short ?? state.drivers[id]?.name ?? id);
             let text = event.text;
@@ -790,7 +847,16 @@ function buildWeekendView(state: GameState): WeekendView | null {
             return { ...event, text, drivers: event.drivers, driverNames: names };
           }),
           teamOrders: { ...live.teamOrders },
-          pendingDecision: live.pendingDecision ? { id: live.pendingDecision.id, lap: live.pendingDecision.lap, reasons: live.pendingDecision.reasons, eligibleDriverIds: live.pendingDecision.eligibleDriverIds, expectedPitLoss: (track?.pitLoss ?? 0) * (live.scLeft > 0 ? .5 : live.vscLeft > 0 ? .7 : 1) } : null,
+          pendingDecision: live.pendingDecision ? {
+            id: live.pendingDecision.id,
+            lap: live.pendingDecision.lap,
+            reasons: live.pendingDecision.reasons,
+            eligibleDriverIds: live.pendingDecision.eligibleDriverIds,
+            expectedPitLoss: (track?.pitLoss ?? 0) * (live.scLeft > 0 ? .5 : live.vscLeft > 0 ? .7 : 1),
+            ...(live.stage === 'grid' && live.completedLaps === 0
+              ? { startTyreOptions: requiresWetGridTyreChoice(live) ? [state.rules.wetCompound, state.rules.fullWetCompound] : [...state.rules.dryCompounds, state.rules.wetCompound, state.rules.fullWetCompound] }
+              : {}),
+          } : null,
         };
       })();
   return {

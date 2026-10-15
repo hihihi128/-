@@ -89,6 +89,8 @@ describe('提示词', () => {
     expect(p).toContain('待叙述事件');
     expect(p).toContain('F1M_UPDATE');
     expect(p).toContain('排位');
+    expect(p).toContain('正文保密规则');
+    expect(p).toContain('某个 XX 分水平的工程师做了某事');
     expect(p.length).toBeLessThan(4000);
   });
 
@@ -122,5 +124,13 @@ describe('提示词', () => {
     const s = advanceUntil(newTestGame(3), x => x.season.phase === 'practice');
     const p = buildStatePrompt(s);
     expect(p).toMatch(/正赛降雨概率 \d+%/);
+  });
+
+  it('实时比赛暂停原因使用中文标签而非内部枚举值', () => {
+    let s = advanceUntil(newTestGame(3), x => x.season.phase === 'race');
+    s = act(s, { type: 'START_RACE', kind: 'race' });
+    const p = buildStatePrompt(s);
+    expect(p).toContain('当前暂停等待领队确认：发车');
+    expect(p).not.toContain('当前暂停等待领队确认：grid');
   });
 });

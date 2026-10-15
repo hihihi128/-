@@ -23,19 +23,28 @@ describe('特殊事件多轮谈判协议', () => {
   it('最低轮数前只能继续谈判', () => {
     const definition = NEGOTIATIONS.aduo_alliance;
     expect(() => parseNegotiationReply(
-      '{"speaker":"法拉利代表","reply":"我们同意。","status":"agreement","choice":"alliance"}',
+      '{"speaker":"ADUO 联盟协调代表","reply":"我们同意。","status":"agreement","choice":"alliance"}',
       definition,
       1,
       2,
       4,
     )).toThrow('至少需要 2 轮');
     expect(parseNegotiationReply(
-      '{"speaker":"法拉利代表","reply":"先说明信息共享边界。","status":"continue","choice":null}',
+      '{"speaker":"ADUO 联盟协调代表","reply":"先说明信息共享边界。","status":"continue","choice":null}',
       definition,
       1,
       2,
       4,
     )).toMatchObject({ status: 'continue', choice: null });
+  });
+
+  it('法拉利联盟谈判不受 AI 奥迪已经结盟影响', () => {
+    const loaded = normalizeDatabase(cardSources());
+    if (!loaded.db) throw new Error('card database failed to load');
+    const state = createGame(loaded.db, { playerTeamId: 'ferrari', principalName: '测试领队', seed: 8, gameId: 'ferrari-alliance', now: 1 });
+    state.audi!.alliance = true;
+    expect(NEGOTIATIONS.aduo_alliance.unavailable(state)).toBeNull();
+    expect(NEGOTIATIONS.aduo_alliance.context(state)).toContain('法拉利尚有');
   });
 
   it('协议只能映射到事件白名单动作', () => {

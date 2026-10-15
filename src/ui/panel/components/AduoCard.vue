@@ -19,7 +19,7 @@ const maxGap = computed(() => Math.max(...(props.aduo.last?.results.map(row => r
       <span v-else class="badge team">厂商车队</span>
     </div>
     <div class="aduo-stats">
-      <div><span>认证升级</span><b>{{ aduo.upgradesUsed }}/{{ aduo.upgradesTotal }}</b><small>剩余 {{ aduo.upgradesLeft }} 次</small></div>
+      <div><span>认证机会</span><b>{{ aduo.upgradesUsed }}/{{ aduo.upgradesTotal }}</b><small>剩余 {{ aduo.upgradesLeft }} 次 · 首次装车消耗</small></div>
       <div><span>预算帽额度</span><b>+${{ aduo.capBonus.toFixed(1) }}M</b><small>{{ aduo.isCustomer ? '供应商' : '本车队' }}本赛季追加</small></div>
       <div><span>研发周期</span><b>×{{ aduo.weeksMultiplier.toFixed(1) }}</b><small>公开档位对应倍率</small></div>
       <div><span>下次评估</span><b>{{ nextEval }}</b><small>评估站：{{ aduo.evalRounds.map(x => `R${x}`).join(' · ') }}</small></div>
@@ -32,7 +32,8 @@ const maxGap = computed(() => Math.max(...(props.aduo.last?.results.map(row => r
         <span>{{ row.deficitPct.toFixed(1) }}%</span><span class="tier" :class="`t${row.tier}`">{{ row.tierName }}</span>
       </div>
     </div>
-    <div v-if="aduo.isCustomer" class="notice warn tiny">客户车队无法自行研发内燃机和能量回收系统；供应商交付的新规格将同步给客户车队。</div>
+    <div v-if="aduo.isCustomer" class="notice warn tiny">客户车队不能自行研发动力单元；供应商完成 ADUO 认证后，新规格才会交付。</div>
+    <div v-else class="notice tiny">动力单元可先研发和生产。一次 ADUO 机会会在首次装车时认证当前整批待认证规格。</div>
   </section>
 </template>
 

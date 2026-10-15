@@ -22,11 +22,12 @@ describe('法拉利：过渡领队机制', () => {
     expect(buildStatePrompt(s)).toContain('法拉利·过渡领队考核');
   });
 
-  it('其他车队没有这套机制', () => {
+  it('其他玩家看不到法拉利机制，但法拉利 AI 仍保留状态', () => {
     const s = newTestGame();
-    expect(s.ferrari ?? null).toBeNull();
+    expect(s.ferrari ?? null).not.toBeNull();
     expect(buildView(s).ferrari ?? null).toBeNull();
     expect(buildStatePrompt(s)).not.toContain('过渡领队考核');
+    expect(buildStatePrompt(s)).not.toContain('"op":"fans"');
   });
 
   it('指定优先车手：被选中一方粉丝上升，另一方下降', () => {
@@ -109,7 +110,8 @@ describe('法拉利：AI 粉丝指令', () => {
     expect(logs[2].ok).toBe(false);
 
     const other = newTestGame();
-    const l2 = applyAiCommands(other, [{ op: 'fans', driver: 'c1', delta: 3 }], { messageId: 1 });
+    const l2 = applyAiCommands(other, [{ op: 'fans', driver: 'hamilton', delta: 3 }], { messageId: 1 });
+    expect(other.ferrari!.fans.hamilton).toBe(other.rules.ferrari.startFans);
     expect(l2[0].ok).toBe(false);
   });
 

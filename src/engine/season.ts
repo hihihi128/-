@@ -13,8 +13,8 @@ import { afterSpecialRace } from './teamSpecials';
 import { afterNextTeamRace, maybeTriggerRacingBullsRecall } from './nextTeamSpecials';
 import { afterManagementRace, completeAlpineDriverExit, completeWilliamsHandover } from './managementSpecials';
 import { closeUnansweredRandomEvent } from './randomEvents';
-import { resetPuUsage, recordPuFit } from './powerunit';
-import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, type RaceExtras } from './race';
+import { isPowerUnitPart, PU_PART_TYPES, resetPuUsage, recordPuFit } from './powerunit';
+import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, wetCompoundFor, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import type { Rng } from './rng';
 import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, PracticeReturnRequest, RaceResult, TeamState } from './types';
@@ -198,7 +198,11 @@ export function doRace(state: GameState, rng: Rng, kind: 'race' | 'sprint', aiPl
   }
   while (live.stage !== 'finished') {
     if (live.pendingDecision) {
-      const choices = live.pendingDecision.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto' as const }));
+      const choices = live.pendingDecision.eligibleDriverIds.map(driverId => ({
+        driverId,
+        pit: 'auto' as const,
+        ...(live.pendingDecision?.stage === 'grid' ? { startCompound: live.cars[driverId]?.tyre ?? wetCompoundFor(state.rules, live.wetness) } : {}),
+      }));
       if (!applyRaceDecision(state, live, live.pendingDecision.id, choices)) return fail('自动策略无法处理当前决策窗口');
     } else advanceRaceSession(state, live, 'next_decision');
   }
@@ -239,17 +243,12 @@ function finalizeLiveRace(state: GameState, rng: Rng): Outcome {
     if (!car) continue;
     car.puWear ??= {};
     car.puWearPool ??= {};
-    const iceSpecId = car.fitted.power_unit;
-    const ersSpecId = car.fitted.ers;
-    if (iceSpecId) {
-      const wear = Math.max(0, 100 - (liveCar.iceHealth ?? 100));
-      car.puWear.power_unit = { specId: iceSpecId, wear };
-      (car.puWearPool.power_unit ??= {})[iceSpecId] = wear;
-    }
-    if (ersSpecId) {
-      const wear = Math.max(0, 100 - (liveCar.electricalHealth ?? 100));
-      car.puWear.ers = { specId: ersSpecId, wear };
-      (car.puWearPool.ers ??= {})[ersSpecId] = wear;
+    for (const type of PU_PART_TYPES) {
+      const specId = car.fitted[type];
+      if (!specId) continue;
+      const wear = Math.max(0, 100 - (liveCar.puComponentHealth?.[type] ?? 100));
+      car.puWear[type] = { specId, wear };
+      (car.puWearPool[type] ??= {})[specId] = wear;
     }
   }
   const { result, extras } = completed;
@@ -462,11 +461,12 @@ function applyRaceOutcome(state: GameState, result: RaceResult, extras: RaceExtr
       const rank = rankOfTeam(state, tid);
       const podium = result.classification.some(c => c.teamId === tid && c.pos !== null && c.pos <= 3);
       team.boardConfidence = round1(clamp(team.boardConfidence + clamp((team.targetPosition - rank) * 0.8, -3, 3) + (podium ? 1 : 0), 0, 100));
-      if (team.isPlayer) {
+      if (team.isPlayer || team.special === 'ferrari') {
         const best = Math.min(...result.classification.filter(c => c.teamId === tid && c.pos !== null).map(c => c.pos as number), 99);
         const crashed = result.classification.some(c => c.teamId === tid && /撞|碰撞|失控/.test(c.reason));
         const dRep = (best === 1 ? 4 : best <= 3 ? 2 : best <= 10 ? 0.5 : 0) - (crashed ? 1 : 0);
-        team.mediaReputation = round1(clamp(team.mediaReputation + ferrariMediaDelta(state, dRep), 0, 100));
+        const mediaDelta = team.special === 'ferrari' ? ferrariMediaDelta(state, dRep) : dRep;
+        team.mediaReputation = round1(clamp(team.mediaReputation + mediaDelta, 0, 100));
       }
     }
     verifyFittedParts(state);
@@ -702,16 +702,17 @@ export function startNextSeason(state: GameState, rng: Rng): Outcome {
     const team = state.teams[tid];
     const focusBonus = (team.nextSeasonFocus / 100) * 4;
     for (const pt of Object.keys(rules.parts)) {
+      // 未认证成果仍代表已掌握的工程知识；新赛季会把它重新收敛为已认证的基础规格。
       const best = bestSpec(team, pt);
       const perf = round1(clamp((best?.perf ?? 70) * rules.carryOver + 70 * (1 - rules.carryOver) + focusBonus + rng.normal(0, 0.8), 1, 100));
       const id = `${pt}-S${state.season.number}v1`;
       team.parts[pt] = {
-        specs: [{ id, type: pt, version: 1, perf, rel: round1(clamp((best?.rel ?? 80) + 2, 1, 99)), verified: true, expected: null, introduced: `S${state.season.number}` }],
+        specs: [{ id, type: pt, version: 1, perf, rel: round1(clamp((best?.rel ?? 80) + 2, 1, 99)), verified: true, expected: null, homologated: true, introduced: `S${state.season.number}` }],
         stock: { [id]: pt === 'front_wing' ? 2 : 1 },
       };
       for (const car of team.cars) {
         car.fitted[pt] = id;
-        if (pt === 'power_unit' || pt === 'ers') {
+        if (isPowerUnitPart(pt)) {
           car.puWear = {};
           car.puWearPool = {};
         }

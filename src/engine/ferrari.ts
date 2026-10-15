@@ -1,5 +1,5 @@
 /**
- * 法拉利特殊机制（只对 special = ferrari 的玩家车队生效）。
+ * 法拉利特殊机制。比赛效果对法拉利始终生效，交互操作只属于玩家车队。
  *
  * - 媒体支持率：直接使用车队的 mediaReputation。法拉利的媒体更苛刻：
  *   每站正赛后固定消耗一点耐心，成绩带来的涨跌也更大。
@@ -8,7 +8,7 @@
  * - 撤职：正赛后检查。媒体支持率低于下限，或两边粉丝满意度差距超过上限 → 撤销领队职务。
  */
 import { addNarration, addNews, driverName, playerTeam } from './log';
-import type { ClassificationEntry, FerrariState, GameState, RaceResult, TeamState } from './types';
+import type { ClassificationEntry, FerrariState, GameState, RaceResult } from './types';
 import { clamp, pushCapped, round1, stamp } from './util';
 
 const LOG_CAP = 8;
@@ -19,19 +19,23 @@ export function ferrariActive(state: GameState): state is GameState & { ferrari:
 }
 
 /** 开局：玩家选择了 special = ferrari 的车队时初始化 */
-export function initFerrari(state: GameState, team: TeamState): void {
-  const raceDrivers = team.cars.map(c => c.driverId).filter((id): id is string => !!id);
-  if (team.special !== 'ferrari' || raceDrivers.length < 2) {
-    state.ferrari = null;
+export function initFerrari(state: GameState, preserveExisting = false): void {
+  const ferrari = Object.values(state.teams).find(value => value.special === 'ferrari');
+  const raceDrivers = ferrari?.cars.map(c => c.driverId).filter((id): id is string => !!id) ?? [];
+  if (!ferrari || raceDrivers.length < 2) {
+    if (!preserveExisting) state.ferrari = null;
     return;
   }
+  if (preserveExisting && state.ferrari) return;
   const r = state.rules.ferrari;
-  team.mediaReputation = r.startMedia;
+  ferrari.mediaReputation = r.startMedia;
   state.ferrari = {
     fans: Object.fromEntries(raceDrivers.slice(0, 2).map(id => [id, r.startFans])),
     warned: { media: false, gap: false },
     dismissed: null,
     log: [],
+    aduoAlliance: false,
+    aduoLobbyGranted: false,
   };
 }
 
@@ -69,7 +73,8 @@ export function shiftFans(state: GameState, changes: Record<string, number>, why
 
 /** 调整媒体支持率（法拉利），返回实际变化 */
 function shiftMedia(state: GameState, delta: number, why: string): number {
-  const team = playerTeam(state);
+  const team = Object.values(state.teams).find(value => value.special === 'ferrari');
+  if (!team) return 0;
   const before = team.mediaReputation;
   team.mediaReputation = round1(clamp(before + delta, 0, 100));
   const applied = round1(team.mediaReputation - before);
@@ -81,7 +86,7 @@ function shiftMedia(state: GameState, delta: number, why: string): number {
 
 /** 指定 / 取消优先车手 */
 export function ferrariOnPriority(state: GameState, driverId: string | null): void {
-  if (!ferrariActive(state)) return;
+  if (playerTeam(state).special !== 'ferrari' || !ferrariActive(state)) return;
   const amt = state.rules.ferrari.priorityFans;
   const changes: Record<string, number> = {};
   for (const id of fanCamps(state.ferrari)) {
@@ -94,7 +99,7 @@ export function ferrariOnPriority(state: GameState, driverId: string | null): vo
 
 /** 把一位正式车手换下（启用替补） */
 export function ferrariOnBench(state: GameState, benchedId: string, inId: string): void {
-  if (!ferrariActive(state) || !(benchedId in state.ferrari.fans)) return;
+  if (playerTeam(state).special !== 'ferrari' || !ferrariActive(state) || !(benchedId in state.ferrari.fans)) return;
   const text = shiftFans(state, { [benchedId]: -state.rules.ferrari.priorityFans * 1.5 }, `${driverName(state, benchedId)} 被 ${driverName(state, inId)} 换下`);
   if (text) addNews(state, '粉丝', text);
 }
@@ -104,14 +109,14 @@ export function ferrariOnBench(state: GameState, benchedId: string, inId: string
  * 拿到好车的一方粉丝满意，另一方粉丝认为车队偏心。
  */
 export function ferrariOnAllocation(state: GameState, favoredId: string, slightedId: string, gap: number): string {
-  if (!ferrariActive(state)) return '';
+  if (playerTeam(state).special !== 'ferrari' || !ferrariActive(state)) return '';
   const amt = state.rules.ferrari.allocationFans * gap;
   return shiftFans(state, { [favoredId]: round1(amt * 0.5), [slightedId]: round1(-amt) }, '升级件分配');
 }
 
 /** 车队指令执行结果（粉丝反应写入新闻） */
 export function ferrariOnOrder(state: GameState, yieldedId: string, favoredId: string, complied: boolean): void {
-  if (!ferrariActive(state)) return;
+  if (playerTeam(state).special !== 'ferrari' || !ferrariActive(state)) return;
   const amt = state.rules.ferrari.orderFans;
   let text: string;
   if (complied) {
@@ -139,7 +144,8 @@ export function ferrariAfterRace(state: GameState, result: RaceResult): void {
   if (!ferrariActive(state) || result.kind !== 'race') return;
   const f = state.ferrari;
   const r = state.rules.ferrari;
-  const team = playerTeam(state);
+  const team = Object.values(state.teams).find(value => value.special === 'ferrari');
+  if (!team) return;
   const amt = r.resultFans;
   const camps = fanCamps(f);
   const entries = camps.map(id => result.classification.find(c => c.driverId === id));
@@ -185,7 +191,7 @@ export function ferrariAfterRace(state: GameState, result: RaceResult): void {
   else if (gap > r.maxFanGap) reason = `两位车手的粉丝意见相差 ${gap.toFixed(0)}（上限 ${r.maxFanGap}）`;
 
   const fansLine = camps.map(id => `${driverName(state, id)}粉丝 ${f.fans[id].toFixed(0)}`).join(' / ');
-  if (reason && !inGrace) {
+  if (reason && !inGrace && team.isPlayer) {
     f.dismissed = reason;
     state.flags.fired = true;
     state.flags.firedReason = reason;
@@ -211,12 +217,14 @@ export function ferrariAfterRace(state: GameState, result: RaceResult): void {
   } else if (gap <= r.warnFanGap - 5) f.warned.gap = false;
 
   if (warnings.length) addNews(state, '媒体', warnings.join('；'));
-  addNarration(
-    state,
-    'ferrari_pressure',
-    warnings.length ? '马拉内罗的压力升级' : '媒体与粉丝的反应',
-    [`媒体支持率 ${media.toFixed(0)}，${fansLine}（差距 ${gap.toFixed(0)}）。`, fanText ? `本站变化：${fanText}。` : '', notes.join('；'), warnings.length ? `警告：${warnings.join('；')}。` : '']
-      .filter(Boolean)
-      .join(''),
-  );
+  if (team.isPlayer) {
+    addNarration(
+      state,
+      'ferrari_pressure',
+      warnings.length ? '马拉内罗的压力升级' : '媒体与粉丝的反应',
+      [`媒体支持率 ${media.toFixed(0)}，${fansLine}（差距 ${gap.toFixed(0)}）。`, fanText ? `本站变化：${fanText}。` : '', notes.join('；'), warnings.length ? `警告：${warnings.join('；')}。` : '']
+        .filter(Boolean)
+        .join(''),
+    );
+  }
 }

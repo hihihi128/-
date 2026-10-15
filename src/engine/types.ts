@@ -12,6 +12,7 @@
 
 /** 零件类型，键来自 rules.parts（默认 8 种，可在规则数据里增删） */
 export type PartType = string;
+export type PowerUnitPartType = 'ice' | 'turbocharger' | 'mgu_k' | 'energy_store' | 'control_electronics' | 'exhaust';
 /** 轮胎配方，键来自 rules.tyres */
 export type Compound = string;
 
@@ -48,6 +49,7 @@ export type Phase =
   | 'season_end';
 
 export type PracticeProgram = 'setup' | 'longrun' | 'quali_sim' | 'parts';
+export type PracticeSetupFocus = 'balanced' | 'aero_balance' | 'mechanical' | 'ride_height' | 'tyre_prep';
 export type QualiApproach = 'safe' | 'standard' | 'aggressive';
 export type PaceMode = 'conserve' | 'balanced' | 'push';
 export type PitTiming = 'early' | 'standard' | 'late';
@@ -89,6 +91,10 @@ export interface TyreDef {
   /** 是否为雨胎 */
   wet: boolean;
   color: string;
+  /** 最佳工作胎温窗口（°C）。 */
+  temperatureWindow?: [number, number];
+  /** 每圈向目标温度收敛的比例。 */
+  warmupRate?: number;
 }
 
 export interface AmbitionDef {
@@ -131,8 +137,9 @@ export interface AiLimits {
 /**
  * ADUO（Additional Development and Upgrade Opportunities，2026 动力单元追赶机制）。
  *
- * - 动力单元零件（parts）每赛季只能认证 baseUpgrades 次升级（开工即计数，取消返还）。
- * - 有厂商车队（worksTeam）的动力单元由厂商车队研发，客户车队不能自行研发，厂商的新件同时交付给客户车队。
+ * - 动力单元零件（parts）可自由研发和生产，但新规格必须消耗 ADUO 机会完成认证后才能装车。
+ * - 一次认证会批准厂商当前所有已交付、尚未认证的动力单元规格，作为同一升级批次。
+ * - 有厂商车队（worksTeam）的动力单元由厂商车队研发，客户车队不能自行研发，厂商认证后的新件才交付给客户车队。
  * - 在 evalRounds 列出的站次（正赛后）按厂商评估 measurePart 的真实性能：
  *   落后最好厂商的百分比 = 性能分差 × pctPerPoint。
  *   落后 ≥ tier1Deficit% → 一档；≥ tier2Deficit% → 二档。
@@ -144,7 +151,7 @@ export interface AduoRules {
   parts: PartType[];
   /** 评估用的零件类型（2026 规则只评估内燃机） */
   measurePart: PartType;
-  /** 每赛季基础认证升级次数 */
+  /** 每赛季基础认证升级次数（2026 默认为 0，只能通过 ADUO 评估获得） */
   baseUpgrades: number;
   /** 评估站次（第 N 站正赛后，1 起） */
   evalRounds: number[];
@@ -208,6 +215,12 @@ export interface FerrariRules {
   mediaResultMul: number;
   /** 升级件分配：两台车每差 1 分综合性能，两边粉丝各变化多少 */
   allocationFans: number;
+  /** 小涡轮方案在正赛起步时最少提升的位置 */
+  turboStartGainMin: number;
+  /** 小涡轮方案在正赛起步时最多提升的位置 */
+  turboStartGainMax: number;
+  /** FIA 提案要求的起步前涡轮起压时间（秒） */
+  turboSpoolSeconds: number;
   /** 指定 / 取消优先车手的粉丝变化 */
   priorityFans: number;
   /** 执行车队指令（让车）的粉丝变化 */
@@ -318,6 +331,8 @@ export interface Rules {
   secPerCarPoint: number;
   /** 车手能力每差 1 点的圈速差（秒） */
   secPerDriverPoint: number;
+  /** 统一比赛性能模型的有界平衡参数。 */
+  performance: PerformanceRules;
   parts: Record<PartType, PartDef>;
   tyres: Record<Compound, TyreDef>;
   /** 干地可用配方（按软→硬） */
@@ -383,6 +398,16 @@ export interface Rules {
   aduo: AduoRules;
 }
 
+export interface PerformanceRules {
+  qualiSetupMax: number;
+  raceSetupMax: number;
+  qualiBonusMax: number;
+  practiceWearKnowledgeMax: number;
+  temperatureLapMax: number;
+  overheatWearMax: number;
+  trackFitMax: number;
+}
+
 export interface MarketRules {
   minYears: number;
   maxYears: number;
@@ -413,6 +438,10 @@ export interface TrackDef {
   overtaking: number;
   /** 轮胎负荷 0~100 */
   tyreStress: number;
+  /** 模拟参考路温（°C），非现实测量数据。 */
+  surfaceTemperature?: number;
+  /** 轮胎生热需求 0~100。 */
+  thermalDemand?: number;
   /** 降雨概率 0~1 */
   rainChance: number;
   /** 事故后出动安全车（而非虚拟安全车）的概率 0~1 */
@@ -551,6 +580,8 @@ export interface PartSpec {
   verified: boolean;
   /** 交付前的预估区间 */
   expected: [number, number] | null;
+  /** 动力单元规格是否已获认证；非动力单元规格与旧存档默认视为已认证 */
+  homologated?: boolean;
   introduced: string;
 }
 
@@ -567,9 +598,9 @@ export interface CarState {
   /** 当前装车：零件类型 → specId */
   fitted: Record<PartType, string>;
   /** 动力单元实体磨损；更换为不同规格时从新件开始。旧存档没有该字段。 */
-  puWear?: Partial<Record<'power_unit' | 'ers', { specId: string; wear: number }>>;
+  puWear?: Partial<Record<PowerUnitPartType, { specId: string; wear: number }>>;
   /** 按规格保存可再次装回的动力单元磨损。 */
-  puWearPool?: Partial<Record<'power_unit' | 'ers', Record<string, number>>>;
+  puWearPool?: Partial<Record<PowerUnitPartType, Record<string, number>>>;
 }
 
 export type ProjectKind = 'design' | 'manufacture' | 'facility' | 'pit_training' | 'driver_training';
@@ -720,10 +751,25 @@ export interface Standings {
 
 export type EnergyMode = 'harvest' | 'balanced' | 'deploy';
 
+/** Persisted provenance for an explicitly applied secondary-API strategy review. */
+export interface StrategyReviewMetadata {
+  source: 'secondary';
+  originalPlan: Pick<DriverPlan, 'tyrePlan' | 'paceMode' | 'pitTiming' | 'scReaction'> & { tyrePlan: Compound[] };
+  summary: string;
+  issues: Array<{ code: string; severity: 'low' | 'medium' | 'high'; message: string }>;
+  modelLabel: string;
+  roundKey: string;
+}
+
 export interface DriverPlan {
   /** 策略来源；旧存档缺失时按玩家策略处理。 */
   strategySource?: 'player' | 'engineer' | 'perfect';
+  strategyReview?: StrategyReviewMetadata;
   practiceProgram: PracticeProgram;
+  /** 本节练习赛使用的配方；auto 由项目和天气决定。 */
+  practiceTyre?: Compound | 'auto';
+  /** 本节练习赛的具体调校方向。 */
+  practiceSetupFocus?: PracticeSetupFocus;
   qualiApproach: QualiApproach;
   /** 轮胎策略：各段配方；'auto' 由策略组自动选择 */
   tyrePlan: Compound[] | 'auto';
@@ -749,6 +795,10 @@ export interface SetupState {
   tyreKnowledge: number;
   /** 排位模拟加成（秒） */
   qualiBonus: number;
+  /** 长距离温控知识 0~100。 */
+  thermalKnowledge?: number;
+  /** 赛道掌握度 0~100。 */
+  trackKnowledge?: number;
 }
 
 export interface PracticeEntry {
@@ -756,11 +806,14 @@ export interface PracticeEntry {
   teamId: string;
   time: number;
   laps: number;
+  compound?: Compound;
+  tyreSetId?: string;
+  tyreStartedNew?: boolean;
 }
 
 export interface PracticeResult {
   timesheet: PracticeEntry[];
-  gains: Record<string, { setup: number; tyre: number; program: PracticeProgram; verified: string[] }>;
+  gains: Record<string, { setup: number; tyre: number; thermal?: number; track?: number; quali?: number; program: PracticeProgram; verified: string[] }>;
   events: RaceEvent[];
 }
 
@@ -770,6 +823,8 @@ export interface TyreSet {
   compound: Compound;
   state: 'new' | 'used';
   laps: number;
+  /** 等效磨损胎龄；实际使用圈数仍由 laps 表示。 */
+  wearAge?: number;
   returned: boolean;
   /** Season + calendar round key. Prevents same-index sets leaking into a new season. */
   weekendKey: string;
@@ -785,7 +840,14 @@ export interface PracticeReturnRequest {
 
 export interface QualiSession {
   name: string;
-  entries: Array<{ driverId: string; teamId: string; time: number | null; eliminated: boolean; note?: string }>;
+  entries: Array<{
+    driverId: string;
+    teamId: string;
+    time: number | null;
+    eliminated: boolean;
+    note?: string;
+    tyreRuns?: Array<{ compound: Compound; setId: string; startedNew: boolean; lapsBefore: number; lapsAdded: number; time: number | null }>;
+  }>;
 }
 
 export interface QualiResult {
@@ -882,6 +944,18 @@ export interface RaceForecast {
   confidence: number;
 }
 
+/** Immutable inputs shared by race execution and strategy prediction. */
+export interface RacePerformanceContext {
+  driverTyre: number;
+  carTyre: number;
+  setup: SetupState;
+  trackFit: number;
+  trackScore: number;
+  surfaceTemperature: number;
+  thermalDemand: number;
+  tyreStress: number;
+}
+
 export interface LiveRaceCar {
   driverId: string;
   teamId: string;
@@ -903,6 +977,9 @@ export interface LiveRaceCar {
   plan: DriverPlan;
   tyre: Compound;
   tyreAge: number;
+  tyreTemperature?: number;
+  tyreWearAge?: number;
+  performanceContext?: RacePerformanceContext;
   tyreSetId?: string;
   usedCompounds: Compound[];
   plannedCompounds: Compound[];
@@ -923,6 +1000,9 @@ export interface LiveRaceCar {
   /** 2026 动力单元实时状态。健康度与温度均为简化管理指标。 */
   iceHealth?: number;
   electricalHealth?: number;
+  /** 六类动力单元部件的独立健康度。 */
+  puComponentHealth?: Partial<Record<PowerUnitPartType, number>>;
+  puComponentReliability?: Partial<Record<PowerUnitPartType, number>>;
   puTemperature?: number;
   puStatus?: 'normal' | 'hot' | 'protect' | 'critical';
   ersPerformance?: number;
@@ -939,6 +1019,10 @@ export interface LiveRaceCar {
   engineerWeatherSpell?: number;
   engineerTyreOverride?: Compound | null;
   engineerTyreOverrideUntilLap?: number;
+  /** Stable public-weather target and the first lap when this AI will act on it. */
+  engineerWeatherTarget?: Compound | null;
+  engineerWeatherEligibleLap?: number;
+  lastWeatherPitLap?: number;
   /** Prevents repeated opportunistic stops during one SC/VSC period. */
   neutralStopTaken?: boolean;
 }
@@ -965,9 +1049,24 @@ export interface RaceDecisionWindow {
   observedEventIds: string[];
 }
 
+/** A player's response to a live-race strategy window. */
+export interface RaceDriverDecision {
+  driverId: string;
+  pit: 'auto' | 'stay_out' | 'box';
+  /** Only used for a grid start; `compound` remains a pit-stop choice. */
+  startCompound?: Compound;
+  compound?: Compound;
+  repairWing?: boolean;
+  paceMode?: PaceMode;
+  energyMode?: EnergyMode;
+  pitTiming?: PitTiming;
+}
+
 /** Fully serializable in-progress race state. Private trajectory and RNG stay out of views. */
 export interface LiveRaceState {
   version: 1;
+  /** 独立于存档格式版本的比赛物理版本。 */
+  physicsVersion?: 1 | 2;
   id: string;
   kind: 'race' | 'sprint';
   roundIndex: number;
@@ -1029,6 +1128,8 @@ export interface WeekendState {
   /** 只作用于本周末尚未执行计算的玩家赛车调校。 */
   supernaturalCarEffects?: Record<string, { confidence: number; tyreKnowledge: number }>;
   setup: Record<string, SetupState>;
+  /** 新周末开始时冻结的练习基线，用于收益比较。 */
+  practiceBaseline?: Record<string, SetupState>;
   plans: Record<string, DriverPlan>;
   teamOrders: TeamOrders;
   /** 本站罚退（格） */
@@ -1122,6 +1223,10 @@ export interface FerrariState {
   dismissed: string | null;
   /** 最近几次粉丝/媒体变化（供面板展示） */
   log: Array<{ at: string; text: string }>;
+  /** 是否加入奥迪、梅赛德斯、阿斯顿·马丁的 ADUO 联盟 */
+  aduoAlliance: boolean;
+  /** 是否已经通过 FIA 游说获得联盟承诺的一次 ADUO */
+  aduoLobbyGranted: boolean;
 }
 
 export interface McLarenState {
@@ -1147,6 +1252,7 @@ export interface MercedesState {
 export interface RedBullState {
   gpRetention: number;
   gpTransferred: boolean;
+  gpTransferBlocked?: boolean;
   summerChecked: boolean;
   verstappenExit: boolean;
   lastActionRound: string | null;
@@ -1265,11 +1371,23 @@ export interface RandomEventState {
   history: RandomEventRecord[];
 }
 
-export type FiaMeetingIssue = 'aduo' | 'driver_safety' | 'cost_cap';
+export type FiaMeetingIssue = 'ferrari_turbo' | 'aduo' | 'driver_safety' | 'cost_cap';
 export interface FiaMeetingState {
   politicalCapital: number;
   completed: number;
-  current: { index: number; issue: FiaMeetingIssue; opponents: string[] } | null;
+  current: {
+    index: number;
+    issue: FiaMeetingIssue;
+    opponents: string[];
+    supporters?: string[];
+    forcedStance?: 'support' | 'oppose' | 'compromise' | null;
+  } | null;
+  /** FIA 最终要求的起步前涡轮起压时间；0 表示提案未通过 */
+  ferrariTurboSpoolSeconds: number;
+  /** 法拉利是否已经把首批 ADUO 动力单元升级装车；跨赛季保留 */
+  ferrariAduoInstalled: boolean;
+  /** 是否已经完成小涡轮起压规则的专门座谈 */
+  ferrariTurboDebated: boolean;
   log: Array<{ at: string; text: string }>;
 }
 
@@ -1444,7 +1562,7 @@ export type Action =
   | { type: 'START_RACE'; kind: 'race' | 'sprint'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'ADVANCE_RACE'; sessionId: string; expectedRevision: number; until: 'next_lap' | 'next_decision' }
   | { type: 'SET_RACE_TACTICS'; sessionId: string; expectedRevision: number; drivers: Array<{ driverId: string; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }
-  | { type: 'RESOLVE_RACE_DECISION'; sessionId: string; expectedRevision: number; windowId: string; drivers: Array<{ driverId: string; pit: 'auto' | 'stay_out' | 'box'; compound?: Compound; repairWing?: boolean; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }
+  | { type: 'RESOLVE_RACE_DECISION'; sessionId: string; expectedRevision: number; windowId: string; drivers: RaceDriverDecision[]; orders?: TeamOrders }
   | { type: 'FINISH_ROUND' }
   | { type: 'START_NEXT_SEASON' }
   | { type: 'OFFER_DRIVER_CONTRACT'; windowId: string; marketRevision: number; driverId: string; annualSalary: number; years: number; role: 'race' | 'reserve'; slot?: number; replaceDriverId?: string }

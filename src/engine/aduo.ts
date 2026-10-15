@@ -3,14 +3,13 @@
  *
  * 规则见 types.ts 中的 AduoRules。要点：
  * - 动力单元按 engine 分组。组内有厂商车队（worksTeam）时，只有厂商车队能研发动力单元零件，
- *   新件同时交付给同组的客户车队；没有厂商车队时，组内每支车队各自研发（兼容旧数据）。
- * - 认证升级次数：每赛季 baseUpgrades 次，ADUO 评估后按档位追加。
+ *   新规格完成认证后交付给同组的客户车队；没有厂商车队时，组内每支车队各自研发（兼容旧数据）。
+ * - 研发和生产不消耗认证机会；首次装上未认证规格时，一次机会批准当前待认证升级批次。
  * - 评估：evalRounds 中的站次正赛后，比较各厂商 measurePart 的真实性能。
  */
 import { addNarration, addNews } from './log';
 import { applyAlpinePuPenalty } from './managementSpecials';
 import { autoFit } from './development';
-import { bestSpec } from './ratings';
 import type { AduoEvaluation, AduoResult, GameState, PartSpec, PartType, TeamState } from './types';
 import { round1, stamp } from './util';
 
@@ -49,15 +48,11 @@ export function homologationsLeft(state: GameState, team: TeamState): number {
   return Math.max(0, homologationsTotal(state, team) - (team.puHomologations ?? 0));
 }
 
-/** 动力单元零件的研发限制（没有限制时返回 null） */
+/** 动力单元零件的研发限制（ADUO 不限制研发，只限制客户车队自行研发） */
 export function puDesignBlock(state: GameState, team: TeamState, partType: PartType): string | null {
   if (!isAduoPart(state, partType)) return null;
   const works = worksTeamFor(state, team);
   if (works && works.id !== team.id) return `动力单元由厂商车队 ${works.name} 研发并供应，客户车队不能自行研发`;
-  if (!state.rules.aduo.enabled) return null;
-  if (homologationsLeft(state, team) <= 0) {
-    return `本赛季动力单元认证升级次数已用完（${team.puHomologations ?? 0}/${homologationsTotal(state, team)}）`;
-  }
   return null;
 }
 
@@ -69,10 +64,15 @@ export function aduoWeeksMul(state: GameState, team: TeamState, partType: PartTy
   return tier >= 2 ? r.tier2WeeksMul : tier === 1 ? r.tier1WeeksMul : 1;
 }
 
-/** 开工 / 取消动力单元研发项目时更新认证升级计数 */
-export function countHomologation(state: GameState, team: TeamState, partType: PartType, delta: 1 | -1): void {
-  if (!state.rules.aduo.enabled || !isAduoPart(state, partType)) return;
-  team.puHomologations = Math.max(0, (team.puHomologations ?? 0) + delta);
+/** 未认证动力单元规格的装车限制（没有限制时返回 null） */
+export function puFitBlock(state: GameState, team: TeamState, partType: PartType, spec: PartSpec): string | null {
+  if (!state.rules.aduo.enabled || !isAduoPart(state, partType) || spec.homologated !== false) return null;
+  const works = worksTeamFor(state, team);
+  if (works && works.id !== team.id) return `该动力单元规格尚未由供应商 ${works.name} 完成认证`;
+  if (homologationsLeft(state, team) <= 0) {
+    return `该动力单元规格尚未认证；当前没有可用 ADUO 认证机会（${team.puHomologations ?? 0}/${homologationsTotal(state, team)}）`;
+  }
+  return null;
 }
 
 /** 预算帽 ADUO 追加额度 */
@@ -80,7 +80,7 @@ export function capBonus(team: TeamState): number {
   return team.aduoCapBonus ?? 0;
 }
 
-/** 厂商车队交付新件后，同样的规格交付给客户车队 */
+/** 厂商完成认证后，把同样的规格交付给客户车队 */
 export function supplyCustomers(state: GameState, works: TeamState, partType: PartType, spec: PartSpec): void {
   if (!works.worksTeam || !isAduoPart(state, partType)) return;
   const name = state.rules.parts[partType]?.name ?? partType;
@@ -99,6 +99,7 @@ export function supplyCustomers(state: GameState, works: TeamState, partType: Pa
       rel: spec.rel,
       verified: true,
       expected: null,
+      homologated: true,
       introduced: stamp(state),
     };
     parts.specs.push(copy);
@@ -111,6 +112,45 @@ export function supplyCustomers(state: GameState, works: TeamState, partType: Pa
       autoFit(state, c, partType, id);
     }
   }
+}
+
+/**
+ * 首次装上未认证规格时，消耗一次机会并批准当前全部已交付待认证动力单元规格。
+ * 这些规格组成同一升级批次；同批规格以后装车不再消耗机会。
+ */
+export function homologateUpgradePackage(state: GameState, team: TeamState, requested: PartSpec): PartSpec[] {
+  if (!state.rules.aduo.enabled || requested.homologated !== false) return [];
+  if (homologationsLeft(state, team) <= 0) return [];
+  const pending = state.rules.aduo.parts.flatMap(partType =>
+    (team.parts[partType]?.specs ?? []).filter(spec => spec.homologated === false),
+  );
+  if (!pending.some(spec => spec === requested)) return [];
+  for (const spec of pending) spec.homologated = true;
+  team.puHomologations = (team.puHomologations ?? 0) + 1;
+  if (team.id === 'ferrari' && state.fiaMeeting) state.fiaMeeting.ferrariAduoInstalled = true;
+  // 同一类型可能在两次评估之间积累多个版本。客户只接收最新版本，避免 AI 依次装上旧版并浪费配额。
+  const customerSpecs = [...pending]
+    .sort((a, b) => b.version - a.version)
+    .filter((spec, index, list) => list.findIndex(candidate => candidate.type === spec.type) === index);
+  for (const spec of customerSpecs) supplyCustomers(state, team, spec.type, spec);
+  if (team.isPlayer) {
+    const names = [...new Set(pending.map(spec => state.rules.parts[spec.type]?.name ?? spec.type))];
+    addNews(state, 'ADUO', `动力单元升级批次完成认证：${names.join('、')}。已消耗 1 次 ADUO 认证机会。`);
+  }
+  return pending;
+}
+
+/** AI 厂商在获得机会后，为已完成的待认证批次自动申请认证并装车。 */
+function autoHomologatePending(state: GameState, team: TeamState): void {
+  if (team.isPlayer || homologationsLeft(state, team) <= 0) return;
+  const pending = state.rules.aduo.parts.flatMap(partType =>
+    (team.parts[partType]?.specs ?? [])
+      .filter(spec => spec.homologated === false)
+      .map(spec => ({ partType, spec })),
+  );
+  if (!pending.length) return;
+  pending.sort((a, b) => b.spec.version - a.spec.version);
+  for (const { partType, spec } of pending) autoFit(state, team, partType, spec.id);
 }
 
 /** 新赛季：客户车队的动力单元零件与厂商车队保持一致 */
@@ -178,7 +218,10 @@ export function measureManufacturers(state: GameState): AduoResult[] {
     seen.add(key);
     const group = engineGroup(state, key);
     const works = group.find(t => t.worksTeam);
-    const perf = Math.max(...(works ? [works] : group).map(t => bestSpec(t, pt)?.perf ?? 0));
+    const perf = Math.max(...(works ? [works] : group).map(t => {
+      const homologated = (t.parts[pt]?.specs ?? []).filter(spec => spec.homologated !== false);
+      return homologated.reduce((best, spec) => Math.max(best, spec.perf), 0);
+    }));
     rows.push({ engine: engineLabel(team), worksTeamId: works?.id ?? null, perf, deficitPct: 0, tier: 0, upgrades: 0, capBonus: 0 });
   }
   const best = Math.max(...rows.map(x => x.perf));
@@ -218,6 +261,7 @@ export function maybeEvaluateAduo(state: GameState, completedRound: number): Adu
       t.aduoTier = row.tier;
       t.aduoUpgrades = (t.aduoUpgrades ?? 0) + row.upgrades;
       t.aduoCapBonus = round1((t.aduoCapBonus ?? 0) + row.capBonus);
+      if (row.upgrades > 0) autoHomologatePending(state, t);
     }
     if (player && engineLabel(player) === row.engine) playerRow = row;
   }

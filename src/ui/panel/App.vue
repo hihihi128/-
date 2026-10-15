@@ -270,6 +270,7 @@ function supernaturalSettings() {
   .team-badge { height: 56px; width: 60px; min-width: 60px; border-radius: 0; font-size: 15px; }
   .top .grow { min-width: 0; overflow: hidden; }.title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 15px; }.title .muted { display: none; }.top .small.muted { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.actions { margin-left: 0; flex-wrap: nowrap; }.actions button:not(.primary) { display: none; }.actions .primary { max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 6px 8px; font-size: 11px; }
   .tabs { display: none; }.content { padding: 10px 12px calc(var(--tabbar-h) + 16px); }.mobile-more button { text-align: left; }
-  .toasts { bottom: calc(var(--tabbar-h) + 10px); }
+  .toasts { top: 66px; right: 12px; bottom: auto; left: 12px; max-width: none; }
+  .toast:not(:last-child) { display: none; }
 }
 </style>

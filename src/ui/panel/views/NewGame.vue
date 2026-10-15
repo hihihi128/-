@@ -14,9 +14,9 @@ const selectionReason = ref('');
 const REASON_MAX = 300;
 
 const difficultyGroups = [
-  { id: 'easy', label: '简单车队', hint: '赛车基础较好，目标相对容易达成' },
-  { id: 'medium', label: '中等车队', hint: '有竞争力，但特殊机制或资源会带来压力' },
-  { id: 'hard', label: '困难车队', hint: '起点差或危机严重，需要长期追赶' },
+  { id: 'easy', label: '简单车队', hint: '目标较宽松，容错空间较大' },
+  { id: 'medium', label: '中等车队', hint: '目标、资源或车队机制会持续施压' },
+  { id: 'hard', label: '困难车队', hint: '目标远超当前实力或面临严重危机' },
 ] as const;
 const teamGroups = computed(() =>
   difficultyGroups
@@ -153,6 +153,8 @@ onMounted(load);
         <li>稳住媒体：<b>媒体支持率</b>过低会被撤职。</li>
         <li>平衡粉丝：<b>汉密尔顿粉丝</b>与<b>勒克莱尔粉丝</b>的意见差距过大会被撤职。</li>
         <li>升级件分配、优先车手、车队指令和比赛成绩都会影响两边粉丝。</li>
+        <li>小涡轮结构每场正赛起步提升 {{ report?.specialRules?.ferrari.turboStartGainMin ?? 2 }}–{{ report?.specialRules?.ferrari.turboStartGainMax ?? 4 }} 位；ADUO 升级装车后优势消失。</li>
+        <li>首次领队座谈会必定讨论增加 {{ report?.specialRules?.ferrari.turboSpoolSeconds ?? 5 }} 秒起步前起压时间。</li>
       </ul>
     </div>
 
@@ -168,8 +170,8 @@ onMounted(load);
     </div>
     <div v-else-if="special === 'red_bull'" class="card notice special-team small stack-s">
       <b>红牛 · 人手危机</b>
-      <div>玩家协助梅基斯处理人才流失与 RB23 准备不足的问题。</div>
-      <ul class="tiny"><li>RB23 准备不足会显著提高车手失误概率。</li><li>GP 正与迈凯伦谈判，需要持续争取留任。</li><li>夏休时维斯塔潘必须位列车手榜前三，否则会触发解约条款。</li></ul>
+      <div>玩家协助梅基斯处理人才流失与 RB22 准备不足的问题。</div>
+      <ul class="tiny"><li>RB22 准备不足会显著提高车手失误概率。</li><li>GP 正与迈凯伦谈判，需要持续争取留任。</li><li>夏休时维斯塔潘必须位列车手榜前三，否则会触发解约条款。</li></ul>
     </div>
     <div v-else-if="special === 'aston_martin'" class="card notice special-team small stack-s">
       <b>阿斯顿·马丁 · 本田振动危机</b>

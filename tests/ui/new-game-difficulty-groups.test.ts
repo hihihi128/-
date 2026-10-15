@@ -6,9 +6,9 @@ import NewGame from '../../src/ui/panel/views/NewGame.vue';
 import { cardSources } from '../helpers';
 
 const expected = {
-  easy: ['梅赛德斯车队', '法拉利车队', '小红牛车队', '阿尔派车队'],
-  medium: ['迈凯伦车队', '红牛车队', '哈斯车队', '奥迪车队'],
-  hard: ['威廉姆斯车队', '阿斯顿·马丁车队', '凯迪拉克车队'],
+  easy: ['小红牛车队', '阿尔派车队', '凯迪拉克车队'],
+  medium: ['梅赛德斯车队', '法拉利车队', '哈斯车队', '奥迪车队'],
+  hard: ['迈凯伦车队', '红牛车队', '威廉姆斯车队', '阿斯顿·马丁车队'],
 };
 
 afterEach(() => {
@@ -49,6 +49,11 @@ describe('开局选队难度分组', () => {
     const sections = [...host.querySelectorAll<HTMLElement>('.team-group')];
     expect(sections.map(s => s.dataset.difficulty)).toEqual(['easy', 'medium', 'hard']);
     expect(sections.map(s => s.querySelector('.group-head b')?.textContent)).toEqual(['简单车队', '中等车队', '困难车队']);
+    expect(sections.map(s => s.querySelector('.group-head .tiny')?.textContent)).toEqual([
+      '目标较宽松，容错空间较大 · 3 支',
+      '目标、资源或车队机制会持续施压 · 4 支',
+      '目标远超当前实力或面临严重危机 · 4 支',
+    ]);
     for (const section of sections) {
       const names = [...section.querySelectorAll('.team-card b')].map(b => b.textContent);
       expect(names).toEqual(expected[section.dataset.difficulty as keyof typeof expected]);
@@ -60,9 +65,9 @@ describe('开局选队难度分组', () => {
     const sources = cardSources();
     const teamSource = sources.find(s => Array.isArray((s.data as { teams?: unknown })?.teams))!;
     const teams = (teamSource.data as { teams: Array<Record<string, unknown>> }).teams;
-    teams.find(t => t.id === 'mercedes')!.selectionDifficulty = 'extreme';
+    teams.find(t => t.id === 'racing_bulls')!.selectionDifficulty = 'extreme';
     const loaded = normalizeDatabase(sources);
-    expect(loaded.db!.teams.find(t => t.id === 'mercedes')!.selectionDifficulty).toBe('medium');
+    expect(loaded.db!.teams.find(t => t.id === 'racing_bulls')!.selectionDifficulty).toBe('medium');
     expect(loaded.issues.some(i => i.path.endsWith('selectionDifficulty') && i.level === 'warning')).toBe(true);
   });
 });

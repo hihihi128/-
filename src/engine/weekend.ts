@@ -8,12 +8,14 @@ import { createPreRaceRainWindow, createWeatherTrajectory } from './raceWeather'
 import { Rng } from './rng';
 import { raceEngineerFor, staffAbility } from './staff';
 import { effectiveSetup } from './supernatural';
+import { practiceEffects, trackFit } from './performance';
 import { ensureDriverWeekendTyres, provisionWeekendTyres, returnEligibleTyreSets, takeTyreSet, useTyreSet, weekendTyreKey } from './tyres';
 import type {
   DriverPlan,
   DriverState,
   GameState,
   PracticeProgram,
+  PracticeSetupFocus,
   PracticeResult,
   QualiApproach,
   QualiResult,
@@ -53,6 +55,8 @@ function baseSetup(team: TeamState, slot: number): SetupState {
   return {
     confidence: round1(25 + team.facilities.simulator * 5 + staffAbility(engineer, 'setup') * 0.1),
     tyreKnowledge: round1(20 + staffAbility(team.staff.strategist, 'strategy') * 0.1),
+    thermalKnowledge: round1(18 + staffAbility(engineer, 'communication') * 0.08),
+    trackKnowledge: round1(18 + team.facilities.simulator * 4),
     qualiBonus: 0,
   };
 }
@@ -93,6 +97,7 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
     raceWeatherSeed,
     ...(rainBias ? { supernaturalRainBias: rainBias } : {}),
     setup: {},
+    practiceBaseline: {},
     plans: {},
     teamOrders: prev?.teamOrders ? deepClone(prev.teamOrders) : { mode: 'free', favorDriverId: null },
     penalties: {},
@@ -120,8 +125,13 @@ export function createWeekend(state: GameState, rng: Rng): WeekendState {
   for (const { driver, team, car } of activeEntries(state)) {
     ensureDriverWeekendTyres(state, team, driver.id);
     weekend.setup[driver.id] = baseSetup(team, car.slot);
+    (weekend.practiceBaseline ??= {})[driver.id] = deepClone(weekend.setup[driver.id]);
     const old = prev?.plans[driver.id];
-    weekend.plans[driver.id] = old ? { ...deepClone(old), tyrePlan: 'auto', sprintTyre: 'auto' } : deepClone(DEFAULT_PLAN);
+    if (old) {
+      const inherited = { ...deepClone(old), tyrePlan: 'auto' as const, sprintTyre: 'auto' as const };
+      delete inherited.strategyReview;
+      weekend.plans[driver.id] = inherited;
+    } else weekend.plans[driver.id] = deepClone(DEFAULT_PLAN);
   }
   if (!round?.sprint) {
     weekend.weather.sprint = 'dry';
@@ -140,12 +150,30 @@ function setupOf(state: GameState, driverId: string, team: TeamState, slot: numb
   return w.setup[driverId];
 }
 
-const PROGRAM: Record<PracticeProgram, { setup: number; tyre: number; quali: number }> = {
-  setup: { setup: 1, tyre: 0.35, quali: 0 },
-  longrun: { setup: 0.4, tyre: 1, quali: 0 },
-  quali_sim: { setup: 0.6, tyre: 0.2, quali: 0.08 },
-  parts: { setup: 0.35, tyre: 0.3, quali: 0 },
+const PROGRAM: Record<PracticeProgram, { setup: number; tyre: number; thermal: number; track: number; quali: number }> = {
+  setup: { setup: 1, tyre: 0.35, thermal: .3, track: .9, quali: 0 },
+  longrun: { setup: 0.4, tyre: 1, thermal: 1, track: .35, quali: 0 },
+  quali_sim: { setup: 0.6, tyre: 0.2, thermal: .2, track: .85, quali: 0.08 },
+  parts: { setup: 0.35, tyre: 0.3, thermal: .25, track: .3, quali: 0 },
 };
+
+const SETUP_FOCUS: Record<PracticeSetupFocus, { setup: number; tyre: number; thermal: number; track: number; quali: number }> = {
+  balanced: { setup: 1, tyre: 1, thermal: 1, track: 1, quali: 1 },
+  aero_balance: { setup: 1.25, tyre: .85, thermal: .85, track: 1.05, quali: 1.12 },
+  mechanical: { setup: 1.2, tyre: 1.08, thermal: .95, track: .9, quali: 1 },
+  ride_height: { setup: 1.15, tyre: .9, thermal: .9, track: 1.18, quali: 1.06 },
+  tyre_prep: { setup: .82, tyre: 1.25, thermal: 1.3, track: .9, quali: .95 },
+};
+
+function aiPracticeProgram(setup: SetupState): PracticeProgram {
+  const rows: Array<[PracticeProgram, number]> = [
+    ['longrun', 100 - ((setup.tyreKnowledge + (setup.thermalKnowledge ?? 0)) / 2)],
+    ['setup', 100 - ((setup.confidence + (setup.trackKnowledge ?? 0)) / 2)],
+    ['quali_sim', 100 - Math.min(100, setup.qualiBonus / .2 * 100)],
+    ['parts', 0],
+  ];
+  return rows.sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0][0];
+}
 
 export function runPractice(state: GameState, rng: Rng): PracticeResult {
   const w = state.weekend!;
@@ -160,18 +188,25 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
   const result: PracticeResult = { timesheet: [], gains: {}, events: [] };
 
   for (const { driver, team, car } of activeEntries(state)) {
-    const plan = team.isPlayer ? planOf(state, driver.id) : { ...DEFAULT_PLAN };
-    const program = PROGRAM[plan.practiceProgram] ? plan.practiceProgram : 'setup';
-    const f = PROGRAM[program];
     const setup = setupOf(state, driver.id, team, car.slot);
+    const plan = team.isPlayer ? planOf(state, driver.id) : { ...DEFAULT_PLAN };
+    const program = team.isPlayer && PROGRAM[plan.practiceProgram] ? plan.practiceProgram : aiPracticeProgram(setup);
+    const f = PROGRAM[program];
+    const focus = SETUP_FOCUS[plan.practiceSetupFocus ?? 'balanced'];
     const engineer = raceEngineerFor(team, car.slot);
     const base =
       (18 + driver.attrs.feedback * 0.18 + staffAbility(engineer, 'setup') * 0.07 + staffAbility(engineer, 'communication') * 0.03 + team.facilities.simulator * 3) * rng.range(0.85, 1.15);
-    const setupGain = base * f.setup * sessionMul * (wet ? 0.7 : 1);
-    const tyreGain = base * f.tyre * sessionMul * (wet ? 0.5 : 1);
+    const setupGain = base * f.setup * focus.setup * sessionMul * (wet ? 0.7 : 1);
+    const tyreGain = base * f.tyre * focus.tyre * sessionMul * (wet ? 0.5 : 1);
+    const thermalGain = base * f.thermal * focus.thermal * sessionMul * (wet ? .6 : 1);
+    const trackGain = base * f.track * focus.track * sessionMul * (wet ? .75 : 1);
+    const qualiGain = f.quali * focus.quali * (0.6 + driver.attrs.feedback / 250);
+    const before = { confidence: setup.confidence, tyre: setup.tyreKnowledge, thermal: setup.thermalKnowledge ?? 0, track: setup.trackKnowledge ?? 0, quali: setup.qualiBonus };
     setup.confidence = round1(clamp(setup.confidence + setupGain, 0, 100));
     setup.tyreKnowledge = round1(clamp(setup.tyreKnowledge + tyreGain, 0, 100));
-    setup.qualiBonus = round3(f.quali * (0.6 + driver.attrs.feedback / 250));
+    setup.thermalKnowledge = round1(clamp((setup.thermalKnowledge ?? 0) + thermalGain, 0, 100));
+    setup.trackKnowledge = round1(clamp((setup.trackKnowledge ?? 0) + trackGain, 0, 100));
+    setup.qualiBonus = round3(clamp(setup.qualiBonus + qualiGain, 0, rules.performance.qualiBonusMax));
 
     const verified: string[] = [];
     if (program === 'parts') {
@@ -183,7 +218,7 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
         }
       }
     }
-    result.gains[driver.id] = { setup: round1(setupGain), tyre: round1(tyreGain), program, verified };
+    result.gains[driver.id] = { setup: round1(setup.confidence - before.confidence), tyre: round1(setup.tyreKnowledge - before.tyre), thermal: round1(setup.thermalKnowledge - before.thermal), track: round1(setup.trackKnowledge - before.track), quali: round3(setup.qualiBonus - before.quali), program, verified };
 
     const score = trackScore(carRatings(team, car, rules), track);
     const time =
@@ -193,10 +228,15 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
       rng.range(0.2, 1.4) + // 油量与项目差异（谍照永远不准）
       rng.normal(0, 0.25);
     const laps = rng.int(18, 34);
-    const practiceCompounds = wet ? [rules.wetCompound] : rules.dryCompounds;
-    const compound = practiceCompounds[(session - 1) % practiceCompounds.length];
-    useTyreSet(takeTyreSet(team, driver.id, compound, weekendTyreKey(state)), laps);
-    result.timesheet.push({ driverId: driver.id, teamId: team.id, time: round3(time), laps });
+    const practiceCompounds = wet ? [rules.wetCompound, rules.fullWetCompound] : rules.dryCompounds;
+    const requested = plan.practiceTyre;
+    const compound = requested && requested !== 'auto' && practiceCompounds.includes(requested)
+      ? requested
+      : practiceCompounds[(session - 1) % practiceCompounds.length];
+    const tyreSet = takeTyreSet(team, driver.id, compound, weekendTyreKey(state));
+    const tyreStartedNew = tyreSet?.state === 'new';
+    useTyreSet(tyreSet, laps);
+    result.timesheet.push({ driverId: driver.id, teamId: team.id, time: round3(time), laps, compound, tyreSetId: tyreSet?.id, tyreStartedNew });
   }
   result.timesheet.sort((a, b) => a.time - b.time);
   const top = result.timesheet[0];
@@ -225,9 +265,9 @@ export function runPractice(state: GameState, rng: Rng): PracticeResult {
   w.practiceSessions = [...completedPracticeSessions(w), result];
   w.practice = result;
   const playerDrivers = playerTeam(state).cars.map(car => car.driverId).filter((id): id is string => !!id);
-  const required = Math.max(0, rules.practiceReturnSets);
   const player = playerTeam(state);
   const eligibleSetIds = Object.fromEntries(playerDrivers.map(driverId => [driverId, returnEligibleTyreSets(state, player, driverId).map(set => set.id)]));
+  const required = playerDrivers.length ? Math.min(Math.max(0, rules.practiceReturnSets), ...playerDrivers.map(driverId => eligibleSetIds[driverId].length)) : 0;
   w.practiceReturn = playerDrivers.length && required ? { session, required, driverIds: playerDrivers, eligibleSetIds } : null;
   return result;
 }
@@ -249,6 +289,7 @@ function qualiLap(
   wet: boolean,
   sessionIndex: number,
   rng: Rng,
+  tyreLaps = 0,
 ): { time: number | null; note?: string } {
   const rules = state.rules;
   const plan = team.isPlayer ? planOf(state, driver.id) : DEFAULT_PLAN;
@@ -261,10 +302,10 @@ function qualiLap(
     (track.baseLap - 1.2) * (wet ? 1.12 : 1) +
     (100 - score) * rules.secPerCarPoint +
     (100 - qualiSkill(driver, wet)) * rules.secPerDriverPoint -
-    (setup.confidence / 100) * 0.3 -
-    setup.qualiBonus +
+    practiceEffects(setup, rules, trackFit(carRatings(team, team.cars.find(car => car.driverId === driver.id)!, rules), track)).quali +
     approach.mean -
     sessionIndex * 0.12 +
+    tyreLaps * .018 +
     rng.normal(0, sigma);
   return { time: round3(t) };
 }
@@ -289,17 +330,30 @@ export function runQualifying(state: GameState, rng: Rng, kind: 'qualifying' | '
   const sessionCount = knockouts.length + 1;
 
   for (let s = 0; s < sessionCount; s++) {
-    const runs = sessionCount === 1 ? 3 : 2;
+    const runs = kind === 'sprint_qualifying' ? 1 : sessionCount === 1 ? 3 : 2;
     const times = alive.map(id => {
       const e = entries.find(x => x.driver.id === id)!;
       let best: number | null = null;
       let note: string | undefined;
+      const tyreRuns: NonNullable<QualiSession['entries'][number]['tyreRuns']> = [];
       for (let r = 0; r < runs; r++) {
-        const lap = qualiLap(state, e.driver, e.team, e.score, track, wet, s, rng);
+        const compound = wet
+          ? state.rules.wetCompound
+          : kind === 'sprint_qualifying' && s < 2
+            ? state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0]
+            : state.rules.dryCompounds[0];
+        const set = takeTyreSet(e.team, id, compound, weekendTyreKey(state), undefined, kind === 'sprint_qualifying' && s < 2 && !wet);
+        if (!set) { note = '无可用轮胎'; continue; }
+        const startedNew = set.state === 'new';
+        const lapsBefore = set.laps;
+        const lap = qualiLap(state, e.driver, e.team, e.score, track, wet, s, rng, lapsBefore);
+        const lapsAdded = 3;
+        useTyreSet(set, lapsAdded);
+        tyreRuns.push({ compound, setId: set.id, startedNew, lapsBefore, lapsAdded, time: lap.time });
         if (lap.time === null) note = lap.note;
         else if (best === null || lap.time < best) best = lap.time;
       }
-      return { driverId: id, teamId: e.team.id, time: best, eliminated: false, note: best === null ? note : undefined };
+      return { driverId: id, teamId: e.team.id, time: best, eliminated: false, note: best === null ? note : undefined, tyreRuns };
     });
     times.sort((a, b) => (a.time ?? 9999) - (b.time ?? 9999));
     const cut = s < knockouts.length ? knockouts[s] : 0;

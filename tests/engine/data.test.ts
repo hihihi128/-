@@ -83,10 +83,10 @@ describe('数据解析（世界书 YAML）', () => {
   });
 
   it('规则深度合并', () => {
-    const res = normalizeDatabase([...placeholderSources(), { name: '规则补丁', data: { rules: { costCap: 200, parts: { power_unit: { developable: false } } } } }]);
+    const res = normalizeDatabase([...placeholderSources(), { name: '规则补丁', data: { rules: { costCap: 200, parts: { ice: { developable: false } } } } }]);
     expect(res.db!.rules.costCap).toBe(200);
-    expect(res.db!.rules.parts.power_unit.developable).toBe(false);
-    expect(res.db!.rules.parts.power_unit.baseCost).toBe(5);
+    expect(res.db!.rules.parts.ice.developable).toBe(false);
+    expect(res.db!.rules.parts.ice.baseCost).toBe(2.4);
   });
 
   it('引用错误会阻止开局并给出路径', () => {

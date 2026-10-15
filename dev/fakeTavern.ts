@@ -41,6 +41,7 @@ export class FakeTavern implements TavernEnv {
     CHAT_CHANGED: 'chat_id_changed',
     GENERATION_AFTER_COMMANDS: 'GENERATION_AFTER_COMMANDS',
     GENERATION_ENDED: 'generation_ended',
+    GENERATION_STOPPED: 'generation_stopped',
   };
 
   /** 事件总线监听者（开发页里的状态条/面板用） */

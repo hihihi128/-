@@ -8,13 +8,15 @@
  *   4. 领队决定把新件装到哪台车上（升级件分配）；不平均的分配会影响车手心态与信任。
  *   5. 新件在练习赛「新件测试」或正赛后才会验证真实性能。
  */
-import { aduoWeeksMul, countHomologation, puDesignBlock, supplyCustomers } from './aduo';
+import { aduoWeeksMul, homologateUpgradePackage, homologationsLeft, isAduoPart, puDesignBlock, puFitBlock, supplyCustomers } from './aduo';
 import { AMBITIONS, LABELS, TRACK_DEMANDS } from './defaults';
 import { affordError, capRemaining, charge, income, payWeeklySalaries } from './finance';
 import { addNews, addNarration, driverName } from './log';
 import { managementActionBlocker } from './managementSpecials';
 import { recordPuFit } from './powerunit';
-import { advanceSpecialWeeks } from './teamSpecials';
+import { advanceAiTeamSpecial, advanceSpecialWeeks } from './teamSpecials';
+import { advanceAiNextTeamSpecial } from './nextTeamSpecials';
+import { advanceAiManagementSpecial } from './managementSpecials';
 import { bestDisclosedPerf, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec } from './ratings';
 import type { Rng } from './rng';
 import type {
@@ -217,7 +219,6 @@ export function startProject(
     startedAt: stamp(state),
   };
   team.projects.push(project);
-  countHomologation(state, team, partType, 1);
   if (team.isPlayer) {
     addNews(state, '研发', `启动${project.label}项目：花费 $${pv.cost.toFixed(1)}M，预计 ${pv.weeks} 周，预期提升 +${lo}~+${hi}。`);
   }
@@ -230,7 +231,6 @@ export function cancelProject(state: GameState, teamId: string, projectId: strin
   if (idx < 0) return fail('找不到该项目');
   const p = team.projects[idx];
   team.projects.splice(idx, 1);
-  if (p.kind === 'design' && p.partType) countHomologation(state, team, p.partType, -1);
   // 取消只退还 30% 的现金（预算帽额度不退）
   const refund = round2(p.cost * 0.3);
   income(team, refund);
@@ -430,6 +430,9 @@ export function fitPart(state: GameState, teamId: string, slot: number, partType
   if (current === specId) return ok('该零件已经装在这台车上');
   const stock = team.parts[partType].stock;
   if ((stock[specId] ?? 0) < 1) return fail(`${def.name} v${spec.version} 没有可用备件`);
+  const puBlock = puFitBlock(state, team, partType, spec);
+  if (puBlock) return fail(puBlock);
+  homologateUpgradePackage(state, team, spec);
   stock[specId] -= 1;
   if (current) stock[current] = (stock[current] ?? 0) + 1;
   car.fitted[partType] = specId;
@@ -480,18 +483,23 @@ function completeProject(state: GameState, team: TeamState, p: Project, rng: Rng
         rel: round1(clamp((best?.rel ?? 80) + (p.relDelta ?? 0) + rng.normal(0, 1.5), 30, 99)),
         verified: !team.isPlayer,
         expected: p.expected ? [round1(base + p.expected[0]), round1(base + p.expected[1])] : null,
+        homologated: !rules.aduo.enabled || !rules.aduo.parts.includes(pt),
         introduced: stamp(state),
       };
       parts.specs.push(spec);
       parts.stock[spec.id] = (parts.stock[spec.id] ?? 0) + (p.units ?? 1);
-      supplyCustomers(state, team, pt, spec);
+      if (spec.homologated !== false) supplyCustomers(state, team, pt, spec);
       if (team.isPlayer) {
-        addNews(state, '研发', `${def.name} v${version} 已交付 ×${p.units ?? 1}（预估性能 ${spec.expected?.[0]}~${spec.expected?.[1]}），等待分配到赛车。`);
+        const certification = spec.homologated === false ? '，需获得 ADUO 认证后才能装车' : '';
+        addNews(state, '研发', `${def.name} v${version} 已交付 ×${p.units ?? 1}（预估性能 ${spec.expected?.[0]}~${spec.expected?.[1]}）${certification}。`);
+        const allocation = spec.homologated === false
+          ? '这是待认证动力单元升级批次的一部分。获得 ADUO 机会后，首次装车会认证当前批次中的全部待认证规格。'
+          : '领队需要决定把它装到哪位车手的车上。';
         addNarration(
           state,
           'part_delivered',
           `${def.name} v${version} 交付`,
-          `工厂交付了 ${p.units ?? 1} 件新的${def.name}（v${version}），真实表现需要在赛道上验证。领队需要决定把它装到哪位车手的车上。`,
+          `工厂交付了 ${p.units ?? 1} 件新的${def.name}（v${version}），真实表现需要在赛道上验证。${allocation}`,
         );
       } else {
         const fitted = autoFit(state, team, pt, spec.id);
@@ -547,7 +555,12 @@ export function advanceWeeks(state: GameState, weeks: number, rng: Rng): void {
     advanceSpecialWeeks(state);
     for (const tid of state.teamOrder) {
       const team = state.teams[tid];
-      if (!team.isPlayer) aiTeamWeek(state, team, rng);
+      if (!team.isPlayer) {
+        advanceAiTeamSpecial(state, team);
+        advanceAiNextTeamSpecial(state, team);
+        advanceAiManagementSpecial(state, team);
+        aiTeamWeek(state, team, rng);
+      }
       for (const p of [...team.projects]) {
         p.weeksLeft -= 1;
         if (p.weeksLeft <= 0) {
@@ -605,7 +618,11 @@ function aiTeamWeek(state: GameState, team: TeamState, rng: Rng): void {
   if (designing.length < slots && team.funds > 8 && capRemaining(team, rules) > 6) {
     const imp = partImportance(rules, upcomingDemands(state));
     const candidates = Object.keys(rules.parts)
-      .filter(pt => rules.parts[pt].developable && !designing.some(p => p.partType === pt) && !puDesignBlock(state, team, pt))
+      .filter(pt => {
+        if (!rules.parts[pt].developable || designing.some(p => p.partType === pt) || puDesignBlock(state, team, pt)) return false;
+        const pendingSameType = team.parts[pt]?.specs.some(spec => spec.homologated === false);
+        return !(isAduoPart(state, pt) && homologationsLeft(state, team) <= 0 && pendingSameType);
+      })
       .map(pt => {
         const best = bestSpec(team, pt)?.perf ?? 50;
         const score = (imp[pt] * headroom(rules, best)) / Math.max(0.5, rules.parts[pt].baseCost);

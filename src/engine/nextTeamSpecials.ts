@@ -1,5 +1,6 @@
+import { FIA_ISSUE_LABELS } from './defaults';
 import { addNarration, addNews, playerTeam } from './log';
-import { recordPuFit, resetPuUsage } from './powerunit';
+import { PU_PART_TYPES, recordPuFit, resetPuUsage } from './powerunit';
 import { Rng } from './rng';
 import { ensureDriverWeekendTyres } from './tyres';
 import type { FiaMeetingIssue, GameState, LiveRaceState, TeamState } from './types';
@@ -9,22 +10,23 @@ const CAP = 12;
 const weekKey = (state: GameState) => `${state.season.number}-w${state.season.week}`;
 const append = (state: GameState, target: { log: Array<{ at: string; text: string }> }, text: string) => pushCapped(target.log, { at: stamp(state), text }, CAP);
 
-export function initNextTeamSpecials(state: GameState, team: TeamState): void {
-  state.astonMartin = team.special === 'aston_martin' ? {
+export function initNextTeamSpecials(state: GameState, preserveExisting = false): void {
+  if (!preserveExisting || !state.astonMartin) state.astonMartin = Object.values(state.teams).some(value => value.special === 'aston_martin') ? {
     aduoEngineArrived: false, aduoProgress: 0, hondaConflict: state.rules.astonMartin.startHondaConflict,
     neweyProgress: 0, chassisUpgradeReady: false, mediaPressure: state.rules.astonMartin.startMediaPressure,
     alonsoFanAnger: 25, strollFavor: 65, lastActionRound: null, log: [],
   } : null;
-  state.racingBulls = team.special === 'racing_bulls' ? { pendingRecall: null, activeRecall: null, log: [] } : null;
-  state.audi = team.special === 'audi' ? { turboFixed: false, aduoProgress: 0, alliance: false, politicalSupport: 35, lastActionRound: null, log: [] } : null;
-  state.fiaMeeting = { politicalCapital: state.rules.fiaMeeting.startPoliticalCapital, completed: 0, current: null, log: [] };
+  if (!preserveExisting || !state.racingBulls) state.racingBulls = Object.values(state.teams).some(value => value.special === 'racing_bulls') ? { pendingRecall: null, activeRecall: null, log: [] } : null;
+  if (!preserveExisting || !state.audi) state.audi = Object.values(state.teams).some(value => value.special === 'audi') ? { turboFixed: false, aduoProgress: 0, alliance: false, politicalSupport: 35, lastActionRound: null, log: [] } : null;
+  if (!preserveExisting || !state.fiaMeeting) state.fiaMeeting = { politicalCapital: state.rules.fiaMeeting.startPoliticalCapital, completed: 0, current: null, ferrariTurboSpoolSeconds: 0, ferrariAduoInstalled: false, ferrariTurboDebated: false, log: [] };
 }
 
-function buffCurrentParts(team: TeamState, partTypes: string[], gain: number): void {
+function buffCurrentParts(team: TeamState, partTypes: readonly string[], gain: number): void {
   const touched = new Set<string>();
   for (const car of team.cars) for (const partType of partTypes) {
     const spec = team.parts[partType]?.specs.find(value => value.id === car.fitted[partType]);
-    if (spec && !touched.has(spec.id)) { spec.perf = round1(spec.perf + gain); touched.add(spec.id); }
+    const key = `${partType}:${spec?.id ?? ''}`;
+    if (spec && !touched.has(key)) { spec.perf = round1(spec.perf + gain); touched.add(key); }
   }
 }
 
@@ -32,9 +34,11 @@ function completeAstonAduo(state: GameState): void {
   const a = state.astonMartin;
   if (!a || a.aduoEngineArrived || a.aduoProgress < 100) return;
   a.aduoEngineArrived = true;
-  buffCurrentParts(state.teams.aston_martin, ['power_unit'], state.rules.astonMartin.aduoPuBuff);
+  buffCurrentParts(state.teams.aston_martin, PU_PART_TYPES, state.rules.astonMartin.aduoPuBuff);
   addNews(state, '研发', '本田首批 ADUO 动力单元提前到货。振动达到危险阈值时的强制退赛风险已经消失。');
-  addNarration(state, 'aston_aduo', '本田 ADUO 动力单元到货', '在车手安全舆论与 FIA 压力下，本田交付了首批改进动力单元。车队终于可以停止每十圈一次的振动风险检查。');
+  const text = '在车手安全舆论与 FIA 压力下，本田交付了首批改进动力单元。车队终于可以停止每十圈一次的振动风险检查。';
+  if (state.teams.aston_martin?.isPlayer) addNarration(state, 'aston_aduo', '本田 ADUO 动力单元到货', text);
+  else addNews(state, '研发', `阿斯顿·马丁：${text}`);
 }
 
 function completeAstonChassis(state: GameState): void {
@@ -46,6 +50,11 @@ function completeAstonChassis(state: GameState): void {
 }
 
 export function astonCrisis(state: GameState, strategy: 'pressure_honda' | 'mediate' | 'push_newey'): { ok: boolean; message: string } {
+  if (playerTeam(state).special !== 'aston_martin') return { ok: false, message: '当前车队没有阿斯顿·马丁危机机制' };
+  return applyAstonCrisis(state, strategy);
+}
+
+function applyAstonCrisis(state: GameState, strategy: 'pressure_honda' | 'mediate' | 'push_newey'): { ok: boolean; message: string } {
   const a = state.astonMartin;
   if (!a) return { ok: false, message: '当前车队没有阿斯顿·马丁危机机制' };
   if (a.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能执行一次危机行动' };
@@ -64,12 +73,12 @@ export function astonCrisis(state: GameState, strategy: 'pressure_honda' | 'medi
     a.hondaConflict = round1(clamp(a.hondaConflict - state.rules.astonMartin.mediationGain, 0, 100));
     a.mediaPressure = round1(clamp(a.mediaPressure - 12, 0, 100));
     team.boardConfidence = round1(clamp(team.boardConfidence + 3, 0, 100));
-    text = '玩家安排纽维、本田和车手代表闭门调解，双方冲突明显下降。';
+    text = `${team.isPlayer ? '玩家' : '阿斯顿·马丁管理层'}安排纽维、本田和车手代表闭门调解，双方冲突明显下降。`;
   } else {
     a.neweyProgress = Math.min(100, a.neweyProgress + state.rules.astonMartin.neweyProgressGain);
     a.hondaConflict = round1(clamp(a.hondaConflict + 4, 0, 100));
     team.boardConfidence = round1(clamp(team.boardConfidence + 1, 0, 100));
-    text = `玩家催促纽维交付动力单元适配车体，升级进度达到 ${a.neweyProgress}%。`;
+    text = `${team.isPlayer ? '玩家' : '阿斯顿·马丁管理层'}催促纽维交付动力单元适配车体，升级进度达到 ${a.neweyProgress}%。`;
   }
   completeAstonAduo(state); completeAstonChassis(state);
   append(state, a, text); addNews(state, '车队', text);
@@ -77,6 +86,7 @@ export function astonCrisis(state: GameState, strategy: 'pressure_honda' | 'medi
 }
 
 export function astonOnPriority(state: GameState, driverId: string | null): void {
+  if (playerTeam(state).special !== 'aston_martin') return;
   const a = state.astonMartin;
   if (!a) return;
   if (driverId === 'stroll') {
@@ -95,16 +105,25 @@ export function maybeTriggerRacingBullsRecall(state: GameState, rng: Rng): void 
   const r = state.racingBulls;
   if (!r || r.pendingRecall || r.activeRecall || !rng.chance(state.rules.racingBulls.recallChance)) return;
   const team = state.teams.racing_bulls;
-  const candidates = Object.values(state.drivers).filter(d => d.role === 'reserve' && (d.teamId === 'red_bull' || d.teamId === 'racing_bulls')).map(d => d.id);
-  if (!team?.cars.length || !candidates.length) return;
+  if (!team?.cars.length) return;
+  const candidates = Object.values(state.drivers)
+    .filter(d => d.role === 'reserve' && (d.teamId === 'red_bull' || d.teamId === 'racing_bulls') && (team.isPlayer || d.teamId !== state.meta.playerTeamId))
+    .map(d => d.id);
+  if (!candidates.length) return;
   const car = team.cars[rng.int(0, team.cars.length - 1)];
   if (!car.driverId) return;
   r.pendingRecall = { driverId: car.driverId, candidateIds: candidates };
   const text = `红牛因突发事件调走 ${state.drivers[car.driverId]?.name ?? car.driverId} 一站。请从储备车手中选择替补。`;
-  append(state, r, text); addNarration(state, 'racing_bulls_recall', '红牛紧急调用车手', text);
+  append(state, r, text);
+  if (team.isPlayer) addNarration(state, 'racing_bulls_recall', '红牛紧急调用车手', text);
+  else {
+    const reserve = candidates[0];
+    if (reserve) selectRacingBullsReserve(state, reserve, 'racing_bulls');
+  }
 }
 
-export function selectRacingBullsReserve(state: GameState, driverId: string): { ok: boolean; message: string } {
+export function selectRacingBullsReserve(state: GameState, driverId: string, actorTeamId = state.meta.playerTeamId): { ok: boolean; message: string } {
+  if (state.teams[actorTeamId]?.special !== 'racing_bulls') return { ok: false, message: '当前车队没有小红牛车手调用机制' };
   const r = state.racingBulls;
   const pending = r?.pendingRecall;
   if (!r || !pending) return { ok: false, message: '当前没有需要处理的红牛车手调用' };
@@ -151,12 +170,26 @@ function completeAudiTurbo(state: GameState): void {
   const a = state.audi;
   if (!a || a.turboFixed || a.aduoProgress < 100) return;
   a.turboFixed = true;
-  buffCurrentParts(state.teams.audi, ['power_unit'], 5);
+  buffCurrentParts(state.teams.audi, ['turbocharger'], 5);
   addNews(state, '研发', '奥迪获准使用 ADUO 解决涡轮问题，起步随机掉位风险已经消失。');
 }
 
 export function audiAlliance(state: GameState): { ok: boolean; message: string } {
+  return applyAudiAlliance(state, state.meta.playerTeamId);
+}
+
+function applyAudiAlliance(state: GameState, actorTeamId: string): { ok: boolean; message: string } {
   const a = state.audi;
+  const ferrari = state.ferrari;
+  const special = state.teams[actorTeamId]?.special;
+  if (special !== 'audi' && special !== 'ferrari') return { ok: false, message: '当前车队不能发起 ADUO 联盟谈判' };
+  if (special === 'ferrari' && ferrari) {
+    if (ferrari.aduoAlliance) return { ok: false, message: '法拉利已经加入 ADUO 四队联盟' };
+    ferrari.aduoAlliance = true;
+    const text = '法拉利与奥迪、梅赛德斯和阿斯顿·马丁组成 ADUO 四队联盟，共同向 FIA 争取额外升级机会。';
+    append(state, ferrari, text); addNews(state, '政治', text);
+    return { ok: true, message: text };
+  }
   if (!a) return { ok: false, message: '当前车队没有奥迪联盟机制' };
   if (a.alliance) return { ok: false, message: '奥迪已经加入 ADUO 四队联盟' };
   a.alliance = true;
@@ -168,8 +201,10 @@ export function audiAlliance(state: GameState): { ok: boolean; message: string }
 }
 
 export function applyAudiStartDrop(state: GameState, session: LiveRaceState, rng: Rng): void {
-  if (!state.audi || state.audi.turboFixed || session.kind !== 'race') return;
-  for (const car of Object.values(session.cars).filter(value => value.teamId === 'audi')) {
+  if (session.kind !== 'race' || state.audi?.turboFixed === true) return;
+  const audiCars = Object.values(session.cars).filter(value => state.teams[value.teamId]?.special === 'audi');
+  if (!audiCars.length) return;
+  for (const car of audiCars) {
     const from = session.order.indexOf(car.driverId);
     if (from < 0) continue;
     const loss = rng.int(state.rules.audi.startDropMin, state.rules.audi.startDropMax);
@@ -180,7 +215,30 @@ export function applyAudiStartDrop(state: GameState, session: LiveRaceState, rng
   session.order.forEach((id, index) => { session.cars[id].cumulativeTime = index * .25; });
 }
 
-const ISSUE_LABELS: Record<FiaMeetingIssue, string> = { aduo: 'ADUO 动力单元升级', driver_safety: '车手安全与强制退赛', cost_cap: '预算帽与新车队扶持' };
+export function ferrariTurboAdvantageActive(state: GameState): boolean {
+  return !state.fiaMeeting?.ferrariAduoInstalled
+    && (state.teams.ferrari?.puHomologations ?? 0) === 0
+    && (state.fiaMeeting?.ferrariTurboSpoolSeconds ?? 0) === 0;
+}
+
+/** 法拉利小涡轮在正赛起步时抢位；ADUO 首次认证装车或 FIA 起压规则生效后永久停用。 */
+export function applyFerrariStartGain(state: GameState, session: LiveRaceState, rng: Rng): void {
+  if (session.kind !== 'race' || !ferrariTurboAdvantageActive(state)) return;
+  const ferraris = Object.values(session.cars)
+    .filter(value => value.teamId === 'ferrari')
+    .sort((a, b) => session.order.indexOf(a.driverId) - session.order.indexOf(b.driverId));
+  for (const car of ferraris) {
+    const from = session.order.indexOf(car.driverId);
+    if (from < 0) continue;
+    const gain = rng.int(state.rules.ferrari.turboStartGainMin, state.rules.ferrari.turboStartGainMax);
+    const to = Math.max(0, from - gain);
+    if (to === from) continue;
+    session.order.splice(from, 1); session.order.splice(to, 0, car.driverId);
+    session.events.push({ id: `${session.id}:start-ferrari-${car.driverId}`, lap: 1, type: 'start', text: `${car.driverId} 利用法拉利小涡轮快速起压在起步抢下 ${from - to} 个位置`, drivers: [car.driverId], key: true });
+  }
+  session.order.forEach((id, index) => { session.cars[id].cumulativeTime = index * .25; });
+}
+
 function debateNoise(state: GameState, key: string): number {
   let n = 0; for (const ch of `${state.meta.createdAt}:${state.meta.dataSignature}:${key}`) n = (n * 31 + ch.charCodeAt(0)) >>> 0;
   return n % 21 - 10;
@@ -194,25 +252,63 @@ function openFiaMeeting(state: GameState): void {
   if (meeting.current || completedRaces % state.rules.fiaMeeting.interval !== 0 || meeting.completed >= expectedCompleted) return;
   const issues: FiaMeetingIssue[] = ['aduo', 'driver_safety', 'cost_cap'];
   const opponents = state.teamOrder.filter(id => id !== state.meta.playerTeamId);
-  meeting.current = { index: meeting.completed + 1, issue: issues[meeting.completed % issues.length], opponents: [opponents[meeting.completed % opponents.length], opponents[(meeting.completed + 3) % opponents.length]] };
-  addNarration(state, 'fia_meeting', `FIA 领队座谈会：${ISSUE_LABELS[meeting.current.issue]}`, `三站比赛结束后，FIA 召集领队座谈。玩家必须选择立场，并与${meeting.current.opponents.map(id => state.teams[id]?.name ?? id).join('、')}的代表辩论。`);
+  const index = meeting.completed + 1;
+  if (!meeting.ferrariTurboDebated) {
+    const supporters = ['mercedes', 'mclaren', 'alpine'];
+    if (debateNoise(state, 'ferrari-turbo:audi') >= 0) supporters.push('audi');
+    if (debateNoise(state, 'ferrari-turbo:williams') >= 0) supporters.push('williams');
+    const playerId = state.meta.playerTeamId;
+    const aiSupporters = supporters.filter(id => id !== playerId);
+    const forcedStance = playerId === 'alpine' ? 'support' : null;
+    meeting.current = { index, issue: 'ferrari_turbo', opponents: aiSupporters, supporters: aiSupporters, forcedStance };
+    const instruction = playerId === 'alpine'
+      ? '布里亚托利已经决定支持提案，玩家必须以支持立场参加辩论。'
+      : ['williams', 'mclaren', 'audi'].includes(playerId)
+        ? 'FIA 要求玩家决定是否支持该提案。'
+        : playerId === 'ferrari'
+          ? '法拉利必须说服其他领队否决提案，才能保住起步优势。'
+          : '玩家必须选择立场。';
+    addNarration(state, 'fia_meeting', `FIA 领队座谈会：${FIA_ISSUE_LABELS[meeting.current.issue]}`, `${aiSupporters.map(id => state.teams[id]?.name ?? id).join('、')}主张以安全为由，在起步前增加 ${state.rules.ferrari.turboSpoolSeconds} 秒涡轮起压时间。${instruction}`);
+    return;
+  }
+  const genericCompleted = Math.max(0, meeting.completed - 1);
+  meeting.current = { index, issue: issues[genericCompleted % issues.length], opponents: [opponents[meeting.completed % opponents.length], opponents[(meeting.completed + 3) % opponents.length]], supporters: [], forcedStance: null };
+  addNarration(state, 'fia_meeting', `FIA 领队座谈会：${FIA_ISSUE_LABELS[meeting.current.issue]}`, `FIA 召集领队座谈。玩家必须选择立场，并与${meeting.current.opponents.map(id => state.teams[id]?.name ?? id).join('、')}的代表辩论。`);
 }
 
 export function fiaDebate(state: GameState, stance: 'support' | 'oppose' | 'compromise'): { ok: boolean; message: string } {
   const meeting = state.fiaMeeting, current = meeting?.current;
   if (!meeting || !current) return { ok: false, message: '当前没有待处理的 FIA 领队座谈会' };
+  if (current.forcedStance && stance !== current.forcedStance) return { ok: false, message: `车队已经决定本次必须${current.forcedStance === 'support' ? '支持' : current.forcedStance === 'oppose' ? '反对' : '提出折中'}提案` };
   const team = playerTeam(state);
   const stanceBonus = stance === 'compromise' ? 8 : 0;
   const score = team.boardConfidence * .3 + team.mediaReputation * .3 + meeting.politicalCapital * .4 + stanceBonus + debateNoise(state, `${current.index}:${stance}`);
-  const success = score >= 55;
+  const coalitionAdjustment = current.issue === 'ferrari_turbo' ? Math.max(0, (current.supporters?.length ?? 3) - 3) * 4 : 0;
+  const threshold = 55 + (stance === 'support' ? -coalitionAdjustment : coalitionAdjustment);
+  const success = score >= threshold;
   const delta = success ? (stance === 'compromise' ? 6 : 10) : -8;
   meeting.politicalCapital = round1(clamp(meeting.politicalCapital + delta, 0, 100));
   team.mediaReputation = round1(clamp(team.mediaReputation + (success ? 2 : -2), 0, 100));
   if (current.issue === 'aduo' && stance !== 'oppose' && success) {
-    if (state.astonMartin) { state.astonMartin.aduoProgress = Math.min(100, state.astonMartin.aduoProgress + 22); completeAstonAduo(state); }
-    if (state.mercedes && !state.mercedes.aduoApproved) state.mercedes.aduoProgress = Math.min(100, state.mercedes.aduoProgress + 20);
+    if (state.teams.aston_martin?.isPlayer && state.astonMartin) { state.astonMartin.aduoProgress = Math.min(100, state.astonMartin.aduoProgress + 22); completeAstonAduo(state); }
+    if (state.teams.mercedes?.isPlayer && state.mercedes && !state.mercedes.aduoApproved) state.mercedes.aduoProgress = Math.min(100, state.mercedes.aduoProgress + 20);
+    if (state.teams.ferrari?.isPlayer && state.ferrari?.aduoAlliance && !state.ferrari.aduoLobbyGranted) {
+      state.teams.ferrari.aduoUpgrades = (state.teams.ferrari.aduoUpgrades ?? 0) + 1;
+      state.ferrari.aduoLobbyGranted = true;
+      append(state, state.ferrari, 'FIA 游说成功：法拉利获得 1 次 ADUO 认证机会');
+      addNews(state, 'ADUO', '法拉利通过四队联盟游说获得 1 次 ADUO 动力单元认证机会。');
+    }
   }
-  const text = `${ISSUE_LABELS[current.issue]}辩论${success ? '取得优势' : '未能说服多数领队'}。政治资本变为 ${meeting.politicalCapital}。`;
+  let outcome = '';
+  if (current.issue === 'ferrari_turbo') {
+    meeting.ferrariTurboDebated = true;
+    const proposalPassed = stance === 'support' ? success : stance === 'oppose' ? !success : !success;
+    meeting.ferrariTurboSpoolSeconds = proposalPassed ? state.rules.ferrari.turboSpoolSeconds : 0;
+    outcome = proposalPassed
+      ? `FIA 通过安全提案，法拉利必须在起步前增加 ${meeting.ferrariTurboSpoolSeconds} 秒涡轮起压时间，小涡轮起步优势消失。`
+      : 'FIA 暂缓起压时间提案，法拉利保住小涡轮起步优势。';
+  }
+  const text = `${FIA_ISSUE_LABELS[current.issue]}辩论${success ? '取得优势' : '未能说服多数领队'}。${outcome}政治资本变为 ${meeting.politicalCapital}。`;
   append(state, meeting, text); addNews(state, 'FIA', text); meeting.completed += 1; meeting.current = null;
   return { ok: true, message: text };
 }
@@ -237,8 +333,21 @@ export function afterNextTeamRace(state: GameState): void {
   openFiaMeeting(state);
 }
 
+/** 让非玩家车队处理危机、联盟等每周特殊决策。 */
+export function advanceAiNextTeamSpecial(state: GameState, team: TeamState): void {
+  if (team.isPlayer) return;
+  if (team.special === 'aston_martin' && state.astonMartin?.lastActionRound !== weekKey(state)) {
+    const strategy = state.astonMartin!.aduoEngineArrived
+      ? state.astonMartin!.chassisUpgradeReady ? 'mediate' : 'push_newey'
+      : state.astonMartin!.hondaConflict >= 70 ? 'mediate' : 'pressure_honda';
+    applyAstonCrisis(state, strategy);
+  } else if (team.special === 'audi' && state.audi && !state.audi.alliance) {
+    applyAudiAlliance(state, team.id);
+  }
+}
+
 export function specialDecisionBlocker(state: GameState, actionType: string | undefined): string | null {
-  if (state.racingBulls?.pendingRecall && actionType !== 'RACING_BULLS_SELECT_RESERVE' && actionType !== 'CLEAR_NARRATION') return '红牛已经调走一名正式车手。请先选择本周末替补车手。';
+  if (playerTeam(state).special === 'racing_bulls' && state.racingBulls?.pendingRecall && actionType !== 'RACING_BULLS_SELECT_RESERVE' && actionType !== 'CLEAR_NARRATION') return '红牛已经调走一名正式车手。请先选择本周末替补车手。';
   if (state.fiaMeeting?.current && actionType !== 'FIA_DEBATE' && actionType !== 'CLEAR_NARRATION') return 'FIA 领队座谈会正在等待你的立场。请先完成辩论。';
   return null;
 }

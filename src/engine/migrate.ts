@@ -10,14 +10,106 @@
  * 函数是幂等的，原地修改并返回同一个对象。
  */
 import { DEFAULT_RULES } from './defaults';
-import { resetPuUsage } from './powerunit';
+import { PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES, resetPuUsage } from './powerunit';
 import { ensureMarket, openMarket } from './market';
 import { migrateTyreInventory } from './tyres';
+import { requiresWetGridTyreChoice } from './race';
 import type { GameState, StaffRole } from './types';
 import { deepClone } from './util';
+import { initFerrari } from './ferrari';
+import { initTeamSpecials } from './teamSpecials';
+import { initNextTeamSpecials } from './nextTeamSpecials';
+import { initManagementSpecials, settleLegacyAlpinePenalty } from './managementSpecials';
 
 /** 玩家可以自由增删条目的规则表：不能按默认值回填，否则会恢复被有意删除的零件 / 轮胎 */
 const OPEN_MAPS = new Set(['parts', 'tyres']);
+
+const LEGACY_PU_MAP = {
+  power_unit: PU_COMBUSTION_PARTS,
+  ers: PU_ELECTRICAL_PARTS,
+} as const;
+
+/** 把旧版两组动力单元无损拆成六类部件。 */
+function migrateSixPartPowerUnit(state: GameState): void {
+  const allocation = state.rules.puAllocation;
+  if (!allocation) return;
+  const hasLegacy = !!(
+    allocation.power_unit || allocation.ers || state.rules.parts.power_unit || state.rules.parts.ers
+    || Object.values(state.teams).some(team => team.parts.power_unit || team.parts.ers
+      || team.cars.some(car => car.fitted.power_unit || car.fitted.ers))
+    || Object.values(state.drivers ?? {}).some(driver => driver.puUsed?.power_unit || driver.puUsed?.ers || driver.puPool?.power_unit || driver.puPool?.ers)
+  );
+  if (!hasLegacy) return;
+  for (const type of PU_PART_TYPES) state.rules.parts[type] ??= deepClone(DEFAULT_RULES.parts[type]);
+  for (const [legacy, targets] of Object.entries(LEGACY_PU_MAP)) {
+    const legacyLimit = allocation[legacy] ?? DEFAULT_RULES.puAllocation[targets[0]];
+    for (const type of targets) allocation[type] ??= legacyLimit;
+  }
+  delete allocation.power_unit;
+  delete allocation.ers;
+  delete state.rules.parts.power_unit;
+  delete state.rules.parts.ers;
+  if (state.rules.aduo) {
+    if (state.rules.aduo.parts.some(type => type === 'power_unit' || type === 'ers')) state.rules.aduo.parts = [...PU_PART_TYPES];
+    if (state.rules.aduo.measurePart === 'power_unit' || state.rules.aduo.measurePart === 'ers') state.rules.aduo.measurePart = 'ice';
+  }
+  for (const team of Object.values(state.teams)) {
+    for (const [legacy, targets] of Object.entries(LEGACY_PU_MAP)) {
+      const old = team.parts[legacy];
+      if (!old) continue;
+      for (const type of targets) team.parts[type] ??= {
+        specs: old.specs.map(spec => ({ ...deepClone(spec), type })),
+        stock: { ...old.stock },
+      };
+      for (const car of team.cars) {
+        const specId = car.fitted[legacy];
+        for (const type of targets) {
+          if (specId) car.fitted[type] ??= specId;
+          const oldWear = car.puWear?.[legacy as keyof typeof car.puWear];
+          const oldPool = car.puWearPool?.[legacy as keyof typeof car.puWearPool];
+          if (oldWear) (car.puWear ??= {})[type] ??= { ...oldWear };
+          if (oldPool) (car.puWearPool ??= {})[type] ??= { ...oldPool };
+        }
+        delete car.fitted[legacy];
+        if (car.puWear) delete (car.puWear as Record<string, unknown>)[legacy];
+        if (car.puWearPool) delete (car.puWearPool as Record<string, unknown>)[legacy];
+      }
+      delete team.parts[legacy];
+    }
+    team.projects = team.projects.flatMap(project => {
+      const targets = LEGACY_PU_MAP[project.partType as keyof typeof LEGACY_PU_MAP];
+      return targets ? targets.map(type => ({
+        ...deepClone(project),
+        id: `${project.id}-${type}`,
+        partType: type,
+        cost: project.cost / targets.length,
+        label: `${project.label} · ${state.rules.parts[type]?.name ?? type}`,
+      })) : [project];
+    });
+  }
+  for (const driver of Object.values(state.drivers ?? {})) {
+    for (const [legacy, targets] of Object.entries(LEGACY_PU_MAP)) {
+      const used = driver.puUsed?.[legacy];
+      const pool = driver.puPool?.[legacy];
+      for (const type of targets) {
+        if (used !== undefined) (driver.puUsed ??= {})[type] ??= used;
+        if (pool) (driver.puPool ??= {})[type] ??= [...pool];
+      }
+      if (driver.puUsed) delete driver.puUsed[legacy];
+      if (driver.puPool) delete driver.puPool[legacy];
+    }
+  }
+  if (state.alpine?.penalizedPowerSpecs) {
+    const migrated: typeof state.alpine.penalizedPowerSpecs = {};
+    for (const entry of Object.values(state.alpine.penalizedPowerSpecs)) {
+      const targets = LEGACY_PU_MAP[entry.partType as keyof typeof LEGACY_PU_MAP];
+      if (!targets) migrated[`${entry.partType}:${entry.specId}`] = entry;
+      else for (const type of targets) migrated[`${type}:${entry.specId}`] = { ...entry, partType: type };
+    }
+    state.alpine.penalizedPowerSpecs = migrated;
+  }
+  if (state.rules.astonMartin.aduoPuBuff === 8) state.rules.astonMartin.aduoPuBuff = DEFAULT_RULES.astonMartin.aduoPuBuff;
+}
 
 export const DEFAULT_STAFF_NAMES: Record<string, Partial<Record<StaffRole, string>>> = {
   mercedes: { aeroChief: '贾罗德·墨菲', raceEngineer2: '彼得·博宁顿', pitCrew: '梅赛德斯维修组', strategist: '罗茜·韦特' },
@@ -108,6 +200,7 @@ export function migrateState(state: GameState): GameState {
   const hadRoutineEventWeight = legacyRandomRules?.routineWeight !== undefined;
   const legacyEventsDisabled = !!legacyRandomRules && legacyRandomRules.routineWeight === undefined
     && legacyRandomRules.driverInjuryWeight === 0 && legacyRandomRules.windTunnelWeight === 0 && legacyRandomRules.partIssueWeight === 0;
+  const configuredEventsDisabled = legacyRandomRules?.minPerWeek === 0 && legacyRandomRules?.maxPerWeek === 0;
   for (let index = 0; index < state.randomEvents.history.length; index++) {
     const record = state.randomEvents.history[index];
     record.id ??= `legacy-random-event-${record.roundKey}-${index}`;
@@ -146,8 +239,20 @@ export function migrateState(state: GameState): GameState {
     for (const staff of Object.values(team.staff)) staff.affinity ??= 50;
   }
   if (state.audi) state.audi.alliance = Boolean(state.audi.alliance);
-  state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, log: [] };
+  state.fiaMeeting ??= { politicalCapital: state.rules.fiaMeeting?.startPoliticalCapital ?? 50, completed: 0, current: null, ferrariTurboSpoolSeconds: 0, ferrariAduoInstalled: false, ferrariTurboDebated: false, log: [] };
+  state.fiaMeeting.ferrariTurboSpoolSeconds ??= 0;
+  state.fiaMeeting.ferrariAduoInstalled ??= (state.teams.ferrari?.puHomologations ?? 0) > 0;
+  state.fiaMeeting.ferrariTurboDebated ??= state.fiaMeeting.ferrariAduoInstalled || state.fiaMeeting.current?.issue === 'ferrari_turbo';
+  if (state.fiaMeeting.current) {
+    state.fiaMeeting.current.supporters ??= [];
+    state.fiaMeeting.current.forcedStance ??= null;
+  }
+  if (state.ferrari) {
+    state.ferrari.aduoAlliance ??= false;
+    state.ferrari.aduoLobbyGranted ??= false;
+  }
   if (state.mclaren) state.mclaren.weeksTotal ??= state.mclaren.weeksLeft;
+  state.rules.ferrari ??= deepClone(DEFAULT_RULES.ferrari);
   state.rules.astonMartin ??= deepClone(DEFAULT_RULES.astonMartin);
   state.rules.racingBulls ??= deepClone(DEFAULT_RULES.racingBulls);
   state.rules.audi ??= deepClone(DEFAULT_RULES.audi);
@@ -157,6 +262,9 @@ export function migrateState(state: GameState): GameState {
   state.rules.williams ??= deepClone(DEFAULT_RULES.williams);
   state.rules.randomEvents ??= deepClone(DEFAULT_RULES.randomEvents);
   state.rules.practiceReturnSets ??= DEFAULT_RULES.practiceReturnSets;
+  state.rules.performance ??= deepClone(DEFAULT_RULES.performance);
+  fillMissing(state.rules.performance as unknown as Record<string, unknown>, DEFAULT_RULES.performance as unknown as Record<string, unknown>);
+  fillMissing(state.rules.ferrari as unknown as Record<string, unknown>, DEFAULT_RULES.ferrari as unknown as Record<string, unknown>);
   fillMissing(state.rules.astonMartin as unknown as Record<string, unknown>, DEFAULT_RULES.astonMartin as unknown as Record<string, unknown>);
   fillMissing(state.rules.racingBulls as unknown as Record<string, unknown>, DEFAULT_RULES.racingBulls as unknown as Record<string, unknown>);
   fillMissing(state.rules.audi as unknown as Record<string, unknown>, DEFAULT_RULES.audi as unknown as Record<string, unknown>);
@@ -165,7 +273,34 @@ export function migrateState(state: GameState): GameState {
   fillMissing(state.rules.haas as unknown as Record<string, unknown>, DEFAULT_RULES.haas as unknown as Record<string, unknown>);
   fillMissing(state.rules.williams as unknown as Record<string, unknown>, DEFAULT_RULES.williams as unknown as Record<string, unknown>);
   fillMissing(state.rules.randomEvents as unknown as Record<string, unknown>, DEFAULT_RULES.randomEvents as unknown as Record<string, unknown>);
-  if (legacyEventsDisabled) {
+  const playerTeam = state.teams[state.meta?.playerTeamId];
+  if (playerTeam) {
+    const missing = {
+      ferrari: !state.ferrari,
+      mclaren: !state.mclaren,
+      mercedes: !state.mercedes,
+      redBull: !state.redBull,
+      astonMartin: !state.astonMartin,
+      audi: !state.audi,
+      alpine: !state.alpine,
+    };
+    const ferrariMedia = state.teams.ferrari?.mediaReputation;
+    const progressedSave = state.season.number > 1 || state.season.roundIndex > 0 || state.season.week > 1;
+    initFerrari(state, true);
+    initTeamSpecials(state, true);
+    initNextTeamSpecials(state, true);
+    initManagementSpecials(state, true);
+    if (progressedSave) {
+      if (missing.ferrari && !state.teams.ferrari?.isPlayer && ferrariMedia !== undefined) state.teams.ferrari.mediaReputation = ferrariMedia;
+      if (missing.mclaren && !state.teams.mclaren?.isPlayer && state.mclaren) Object.assign(state.mclaren, { softwareResolved: true, route: 'independent', weeksLeft: 0, weeksTotal: 0 });
+      if (missing.mercedes && !state.teams.mercedes?.isPlayer && state.mercedes) Object.assign(state.mercedes, { aduoApproved: true, aduoProgress: 100 });
+      if (missing.redBull && !state.teams.red_bull?.isPlayer && state.redBull) Object.assign(state.redBull, { summerChecked: true, gpRetention: 100 });
+      if (missing.astonMartin && !state.teams.aston_martin?.isPlayer && state.astonMartin) Object.assign(state.astonMartin, { aduoEngineArrived: true, aduoProgress: 100 });
+      if (missing.audi && !state.teams.audi?.isPlayer && state.audi) Object.assign(state.audi, { turboFixed: true, alliance: true, aduoProgress: 100 });
+      if (missing.alpine && !state.teams.alpine?.isPlayer) settleLegacyAlpinePenalty(state);
+    }
+  }
+  if (legacyEventsDisabled || configuredEventsDisabled) {
     state.rules.randomEvents.routineWeight = 0;
     state.rules.randomEvents.minPerWeek = 0;
     state.rules.randomEvents.maxPerWeek = 0;
@@ -173,6 +308,13 @@ export function migrateState(state: GameState): GameState {
     const randomRules = state.rules.randomEvents;
     const problemWeight = randomRules.driverInjuryWeight + randomRules.windTunnelWeight + randomRules.partIssueWeight;
     randomRules.routineWeight = problemWeight > 0 ? problemWeight * 4 : 80;
+  }
+  if (!legacyEventsDisabled && !configuredEventsDisabled) {
+    state.rules.randomEvents.minPerWeek = 1;
+    state.rules.randomEvents.maxPerWeek = 1;
+  }
+  if (state.randomEvents.weekKey !== null) {
+    state.randomEvents.weeklyQuota = state.rules.randomEvents.maxPerWeek === 0 ? 0 : 1;
   }
   // Market rules are a closed map, unlike parts/tyres. Modern saves take the
   // puAllocation fast path below, so fill this before that return.
@@ -199,6 +341,10 @@ export function migrateState(state: GameState): GameState {
       state.weekend.practice = state.weekend.practiceSessions[state.weekend.practiceSessions.length - 1];
     }
     state.weekend.practiceReturn ??= null;
+    for (const plan of Object.values(state.weekend.plans ?? {})) {
+      plan.practiceTyre ??= 'auto';
+      plan.practiceSetupFocus ??= 'balanced';
+    }
     const bias = state.weekend.supernaturalRainBias;
     if (bias !== undefined && (!Number.isFinite(bias) || bias < -0.2 || bias > 0.2)) delete state.weekend.supernaturalRainBias;
     const effects = state.weekend.supernaturalCarEffects;
@@ -211,17 +357,62 @@ export function migrateState(state: GameState): GameState {
         }
       }
     } else delete state.weekend.supernaturalCarEffects;
+    for (const setup of Object.values(state.weekend.setup ?? {})) {
+      setup.confidence = Number.isFinite(setup.confidence) ? Math.max(0, Math.min(100, setup.confidence)) : 0;
+      setup.tyreKnowledge = Number.isFinite(setup.tyreKnowledge) ? Math.max(0, Math.min(100, setup.tyreKnowledge)) : 0;
+      setup.thermalKnowledge = Number.isFinite(setup.thermalKnowledge) ? Math.max(0, Math.min(100, setup.thermalKnowledge!)) : Math.round(setup.tyreKnowledge * .75);
+      setup.trackKnowledge = Number.isFinite(setup.trackKnowledge) ? Math.max(0, Math.min(100, setup.trackKnowledge!)) : Math.round(setup.confidence * .75);
+      setup.qualiBonus = Number.isFinite(setup.qualiBonus) ? Math.max(0, Math.min(state.rules.performance.qualiBonusMax, setup.qualiBonus)) : 0;
+    }
+    if (state.weekend.practiceBaseline && typeof state.weekend.practiceBaseline !== 'object') delete state.weekend.practiceBaseline;
   }
+  for (const track of Object.values(state.tracks ?? {})) {
+    track.surfaceTemperature = Number.isFinite(track.surfaceTemperature) ? Math.max(10, Math.min(65, track.surfaceTemperature!)) : 32;
+    track.thermalDemand = Number.isFinite(track.thermalDemand) ? Math.max(0, Math.min(100, track.thermalDemand!)) : track.tyreStress;
+  }
+  for (const tyre of Object.values(state.rules.tyres ?? {})) {
+    const fallback: [number, number] = tyre.wet ? [58, 78] : [80, 105];
+    if (!Array.isArray(tyre.temperatureWindow) || tyre.temperatureWindow.length !== 2 || !tyre.temperatureWindow.every(Number.isFinite) || tyre.temperatureWindow[0] < 20 || tyre.temperatureWindow[1] > 140 || tyre.temperatureWindow[0] >= tyre.temperatureWindow[1]) tyre.temperatureWindow = fallback;
+    if (!Number.isFinite(tyre.warmupRate) || tyre.warmupRate! < .05 || tyre.warmupRate! > 1) tyre.warmupRate = tyre.wet ? .4 : .32;
+  }
+  const dryWindows: Record<string, [number, number]> = { soft: [80, 100], medium: [85, 105], hard: [90, 110] };
+  const namedDry = ['soft', 'medium', 'hard'].map(key => state.rules.tyres[key]);
+  if (namedDry.every(Boolean) && !(namedDry[0].temperatureWindow![0] < namedDry[1].temperatureWindow![0] && namedDry[1].temperatureWindow![0] < namedDry[2].temperatureWindow![0])) {
+    for (const [key, window] of Object.entries(dryWindows)) state.rules.tyres[key].temperatureWindow = window;
+  }
+  const aduoPartsBeforePuMigration = new Set([...(state.rules.aduo?.parts ?? []), 'power_unit', 'ers']);
+  const activePuDesignsBeforeMigration = new Map(Object.values(state.teams).map(team => [
+    team.id,
+    team.projects.filter(project => project.kind === 'design' && project.partType && aduoPartsBeforePuMigration.has(project.partType)).length,
+  ]));
+  migrateSixPartPowerUnit(state);
   if (state.weekend?.liveRace) {
     const live = state.weekend.liveRace;
     // Do not attempt to resume malformed or incompatible private simulation data.
     if (live.version !== 1 || !live.id || !Array.isArray(live.weatherTrajectory) || !live.cars || !Number.isFinite(live.rngState) || live.completedLaps < 0 || live.completedLaps > live.totalLaps) state.weekend.liveRace = null;
     else {
+      // A missing marker means this session began before the unified model.
+      // Never mutate its frozen values or rerun a start sequence.
+      live.physicsVersion ??= 1;
       live.strategistSkill ??= state.teams[state.meta.playerTeamId]?.staff.strategist.skill ?? 50;
       live.redFlags ??= 0;
       live.redFlag ??= null;
       live.specialIncidents ??= [];
       live.norrisTeammateRollDone ??= false;
+      // Old wet grids could omit delegated player cars (or the window entirely).
+      // Reopen only an unresolved grid; ready/running saves keep their fitted tyres.
+      if (requiresWetGridTyreChoice(live)) {
+        const eligible = Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => car.driverId);
+        live.pendingDecision = eligible.length ? {
+          id: live.pendingDecision?.id ?? `${live.id}:w1`,
+          lap: 0,
+          stage: 'grid',
+          reasons: ['grid'],
+          affectedDriverIds: eligible,
+          eligibleDriverIds: eligible,
+          observedEventIds: live.pendingDecision?.observedEventIds ?? [],
+        } : null;
+      }
       for (const car of Object.values(live.cars)) {
         const driver = state.drivers[car.driverId];
         car.trust ??= driver?.trust ?? 50;
@@ -239,12 +430,31 @@ export function migrateState(state: GameState): GameState {
         car.ersPerformance ??= 1;
         car.iceReliability ??= car.reliability;
         car.electricalReliability ??= car.reliability;
+        car.puComponentHealth ??= Object.fromEntries([
+          ...PU_COMBUSTION_PARTS.map(type => [type, car.iceHealth]),
+          ...PU_ELECTRICAL_PARTS.map(type => [type, car.electricalHealth]),
+        ]);
+        car.puComponentReliability ??= Object.fromEntries([
+          ...PU_COMBUSTION_PARTS.map(type => [type, car.iceReliability]),
+          ...PU_ELECTRICAL_PARTS.map(type => [type, car.electricalReliability]),
+        ]);
+        if (live.physicsVersion === 2) {
+          car.tyreWearAge ??= car.tyreAge;
+          const tyre = state.rules.tyres[car.tyre];
+          car.tyreTemperature ??= (tyre?.temperatureWindow?.[0] ?? (tyre?.wet ? 58 : 80)) - 18;
+          if (car.performanceContext) car.performanceContext.tyreStress ??= state.tracks[state.calendar[live.roundIndex]?.trackId]?.tyreStress ?? 50;
+        }
       }
     }
   }
   // ADUO（2026-10 新增）：旧存档没有厂商车队信息，按「各车队自行研发」处理
   if (state.rules.puAllocation && !state.rules.aduo) state.rules.aduo = deepClone(DEFAULT_RULES.aduo);
   state.aduo ??= { evaluations: [] };
+  const legacyAduoLifecycle = !!state.rules.aduo && Object.values(state.teams).some(team =>
+    state.rules.aduo.parts.some(partType => team.parts[partType]?.specs.some(spec => spec.homologated === undefined)),
+  );
+  const legacyBaseUpgrades = legacyAduoLifecycle && state.rules.aduo.baseUpgrades === 1 ? 1 : 0;
+  if (legacyAduoLifecycle && state.rules.aduo.baseUpgrades === 1) state.rules.aduo.baseUpgrades = 0;
   for (const team of Object.values(state.teams)) {
     const crew = team.staff.pitCrew.skill;
     team.pitCrewTraining ??= { speed: crew, consistency: crew, error_control: crew };
@@ -257,10 +467,17 @@ export function migrateState(state: GameState): GameState {
       team.staff.raceEngineer2 = { ...deepClone(first), id: `${team.id}-raceEngineer2`, role: 'raceEngineer2', name: `${first.name || team.name}（二号车）`, salary: 0, preference: first.preference ? { ...first.preference } : undefined };
     }
     team.worksTeam ??= false;
-    // 进行中的动力单元设计项目已经占用认证次数（取消时会返还）
-    team.puHomologations ??= state.rules.aduo
-      ? team.projects.filter(p => p.kind === 'design' && p.partType && state.rules.aduo.parts.includes(p.partType)).length
-      : 0;
+    if (legacyAduoLifecycle && state.rules.aduo) {
+      // 旧版在研发开工时计数。进行中的项目尚未生成规格，因此返还其误占的次数。
+      const activePuDesigns = activePuDesignsBeforeMigration.get(team.id) ?? 0;
+      team.puHomologations = Math.max(0, (team.puHomologations ?? activePuDesigns) - activePuDesigns);
+      // 已交付旧规格视为获批；旧基础机会转成祖父条款机会，进行中项目完成后仍可装车。
+      const legacyTotal = legacyBaseUpgrades + (team.aduoUpgrades ?? 0);
+      team.aduoUpgrades = Math.max(legacyTotal, team.puHomologations);
+    } else team.puHomologations ??= 0;
+    for (const parts of Object.values(team.parts)) {
+      for (const spec of parts.specs) spec.homologated ??= true;
+    }
     team.aduoUpgrades ??= 0;
     team.aduoCapBonus ??= 0;
     team.aduoTier ??= 0;
@@ -276,6 +493,9 @@ export function migrateState(state: GameState): GameState {
   }
   if (state.rules.tyres[state.rules.wetCompound]?.name === '雨胎') state.rules.tyres[state.rules.wetCompound].name = '半雨胎';
   migrateTyreInventory(state);
+  for (const team of Object.values(state.teams)) for (const inventory of Object.values(team.tyreInventory ?? {})) {
+    for (const set of inventory) set.wearAge = Number.isFinite(set.wearAge) ? Math.max(0, set.wearAge!) : Math.max(0, set.laps);
+  }
   if (state.weekend?.practiceReturn) {
     const team = state.teams[state.meta.playerTeamId];
     const key = `${state.season.year}:r${state.weekend.roundIndex + 1}`;
@@ -284,8 +504,8 @@ export function migrateState(state: GameState): GameState {
   // 已经是 2026 规则的存档（有 puAllocation）不再补规则：玩家可能在世界书里有意删掉了某些默认项
   if (state.rules.puAllocation) return state;
   fillMissing(state.rules as unknown as Record<string, unknown>, DEFAULT_RULES as unknown as Record<string, unknown>, true);
-  // 2026 新增的零件类型只有能量回收系统
-  state.rules.parts.ers ??= deepClone(DEFAULT_RULES.parts.ers);
+  migrateSixPartPowerUnit(state);
+  for (const type of PU_PART_TYPES) state.rules.parts[type] ??= deepClone(DEFAULT_RULES.parts[type]);
   for (const pt of Object.keys(state.rules.puAllocation)) if (!state.rules.parts[pt]) delete state.rules.puAllocation[pt];
 
   for (const team of Object.values(state.teams)) {
@@ -293,7 +513,7 @@ export function migrateState(state: GameState): GameState {
       if (!team.parts[pt]) {
         const id = `${pt}-S${state.season?.number ?? 1}m`;
         team.parts[pt] = {
-          specs: [{ id, type: pt, version: 1, perf: 70, rel: 80, verified: true, expected: null, introduced: '存档升级' }],
+          specs: [{ id, type: pt, version: 1, perf: 70, rel: 80, verified: true, expected: null, homologated: true, introduced: '存档升级' }],
           stock: { [id]: 1 },
         };
       }

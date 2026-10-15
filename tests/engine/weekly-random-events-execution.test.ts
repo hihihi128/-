@@ -16,20 +16,36 @@ function resolveCurrent(state: ReturnType<typeof newTestGame>, rng: Rng) {
 }
 
 describe('weekly random-event execution', () => {
-  it.each([3, 4])('exhausts an exact %i-event weekly quota', quota => {
-    const state = newTestGame(70_000 + quota);
+  it.each([[3, 4], [1, 3]])('caps configured %i–%i quotas at one event per week', (min, max) => {
+    const state = newTestGame(70_000 + min + max);
     state.rules.randomEvents = {
-      minPerWeek: quota, maxPerWeek: quota,
+      minPerWeek: min, maxPerWeek: max,
       routineWeight: 1, noneWeight: 0, driverInjuryWeight: 0, windTunnelWeight: 0, partIssueWeight: 0,
       minDialogueTurns: 2, maxDialogueTurns: 2,
     };
-    const rng = new Rng(80_000 + quota);
+    const rng = new Rng(80_000 + min + max);
 
-    for (let index = 0; index < quota; index++) resolveCurrent(state, rng);
+    resolveCurrent(state, rng);
 
-    expect(state.randomEvents).toMatchObject({ weeklyQuota: quota, weeklyStarted: quota });
-    expect(state.randomEvents!.history).toHaveLength(quota);
+    expect(state.randomEvents).toMatchObject({ weeklyQuota: 1, weeklyStarted: 1 });
+    expect(state.randomEvents!.history).toHaveLength(1);
     expect(triggerNextWeeklyRandomEvent(state, rng)).toBeNull();
+  });
+
+  it('caps an already-started legacy week without deleting its current event or history', () => {
+    const state = newTestGame(81_000);
+    const rng = new Rng(81_001);
+    state.randomEvents = {
+      lastRoundKey: null,
+      weekKey: `${state.season.number}-w${state.season.week}-r${state.season.roundIndex}`,
+      weeklyQuota: 4,
+      weeklyStarted: 2,
+      current: null,
+      history: [],
+    };
+
+    expect(triggerNextWeeklyRandomEvent(state, rng)).toBeNull();
+    expect(state.randomEvents).toMatchObject({ weeklyQuota: 1, weeklyStarted: 2 });
   });
 
   it('closes an unanswered event and resets quota on week rollover', () => {
@@ -51,7 +67,7 @@ describe('weekly random-event execution', () => {
     const next = triggerNextWeeklyRandomEvent(state, rng)!;
 
     expect(next.id).not.toBe(original.id);
-    expect(state.randomEvents).toMatchObject({ weeklyQuota: 3, weeklyStarted: 1, current: { id: next.id } });
+    expect(state.randomEvents).toMatchObject({ weeklyQuota: 1, weeklyStarted: 1, current: { id: next.id } });
     expect(state.randomEvents!.history.find(event => event.id === original.id)).toMatchObject({ status: 'unresolved', effects: [] });
   });
 
