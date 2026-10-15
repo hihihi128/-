@@ -9,14 +9,22 @@ const root = ref<HTMLElement | null>(null);
 const narrow = ref(false);
 let sizeObserver: ResizeObserver | null = null;
 
+function setNarrow(shell: HTMLElement, value: boolean) {
+  narrow.value = value;
+  shell.classList.toggle('tower-narrow', value);
+}
+
 onMounted(() => {
   const shell = root.value?.parentElement;
   if (!shell) return;
-  if (typeof ResizeObserver === 'undefined') { narrow.value = shell.clientWidth <= 960; return; }
-  sizeObserver = new ResizeObserver(entries => { narrow.value = (entries[0]?.contentRect.width ?? shell.clientWidth) <= 960; });
+  if (typeof ResizeObserver === 'undefined') { setNarrow(shell, shell.clientWidth <= 960); return; }
+  sizeObserver = new ResizeObserver(entries => setNarrow(shell, (entries[0]?.contentRect.width ?? shell.clientWidth) <= 960));
   sizeObserver.observe(shell);
 });
-onBeforeUnmount(() => sizeObserver?.disconnect());
+onBeforeUnmount(() => {
+  sizeObserver?.disconnect();
+  root.value?.parentElement?.classList.remove('tower-narrow');
+});
 
 const live = computed(() => props.view.weekend?.liveRace ?? null);
 const race = computed(() => props.view.weekend?.race ?? props.view.weekend?.sprint ?? null);
