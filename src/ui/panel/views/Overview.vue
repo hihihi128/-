@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import { FIA_ISSUE_LABELS } from '../../../engine/defaults';
 import type { Action } from '../../../engine/types';
 import Bar from '../components/Bar.vue';
@@ -36,7 +36,11 @@ const negotiationActiveFor = (kind: string) => activeNegotiation.value?.kind ===
 const specialAction = ref<{ action: Action; title: string; subject?: string; hint: string } | null>(null);
 const specialActionBlocked = computed(() => store.busy || !!store.status?.generating || !!specialAction.value);
 const overviewRoot = ref<HTMLElement | null>(null);
-const fiaStanceLabel: Record<string, string> = { support: '支持议题', oppose: '反对议题', compromise: '提出折中' };
+const fiaChoice = ref<'support' | 'oppose' | 'compromise' | null>(null);
+
+watch(() => fia.value?.current?.index ?? null, () => {
+  fiaChoice.value = fia.value?.current?.forcedStance ?? null;
+}, { immediate: true });
 
 function openSpecialAction(action: Action, title: string, hint: string, subject?: string): void {
   specialAction.value = { action, title, hint, subject };
@@ -194,8 +198,9 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
       </div>
       <div v-if="fia.current.forcedStance" class="notice warn small">{{ p.team.id === 'alpine' ? '布里亚托利已经决定支持提案。' : '车队已经公开支持提案。' }}你必须以支持立场参加正常领队谈判。</div>
       <Bar label="政治资本" :value="fia.politicalCapital" color="#355c8a" hint="董事会信心、媒体声望和政治资本共同决定说服检定" />
-      <div class="row"><button class="primary" :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'support')" @click="openSpecialAction({ type: 'FIA_DEBATE', stance: 'support' }, '支持 FIA 议题', `必须遵守当前会议的强制立场${fia.current.forcedStance ? `：${fiaStanceLabel[fia.current.forcedStance]}。` : '；当前没有强制立场。'}领队谈判仍按既有流程进行。`, fiaIssue[fia.current.issue])">支持议题</button><button :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'oppose')" @click="openSpecialAction({ type: 'FIA_DEBATE', stance: 'oppose' }, '反对 FIA 议题', `必须遵守当前会议的强制立场${fia.current.forcedStance ? `：${fiaStanceLabel[fia.current.forcedStance]}。` : '；当前没有强制立场。'}领队谈判仍按既有流程进行。`, fiaIssue[fia.current.issue])">反对议题</button><button :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'compromise')" @click="openSpecialAction({ type: 'FIA_DEBATE', stance: 'compromise' }, '提出 FIA 折中', `必须遵守当前会议的强制立场${fia.current.forcedStance ? `：${fiaStanceLabel[fia.current.forcedStance]}。` : '；当前没有强制立场。'}领队谈判仍按既有流程进行。`, fiaIssue[fia.current.issue])">提出折中</button></div>
-      <NegotiationPanel kind="fia_roundtable" />
+      <div class="row"><button :class="{ selected: fiaChoice === 'support' }" :aria-pressed="fiaChoice === 'support'" :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'support')" @click="fiaChoice = 'support'">支持议题</button><button :class="{ selected: fiaChoice === 'oppose' }" :aria-pressed="fiaChoice === 'oppose'" :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'oppose')" @click="fiaChoice = 'oppose'">反对议题</button><button :class="{ selected: fiaChoice === 'compromise' }" :aria-pressed="fiaChoice === 'compromise'" :disabled="specialActionBlocked || negotiationActiveFor('fia_roundtable') || (!!fia.current.forcedStance && fia.current.forcedStance !== 'compromise')" @click="fiaChoice = 'compromise'">提出折中</button></div>
+      <div class="tiny muted">先选择并高亮立场，再开始多轮 AI 谈判。</div>
+      <NegotiationPanel kind="fia_roundtable" :preferred-choice="fiaChoice" />
     </div>
 
     <div class="grid g2">
@@ -287,6 +292,11 @@ function tone(v: number, good = 60, bad = 35): 'ok' | 'warn' | 'bad' {
 }
 .special-card {
   border-left: 4px solid var(--team);
+}
+.fia-meeting button.selected {
+  border-color: var(--team);
+  background: color-mix(in srgb, var(--team) 24%, var(--panel));
+  box-shadow: 0 0 0 1px var(--team);
 }
 .rank-row {
   display: flex;

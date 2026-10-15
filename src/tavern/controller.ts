@@ -1698,7 +1698,7 @@ export class F1Controller {
     return JSON.parse(JSON.stringify(view)) as NegotiationSessionView;
   }
 
-  startSpecialNegotiation(request: { kind: unknown; api?: unknown }): NegotiationResult {
+  startSpecialNegotiation(request: { kind: unknown; api?: unknown; preferredChoice?: unknown }): NegotiationResult {
     const definition = negotiationDefinition(request.kind);
     if (!definition) return { ok: false, message: '未知的特殊谈判事件', session: this.getSpecialNegotiation() };
     const selected = request.api === undefined ? this.settings.engineerApi : request.api;
@@ -1712,6 +1712,14 @@ export class F1Controller {
     if (!current) return { ok: false, message: '还没有开局', session: this.getSpecialNegotiation() };
     const unavailable = definition.unavailable(current.state);
     if (unavailable) return { ok: false, message: unavailable, session: this.getSpecialNegotiation() };
+    const forcedChoice = definition.kind === 'fia_roundtable' ? current.state.fiaMeeting?.current?.forcedStance ?? null : null;
+    const requestedChoice = request.preferredChoice === undefined || request.preferredChoice === null ? null : request.preferredChoice;
+    if (requestedChoice !== null && (typeof requestedChoice !== 'string' || !Object.prototype.hasOwnProperty.call(definition.choices, requestedChoice))) {
+      return { ok: false, message: '谈判预设选项无效', session: this.getSpecialNegotiation() };
+    }
+    if (forcedChoice && requestedChoice && forcedChoice !== requestedChoice) {
+      return { ok: false, message: '所选立场与车队强制立场冲突', session: this.getSpecialNegotiation() };
+    }
     const openingSpeaker = definition.participants[0];
     this.specialNegotiation = {
       id: `neg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1723,6 +1731,7 @@ export class F1Controller {
       minRounds: 2,
       maxRounds: 4,
       status: 'active',
+      preferredChoice: forcedChoice ?? requestedChoice,
       messages: [{ role: 'counterparty', speaker: openingSpeaker, text: definition.opening }],
       outcome: null,
       chatId: this.env.chatId(),
@@ -1786,7 +1795,8 @@ export class F1Controller {
       if (new TextEncoder().encode(generated).byteLength > 16 * 1024) return fail('谈判 API 返回超过 16 KiB');
       const reply = parseNegotiationReply(generated, definition, nextRound, session.minRounds, session.maxRounds);
       const forcedStance = session.kind === 'fia_roundtable' ? current.state.fiaMeeting?.current?.forcedStance : null;
-      if (reply.status === 'agreement' && forcedStance && reply.choice !== forcedStance) throw new Error('谈判 API 返回了车队禁止的立场');
+      const requiredChoice = forcedStance ?? session.preferredChoice;
+      if (reply.status === 'agreement' && requiredChoice && reply.choice !== requiredChoice) throw new Error('谈判 API 返回了未选择的结算方案');
       const latest = this.resolveNegotiationContext(session);
       if (this.generationInProgress() || !latest) {
         session.status = 'breakdown';

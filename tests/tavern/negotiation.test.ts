@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dispatch } from '../../src/engine/actions';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
-import { NEGOTIATIONS, negotiationDefinition, parseNegotiationReply } from '../../src/tavern/negotiation';
+import { NEGOTIATIONS, negotiationDefinition, negotiationPrompt, parseNegotiationReply } from '../../src/tavern/negotiation';
 import { cardSources } from '../helpers';
 
 describe('特殊事件多轮谈判协议', () => {
@@ -72,6 +72,20 @@ describe('特殊事件多轮谈判协议', () => {
       2,
       4,
     )).toThrow('非法结算选择');
+  });
+
+  it('FIA 预设立场只向多轮谈判开放所选结算方案', () => {
+    const loaded = normalizeDatabase(cardSources());
+    if (!loaded.db) throw new Error('card database failed to load');
+    const state = createGame(loaded.db, { playerTeamId: 'audi', principalName: '测试领队', seed: 9, gameId: 'fia-choice', now: 1 });
+    state.fiaMeeting!.current = { index: 1, issue: 'cost_cap', opponents: ['ferrari'], supporters: [], forcedStance: null };
+    const prompt = negotiationPrompt(state, {
+      id: 'fia-test', kind: 'fia_roundtable', title: 'FIA 领队座谈会', participants: NEGOTIATIONS.fia_roundtable.participants,
+      api: 'main', round: 0, minRounds: 2, maxRounds: 4, status: 'active', preferredChoice: 'oppose', messages: [], outcome: null,
+    }, '我反对该议题。');
+    expect(prompt).toContain('oppose=反对议题');
+    expect(prompt).not.toContain('support=支持议题');
+    expect(prompt).not.toContain('compromise=提出折中');
   });
 
   it('第四轮必须结束谈判', () => {
