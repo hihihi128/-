@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { advanceUntil, act, newTestGame, tryAct } from '../helpers';
-import { weekendTyreKey } from '../../src/engine/tyres';
+import { returnEligibleTyreSets, weekendTyreKey } from '../../src/engine/tyres';
+import { deepClone } from '../../src/engine/util';
+import { buildView } from '../../src/engine/view';
+import { migrateState } from '../../src/engine/migrate';
 
 describe('逐段排位与实体轮胎组', () => {
   it('逐段推进 Q1/Q2/Q3，并保存每次出场选择的实体轮胎组', () => {
@@ -47,6 +50,43 @@ describe('逐段排位与实体轮胎组', () => {
     const playerEntries = state.weekend!.liveQualifying!.sessions[0].entries.filter(entry => entry.teamId === team.id);
     expect(playerEntries.every(entry => entry.time === null && entry.note === '无可用轮胎')).toBe(true);
   });
+
+  it('排位赛轮胎配方会影响圈速', () => {
+    const base = advanceUntil(newTestGame(320), value => value.season.phase === 'qualifying');
+    base.weekend!.weather.qualifying = 'dry';
+    const team = base.teams[base.meta.playerTeamId];
+    const sets = team.tyreInventory!.c1.filter(set => !set.returned);
+    const soft = sets.find(set => set.compound === base.rules.dryCompounds[0])!;
+    const hard = sets.find(set => set.compound === base.rules.dryCompounds[2])!;
+    const other = team.tyreInventory!.c2.find(set => !set.returned && !base.rules.tyres[set.compound].wet)!;
+    const run = (setId: string) => act(deepClone(base), { type: 'RUN_QUALIFYING', tyreSetIds: { c1: [setId, setId], c2: [other.id, other.id] } });
+    const softTime = run(soft.id).weekend!.liveQualifying!.sessions[0].entries.find(entry => entry.driverId === 'c1')!.time!;
+    const hardTime = run(hard.id).weekend!.liveQualifying!.sessions[0].entries.find(entry => entry.driverId === 'c1')!.time!;
+    expect(softTime).toBeLessThan(hardTime);
+  });
+
+  it('SQ1 和 SQ2 只允许全新的指定中性胎，SQ3 开放合法干胎', () => {
+    let state = advanceUntil(newTestGame(322), value => value.season.phase === 'sprint_qualifying', 1200);
+    state.weekend!.weather.sprintQualifying = 'dry';
+    const medium = state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0];
+    const choices = () => Object.fromEntries(buildView(state).weekend!.drivers.map(driver => {
+      const sets = driver.tyreSets.filter(set => driver.qualifyingTyreSetIds.includes(set.id));
+      return [driver.driverId, [sets[0]?.id].filter(Boolean) as string[]];
+    }));
+    for (const driver of buildView(state).weekend!.drivers) {
+      const sets = driver.tyreSets.filter(set => driver.qualifyingTyreSetIds.includes(set.id));
+      expect(sets.every(set => set.compound === medium && set.state === 'new')).toBe(true);
+    }
+    state = act(state, { type: 'RUN_SPRINT_QUALIFYING', tyreSetIds: choices() });
+    for (const driver of buildView(state).weekend!.drivers.filter(item => state.weekend!.liveQualifying!.alive.includes(item.driverId))) {
+      const sets = driver.tyreSets.filter(set => driver.qualifyingTyreSetIds.includes(set.id));
+      expect(sets.every(set => set.compound === medium && set.state === 'new')).toBe(true);
+    }
+    state = act(state, { type: 'RUN_SPRINT_QUALIFYING', tyreSetIds: choices() });
+    const sq3 = buildView(state).weekend!.drivers.filter(item => state.weekend!.liveQualifying!.alive.includes(item.driverId));
+    expect(sq3.every(driver => driver.qualifyingTyreSetIds.length > 0)).toBe(true);
+    expect(sq3.some(driver => driver.tyreSets.filter(set => driver.qualifyingTyreSetIds.includes(set.id)).some(set => set.compound !== medium))).toBe(true);
+  });
 });
 
 describe('比赛周末动力单元磨损', () => {
@@ -61,6 +101,21 @@ describe('比赛周末动力单元磨损', () => {
     const beforeQualifying = state.teams[state.meta.playerTeamId].cars.find(item => item.driverId === 'c1')!.puWear!.ice!.wear;
     state = act(state, { type: 'RUN_QUALIFYING' });
     expect(state.teams[state.meta.playerTeamId].cars.find(item => item.driverId === 'c1')!.puWear!.ice!.wear).toBeGreaterThan(beforeQualifying);
+  });
+});
+
+describe('逐段排位存档迁移', () => {
+  it('保留合法进度并清除畸形进度', () => {
+    let state = advanceUntil(newTestGame(323), value => value.season.phase === 'qualifying');
+    state = act(state, { type: 'RUN_QUALIFYING' });
+    const valid = deepClone(state);
+    migrateState(valid);
+    expect(valid.weekend!.liveQualifying?.segmentIndex).toBe(1);
+
+    const malformed = deepClone(state);
+    malformed.weekend!.liveQualifying!.segmentCount = Number.NaN;
+    migrateState(malformed);
+    expect(malformed.weekend!.liveQualifying).toBeNull();
   });
 });
 
@@ -80,6 +135,37 @@ describe('正赛实体轮胎组', () => {
     state = act(state, { type: 'START_RACE', kind: 'race' });
     expect(state.weekend!.liveRace!.cars.c1.tyreSetId).toBe(first.id);
     expect(state.weekend!.liveRace!.cars.c1.plannedTyreSetIds).toEqual([first.id, second.id]);
+    let live = state.weekend!.liveRace!;
+    state = act(state, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
+      drivers: live.pendingDecision!.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto' as const, startCompound: live.cars[driverId].tyre })),
+    });
+    live = state.weekend!.liveRace!;
+    live.cars.c1.stints[0] = 1;
+    live.cars.c1.tyreAge = 10;
+    for (let attempt = 0; attempt < 4 && state.weekend!.liveRace!.cars.c1.tyreSetId !== second.id; attempt++) {
+      live = state.weekend!.liveRace!;
+      state = live.pendingDecision
+        ? act(state, {
+            type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision.id,
+            drivers: live.pendingDecision.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto' as const })),
+          })
+        : act(state, { type: 'ADVANCE_RACE', sessionId: live.id, expectedRevision: live.revision, until: 'next_lap' });
+    }
+    expect(state.weekend!.liveRace!.cars.c1.tyreSetId).toBe(second.id);
+  });
+
+  it('拒绝重复轮胎组，并保护已规划轮胎不被练习赛交回', () => {
+    let state = advanceUntil(newTestGame(321), value => value.season.phase === 'practice');
+    const team = state.teams[state.meta.playerTeamId];
+    const sets = team.tyreInventory!.c1.filter(set => !set.returned && !state.rules.tyres[set.compound].wet);
+    const first = sets[0];
+    const second = sets.find(set => set.compound !== first.compound)!;
+    const duplicate = tryAct(state, { type: 'SET_PLAN', driverId: 'c1', plan: { tyrePlan: [first.compound, second.compound], raceTyreSetPlan: [first.id, first.id] } });
+    expect(duplicate.ok).toBe(false);
+    state = act(state, { type: 'SET_PLAN', driverId: 'c1', plan: { tyrePlan: [first.compound, second.compound], raceTyreSetPlan: [first.id, second.id] } });
+    expect(returnEligibleTyreSets(state, team, 'c1').map(set => set.id)).not.toContain(first.id);
+    expect(returnEligibleTyreSets(state, team, 'c1').map(set => set.id)).not.toContain(second.id);
   });
 });
 
@@ -94,6 +180,8 @@ describe('按退赛原因结算部件损伤', () => {
     const fittedBefore = playerTeam.cars.find(item => item.driverId === 'c1')!.fitted.ice;
     const stockBefore = playerTeam.parts.ice.stock[fittedBefore] ?? 0;
     const usedBefore = state.drivers.c1.puUsed!.ice;
+    const fitnessBefore = state.drivers.c1.fitness;
+    const capSpentBefore = playerTeam.costCapSpent;
     car.status = 'dnf';
     car.reason = 'ICE 故障';
     car.completedLaps = 8;
@@ -107,6 +195,8 @@ describe('按退赛原因结算部件损伤', () => {
     state = act(state, { type: 'ADVANCE_RACE', sessionId: live.id, expectedRevision: live.revision, until: 'next_lap' });
     const fittedAfter = state.teams[state.meta.playerTeamId].cars.find(item => item.driverId === 'c1')!.fitted.ice;
     expect(state.drivers.c1.puUsed!.ice).toBe(usedBefore + 1);
+    expect(state.drivers.c1.fitness).toBe(fitnessBefore);
+    expect(state.teams[state.meta.playerTeamId].costCapSpent).toBe(capSpentBefore + playerTeam.operatingCost);
     expect(state.teams[state.meta.playerTeamId].parts.ice.stock[fittedAfter] ?? 0).toBe(Math.max(0, stockBefore - 1));
     expect(state.teams[state.meta.playerTeamId].cars.find(item => item.driverId === 'c1')!.puWear!.ice!.wear).toBe(0);
     expect(fittedAfter).toBeTruthy();

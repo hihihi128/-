@@ -22,6 +22,7 @@ import type {
   QualiApproach,
   QualiResult,
   QualiSession,
+  Compound,
   SetupState,
   TeamState,
   TrackDef,
@@ -290,6 +291,7 @@ function qualiLap(
   score: number,
   track: TrackDef,
   wet: boolean,
+  compound: Compound,
   sessionIndex: number,
   rng: Rng,
   tyreLaps = 0,
@@ -308,6 +310,7 @@ function qualiLap(
     practiceEffects(setup, rules, trackFit(carRatings(team, team.cars.find(car => car.driverId === driver.id)!, rules), track)).quali +
     approach.mean -
     sessionIndex * 0.12 +
+    (rules.tyres[compound]?.pace ?? 0) +
     tyreLaps * .018 +
     rng.normal(0, sigma);
   return { time: round3(t) };
@@ -329,8 +332,9 @@ export interface QualifyingStepResult {
   result: QualiResult | null;
 }
 
-function legalQualifyingSets(state: GameState, team: TeamState, driverId: string, kind: 'qualifying' | 'sprint_qualifying', segmentIndex: number, wet: boolean) {
+export function qualifyingTyreSets(state: GameState, team: TeamState, driverId: string, kind: 'qualifying' | 'sprint_qualifying', segmentIndex: number) {
   const key = weekendTyreKey(state);
+  const wet = (kind === 'qualifying' ? state.weekend?.weather.qualifying : state.weekend?.weather.sprintQualifying) === 'wet';
   return driverTyreSets(team, driverId, key).filter(set => {
     if (set.returned) return false;
     const tyre = state.rules.tyres[set.compound];
@@ -356,6 +360,7 @@ export function advanceQualifyingSegment(
     ...e,
     score: trackScore(carRatings(e.team, e.car, state.rules), track),
   }));
+  const entryByDriver = new Map(entries.map(entry => [entry.driver.id, entry]));
   const n = entries.length;
   const prefix = kind === 'qualifying' ? 'Q' : 'SQ';
   // 三节淘汰：最后一节保留 qualiFinalists 台车，其余平均分到前两节淘汰（2026 年 22 台车 → 6/6/10）
@@ -371,9 +376,9 @@ export function advanceQualifyingSegment(
 
   // Validate every manual player choice before consuming RNG or tyre life.
   if (tyreSetIds) for (const id of progress.alive) {
-    const e = entries.find(x => x.driver.id === id)!;
+    const e = entryByDriver.get(id)!;
     if (!e.team.isPlayer) continue;
-    const legal = legalQualifyingSets(state, e.team, id, kind, s, wet);
+    const legal = qualifyingTyreSets(state, e.team, id, kind, s);
     const selected = tyreSetIds[id] ?? [];
     if (!legal.length) continue; // No legal set means this driver is allowed to record no time.
     if (selected.length !== runs) return { ok: false, message: `${driverName(state, id)} 必须为本分段的 ${runs} 次出场分别选择轮胎组`, result: null };
@@ -383,7 +388,7 @@ export function advanceQualifyingSegment(
   }
 
   const times = progress.alive.map(id => {
-      const e = entries.find(x => x.driver.id === id)!;
+      const e = entryByDriver.get(id)!;
       let best: number | null = null;
       let note: string | undefined;
       const tyreRuns: NonNullable<QualiSession['entries'][number]['tyreRuns']> = [];
@@ -400,7 +405,7 @@ export function advanceQualifyingSegment(
         const compound = set.compound;
         const startedNew = set.state === 'new';
         const lapsBefore = set.laps;
-        const lap = qualiLap(state, e.driver, e.team, e.score, track, wet, s, rng, lapsBefore);
+        const lap = qualiLap(state, e.driver, e.team, e.score, track, wet, compound, s, rng, lapsBefore);
         const lapsAdded = 3;
         useTyreSet(set, lapsAdded);
         addPowerUnitWear(e.car, lapsAdded * .02);

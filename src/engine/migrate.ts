@@ -388,7 +388,18 @@ export function migrateState(state: GameState): GameState {
   migrateSixPartPowerUnit(state);
   if (state.weekend?.liveQualifying) {
     const live = state.weekend.liveQualifying;
-    if (live.version !== 1 || !Array.isArray(live.alive) || !Array.isArray(live.sessions) || live.segmentIndex < 0 || live.segmentIndex >= live.segmentCount) {
+    if (live.version !== 1
+      || (live.kind !== 'qualifying' && live.kind !== 'sprint_qualifying')
+      || live.kind !== state.season.phase
+      || !Array.isArray(live.alive)
+      || !Array.isArray(live.finalOrder)
+      || !Array.isArray(live.sessions)
+      || !Array.isArray(live.events)
+      || !Number.isInteger(live.segmentIndex)
+      || !Number.isInteger(live.segmentCount)
+      || live.segmentCount < 1
+      || live.segmentIndex < 0
+      || live.segmentIndex >= live.segmentCount) {
       state.weekend.liveQualifying = null;
     }
   }

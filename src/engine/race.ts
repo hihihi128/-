@@ -16,7 +16,7 @@ import { applyAudiStartDrop, applyFerrariStartGain, astonVibrationActive } from 
 import { createForecast, createWeatherTrajectory, nextWetness, surfaceFor } from './raceWeather';
 import { validOrders, validRaceChoice } from './raceDecisions';
 import { actualStationaryTime } from './pitstop';
-import { PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES } from './powerunit';
+import { powerUnitWearRate, PU_COMBUSTION_PARTS, PU_ELECTRICAL_PARTS, PU_PART_TYPES } from './powerunit';
 import { canRunTyreStrategy, ensureDriverWeekendTyres, takeTyreSet, tyreSetById, useTyreSet, weekendTyreKey } from './tyres';
 import {
   degFactor,
@@ -1101,7 +1101,7 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
         const baseWear = electrical ? .014 : .012;
         const stress = electrical ? (car.energyMode === 'deploy' ? .018 : 0) : (car.plan.paceMode === 'push' ? .012 : 0);
         const heat = Math.max(0, car.puTemperature - 102) * (electrical ? .004 : .003);
-        const rate = type === 'exhaust' ? .7 : type === 'control_electronics' ? .8 : type === 'turbocharger' ? 1.1 : 1;
+        const rate = powerUnitWearRate(type);
         car.puComponentHealth[type] = clamp((car.puComponentHealth[type] ?? 100) - (baseWear + Math.max(0, 88 - rel) * (electrical ? .0014 : .0012) + stress + heat) * rate, 0, 100);
       }
       car.iceHealth = groupHealth(car.puComponentHealth, PU_COMBUSTION_PARTS);

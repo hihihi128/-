@@ -20,6 +20,10 @@ export function isPowerUnitPart(type: PartType): type is PowerUnitPartType {
   return PU_PART_TYPES.includes(type as PowerUnitPartType);
 }
 
+export function powerUnitWearRate(type: PowerUnitPartType): number {
+  return type === 'exhaust' ? .7 : type === 'control_electronics' ? .8 : type === 'turbocharger' ? 1.1 : 1;
+}
+
 /** Add persistent wear to every fitted PU component after a non-race session. */
 export function addPowerUnitWear(car: CarState, wear: number): void {
   if (!(wear > 0)) return;
@@ -30,7 +34,7 @@ export function addPowerUnitWear(car: CarState, wear: number): void {
     if (!specId) continue;
     const pool = car.puWearPool[type] ??= {};
     const current = pool[specId] ?? (car.puWear[type]?.specId === specId ? car.puWear[type]!.wear : 0);
-    const next = clamp(current + wear, 0, 99);
+    const next = clamp(current + wear * powerUnitWearRate(type), 0, 99);
     pool[specId] = next;
     car.puWear[type] = { specId, wear: next };
   }

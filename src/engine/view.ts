@@ -54,7 +54,7 @@ import type {
 } from './types';
 import { round1 } from './util';
 import { predictedStationaryTime } from './pitstop';
-import { currentRound } from './weekend';
+import { currentRound, qualifyingTyreSets } from './weekend';
 import { marketCloseBlockers } from './market';
 
 export interface PartView {
@@ -202,6 +202,7 @@ export interface WeekendDriverView {
   sprintOptions: StrategyOption[];
   tyreLife: Record<string, number>;
   tyreSets: Array<{ id: string; compound: string; state: 'new' | 'used'; laps: number; returned: boolean; returnEligible: boolean }>;
+  qualifyingTyreSetIds: string[];
 }
 
 function tyreThermalState(state: GameState, car: import('./types').LiveRaceCar): 'cold' | 'optimal' | 'hot' {
@@ -818,6 +819,9 @@ function buildWeekendView(state: GameState): WeekendView | null {
           : [],
         tyreLife: Object.fromEntries(Object.entries(state.rules.tyres).map(([k, t]) => [k, round1(predictedTyreLife(t, factor, { context: performanceContext, paceMode: plan.paceMode, rules: state.rules }))])),
         tyreSets: (team.tyreInventory?.[d.id] ?? []).filter(set => set.weekendKey === weekendTyreKey(state, w.roundIndex)).map(set => ({ id: set.id, compound: set.compound, state: set.state, laps: set.laps, returned: set.returned, returnEligible: !!w.practiceReturn?.eligibleSetIds?.[d.id]?.includes(set.id) })),
+        qualifyingTyreSetIds: state.season.phase === 'qualifying' || state.season.phase === 'sprint_qualifying'
+          ? qualifyingTyreSets(state, team, d.id, state.season.phase, w.liveQualifying?.segmentIndex ?? 0).map(set => set.id)
+          : [],
       });
     }
   }

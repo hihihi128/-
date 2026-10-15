@@ -144,6 +144,7 @@ function setPlan(state: GameState, driverId: string, patch: Partial<DriverPlan>,
     if (patch.raceTyreSetPlan.length === 0) delete plan.raceTyreSetPlan;
     else {
       if (!Array.isArray(plan.tyrePlan) || patch.raceTyreSetPlan.length !== plan.tyrePlan.length) return fail('每个正赛赛段必须对应一套实体轮胎组');
+      if (new Set(patch.raceTyreSetPlan).size !== patch.raceTyreSetPlan.length) return fail('每个正赛赛段必须使用不同的实体轮胎组');
       plan.raceTyreSetPlan = [...patch.raceTyreSetPlan];
     }
   }

@@ -96,7 +96,7 @@ export function canRunTyreStrategy(team: TeamState, driverId: string, key: strin
 export function returnEligibleTyreSets(state: GameState, team: TeamState, driverId: string): TyreSet[] {
   const dry = new Set(state.rules.dryCompounds);
   const available = ensureDriverWeekendTyres(state, team, driverId).filter(set => !set.returned && dry.has(set.compound));
-  const protectedIds = new Set<string>();
+  const protectedIds = new Set<string>(state.weekend?.plans[driverId]?.raceTyreSetPlan ?? []);
   for (const compound of state.rules.dryCompounds) {
     const reserveCount = state.calendar[state.season.roundIndex]?.sprint && compound === state.rules.dryCompounds[1] ? 2 : 1;
     const reserves = available.filter(set => set.compound === compound)

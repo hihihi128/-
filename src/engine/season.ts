@@ -588,17 +588,20 @@ function processCrashes(state: GameState, extras: RaceExtras, rng: Rng): string[
         destroyed.push(`${def.name} v${lost?.version ?? '?'}（无备件，紧急赶制 ${money(def.unitCost * 1.5)}）${pen ? `（${pen}）` : ''}`);
       }
     }
-    const repair = round2(c.dnf ? rng.range(0.6, 1.4) : 0.25);
-    charge(team, repair, 'repair', rules);
+    const mechanical = c.cause === 'power_unit';
+    const repair = mechanical ? 0 : round2(c.dnf ? rng.range(0.6, 1.4) : 0.25);
+    if (repair > 0) charge(team, repair, 'repair', rules);
     const d = state.drivers[c.driverId];
-    if (d && c.dnf) {
+    if (d && c.dnf && !mechanical) {
       d.fitness = round1(clamp(d.fitness - rng.range(5, 25), 0, 100));
       if (d.fitness < 35) {
         addNews(state, '车手', `${d.name} 在事故中受伤（体能 ${d.fitness.toFixed(0)}），可能影响下一站。`);
       }
     }
     if (team.isPlayer) {
-      const note = `${driverName(state, c.driverId)} 的事故维修 ${money(repair)}${destroyed.length ? `，损毁：${destroyed.join('、')}` : ''}`;
+      const note = mechanical
+        ? `${driverName(state, c.driverId)} 的动力单元故障${destroyed.length ? `，损毁：${destroyed.join('、')}` : ''}`
+        : `${driverName(state, c.driverId)} 的事故维修 ${money(repair)}${destroyed.length ? `，损毁：${destroyed.join('、')}` : ''}`;
       notes.push(note);
       addNews(state, '车队', note);
     }
