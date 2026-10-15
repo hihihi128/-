@@ -838,7 +838,13 @@ function fitInitialTyres(state: GameState, session: LiveRaceState, car: LiveRace
   car.tyreWearAge = set.wearAge ?? set.laps;
   car.tyreTemperature = (tyre?.temperatureWindow?.[0] ?? 80) - 18;
   car.usedCompounds = [compound];
-  car.plannedCompounds = preserveDryStrategy ? [compound, ...car.plannedCompounds.slice(1)] : [compound];
+  if (preserveDryStrategy) {
+    const originalFirst = car.plannedCompounds[0];
+    const remaining = car.plannedCompounds.slice(1);
+    const duplicateIndex = remaining.indexOf(compound);
+    if (duplicateIndex >= 0 && originalFirst) remaining[duplicateIndex] = originalFirst;
+    car.plannedCompounds = [compound, ...remaining];
+  } else car.plannedCompounds = [compound];
   car.stints = optimizeStints(state.rules, track, car.plannedCompounds, session.totalLaps, car.tyreFactor, { context: car.performanceContext, paceMode: car.plan.paceMode });
   car.stintIndex = 0;
   car.pendingPit = null;
@@ -1401,7 +1407,10 @@ export function finishRaceSession(state: GameState, session: LiveRaceState): { r
   if (session.stage !== 'finished') return null;
   const running = liveCars(session).filter(c => c.status === 'running');
   if (session.kind === 'race' && session.weatherHistory.every(v => v < .25)) {
-    for (const car of running) if (new Set(car.usedCompounds.filter(c => !state.rules.tyres[c]?.wet)).size < state.rules.mandatoryCompounds) car.cumulativeTime += 10;
+    for (const car of running) {
+      const usedWetTyre = car.usedCompounds.some(compound => state.rules.tyres[compound]?.wet);
+      if (!usedWetTyre && new Set(car.usedCompounds.filter(compound => !state.rules.tyres[compound]?.wet)).size < state.rules.mandatoryCompounds) car.cumulativeTime += 10;
+    }
   }
   const ordered = [...running].sort((a, b) => a.cumulativeTime - b.cumulativeTime);
   const dnfs = liveCars(session).filter(c => c.status === 'dnf').sort((a, b) => b.completedLaps - a.completedLaps);

@@ -7,7 +7,7 @@ import type { LiveRaceState } from '../../src/engine/types';
 import { createForecast, createWeatherTrajectory } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
 import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
-import { advanceRaceSession, aiWeatherReactionDelay, applyRaceDecision, engineerDecisionRoll, redFlagProbability, requiresWetGridTyreChoice } from '../../src/engine/race';
+import { advanceRaceSession, aiWeatherReactionDelay, applyRaceDecision, engineerDecisionRoll, finishRaceSession, redFlagProbability, requiresWetGridTyreChoice } from '../../src/engine/race';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -482,6 +482,40 @@ describe('resumable live race', () => {
     for (const [id, plan] of Object.entries(before)) {
       expect(resolved.weekend!.liveRace!.cars[id]).toMatchObject({ plannedCompounds: plan.compounds, stints: plan.stints, tyreSetId: plan.setId });
     }
+  });
+
+  it('swaps a changed dry grid tyre into the plan without losing the second compound', () => {
+    const ready = raceReady(1012);
+    const plannedDriver = ready.teams[ready.meta.playerTeamId].cars[0].driverId!;
+    ready.weekend!.weather.race = 'dry';
+    ready.weekend!.plans[plannedDriver].tyrePlan = ['medium', 'hard'];
+    const started = act(ready, { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    const first = plannedDriver;
+    const car = live.cars[first];
+    const originalFirst = car.plannedCompounds[0];
+    const selected = car.plannedCompounds[1];
+    expect(selected).toBeTruthy();
+    const drivers = automaticChoices(started, live).map(choice => choice.driverId === first ? { ...choice, startCompound: selected } : choice);
+    const resolved = act(started, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id, drivers,
+    });
+    expect(resolved.weekend!.liveRace!.cars[first].plannedCompounds.slice(0, 2)).toEqual([selected, originalFirst]);
+  });
+
+  it('waives the two-dry-compound penalty after a wet-tyre start on a dry track', () => {
+    const state = raceReady(1013);
+    const started = act(state, { type: 'START_RACE', kind: 'race' });
+    const live = started.weekend!.liveRace!;
+    for (const car of Object.values(live.cars)) {
+      car.status = 'running';
+      car.usedCompounds = [started.rules.wetCompound, 'soft'];
+      car.cumulativeTime = 100;
+    }
+    live.weatherHistory = [0];
+    live.stage = 'finished';
+    expect(finishRaceSession(started, live)).not.toBeNull();
+    expect(Object.values(live.cars).every(car => car.cumulativeTime === 100)).toBe(true);
   });
 
   it('rejects malformed wet-grid submissions atomically and rejects start tyres later', () => {
