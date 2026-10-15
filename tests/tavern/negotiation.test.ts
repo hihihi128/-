@@ -38,6 +38,15 @@ describe('特殊事件多轮谈判协议', () => {
     )).toMatchObject({ status: 'continue', choice: null });
   });
 
+  it('法拉利联盟谈判不受 AI 奥迪已经结盟影响', () => {
+    const loaded = normalizeDatabase(cardSources());
+    if (!loaded.db) throw new Error('card database failed to load');
+    const state = createGame(loaded.db, { playerTeamId: 'ferrari', principalName: '测试领队', seed: 8, gameId: 'ferrari-alliance', now: 1 });
+    state.audi!.alliance = true;
+    expect(NEGOTIATIONS.aduo_alliance.unavailable(state)).toBeNull();
+    expect(NEGOTIATIONS.aduo_alliance.context(state)).toContain('法拉利尚有');
+  });
+
   it('协议只能映射到事件白名单动作', () => {
     const definition = NEGOTIATIONS.fia_roundtable;
     const parsed = parseNegotiationReply(

@@ -204,10 +204,10 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
   const name = state.meta.principalName;
   const reasonLine = reason ? `外界普遍认为 ${name} 被选中的原因是：${reason}。` : '';
   const tail = `距离首站（${firstTrack}）还有 ${state.calendar[0]?.weeksGap ?? 0} 周。董事会对本赛季的目标是车队积分榜第 ${team.targetPosition} 名。`;
-  initFerrari(state, team);
-  initTeamSpecials(state, team);
-  initNextTeamSpecials(state, team);
-  initManagementSpecials(state, team);
+  initFerrari(state);
+  initTeamSpecials(state);
+  initNextTeamSpecials(state);
+  initManagementSpecials(state);
   let newsText: string;
   let title: string;
   let detail: string[];

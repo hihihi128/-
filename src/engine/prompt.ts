@@ -245,7 +245,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   if (opts.protocolReminder !== false) {
     const lim = rules.aiLimits;
     L.push(
-      `若剧情产生可量化的后果，在回复末尾用 <${UPDATE_TAG}> 每行一个 JSON 输出（没有就不输出）。单条幅度上限：心态/信任 ±${lim.morale}/±${lim.trust}，董事会 ±${lim.board}，媒体/士气 ±${lim.media}/±${lim.staff}，资金 ±${lim.funds}M，体能 ±${lim.fitness}，罚退 ≤${lim.penalty} 格${ferrariActive(state) ? `，粉丝意见 ±${lim.fans}（{"op":"fans","driver":"车手id","delta":数值}）` : ''}；每条回复最多 ${lim.maxCommands} 条。`,
+      `若剧情产生可量化的后果，在回复末尾用 <${UPDATE_TAG}> 每行一个 JSON 输出（没有就不输出）。单条幅度上限：心态/信任 ±${lim.morale}/±${lim.trust}，董事会 ±${lim.board}，媒体/士气 ±${lim.media}/±${lim.staff}，资金 ±${lim.funds}M，体能 ±${lim.fitness}，罚退 ≤${lim.penalty} 格${team.special === 'ferrari' && ferrariActive(state) ? `，粉丝意见 ±${lim.fans}（{"op":"fans","driver":"车手id","delta":数值}）` : ''}；每条回复最多 ${lim.maxCommands} 条。`,
     );
   }
   L.push('</F1领队模拟器·实时数据>');

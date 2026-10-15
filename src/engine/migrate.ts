@@ -275,10 +275,10 @@ export function migrateState(state: GameState): GameState {
   fillMissing(state.rules.randomEvents as unknown as Record<string, unknown>, DEFAULT_RULES.randomEvents as unknown as Record<string, unknown>);
   const playerTeam = state.teams[state.meta?.playerTeamId];
   if (playerTeam) {
-    initFerrari(state, playerTeam, true);
-    initTeamSpecials(state, playerTeam, true);
-    initNextTeamSpecials(state, playerTeam, true);
-    initManagementSpecials(state, playerTeam, true);
+    initFerrari(state, true);
+    initTeamSpecials(state, true);
+    initNextTeamSpecials(state, true);
+    initManagementSpecials(state, true);
   }
   if (legacyEventsDisabled || configuredEventsDisabled) {
     state.rules.randomEvents.routineWeight = 0;

@@ -134,6 +134,7 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     expect(state.audi?.alliance).toBe(true);
     expect(state.mclaren?.route).toBe('independent');
     expect(state.astonMartin?.lastActionRound).not.toBeNull();
+    expect(state.narration.some(event => ['mclaren_fix', 'aston_aduo'].includes(event.kind))).toBe(false);
     state.rules.audi.startDropMin = 3; state.rules.audi.startDropMax = 3;
     const session = createRaceSession(state, new Rng(5), 'race');
 

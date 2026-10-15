@@ -10,8 +10,7 @@ const CAP = 12;
 const weekKey = (state: GameState) => `${state.season.number}-w${state.season.week}`;
 const append = (state: GameState, target: { log: Array<{ at: string; text: string }> }, text: string) => pushCapped(target.log, { at: stamp(state), text }, CAP);
 
-export function initNextTeamSpecials(state: GameState, team: TeamState, preserveExisting = false): void {
-  void team;
+export function initNextTeamSpecials(state: GameState, preserveExisting = false): void {
   if (!preserveExisting || !state.astonMartin) state.astonMartin = Object.values(state.teams).some(value => value.special === 'aston_martin') ? {
     aduoEngineArrived: false, aduoProgress: 0, hondaConflict: state.rules.astonMartin.startHondaConflict,
     neweyProgress: 0, chassisUpgradeReady: false, mediaPressure: state.rules.astonMartin.startMediaPressure,
@@ -37,7 +36,9 @@ function completeAstonAduo(state: GameState): void {
   a.aduoEngineArrived = true;
   buffCurrentParts(state.teams.aston_martin, PU_PART_TYPES, state.rules.astonMartin.aduoPuBuff);
   addNews(state, '研发', '本田首批 ADUO 动力单元提前到货。振动达到危险阈值时的强制退赛风险已经消失。');
-  addNarration(state, 'aston_aduo', '本田 ADUO 动力单元到货', '在车手安全舆论与 FIA 压力下，本田交付了首批改进动力单元。车队终于可以停止每十圈一次的振动风险检查。');
+  const text = '在车手安全舆论与 FIA 压力下，本田交付了首批改进动力单元。车队终于可以停止每十圈一次的振动风险检查。';
+  if (state.teams.aston_martin?.isPlayer) addNarration(state, 'aston_aduo', '本田 ADUO 动力单元到货', text);
+  else addNews(state, '研发', `阿斯顿·马丁：${text}`);
 }
 
 function completeAstonChassis(state: GameState): void {
@@ -72,12 +73,12 @@ function applyAstonCrisis(state: GameState, strategy: 'pressure_honda' | 'mediat
     a.hondaConflict = round1(clamp(a.hondaConflict - state.rules.astonMartin.mediationGain, 0, 100));
     a.mediaPressure = round1(clamp(a.mediaPressure - 12, 0, 100));
     team.boardConfidence = round1(clamp(team.boardConfidence + 3, 0, 100));
-    text = '玩家安排纽维、本田和车手代表闭门调解，双方冲突明显下降。';
+    text = `${team.isPlayer ? '玩家' : '阿斯顿·马丁管理层'}安排纽维、本田和车手代表闭门调解，双方冲突明显下降。`;
   } else {
     a.neweyProgress = Math.min(100, a.neweyProgress + state.rules.astonMartin.neweyProgressGain);
     a.hondaConflict = round1(clamp(a.hondaConflict + 4, 0, 100));
     team.boardConfidence = round1(clamp(team.boardConfidence + 1, 0, 100));
-    text = `玩家催促纽维交付动力单元适配车体，升级进度达到 ${a.neweyProgress}%。`;
+    text = `${team.isPlayer ? '玩家' : '阿斯顿·马丁管理层'}催促纽维交付动力单元适配车体，升级进度达到 ${a.neweyProgress}%。`;
   }
   completeAstonAduo(state); completeAstonChassis(state);
   append(state, a, text); addNews(state, '车队', text);
@@ -104,7 +105,9 @@ export function maybeTriggerRacingBullsRecall(state: GameState, rng: Rng): void 
   const r = state.racingBulls;
   if (!r || r.pendingRecall || r.activeRecall || !rng.chance(state.rules.racingBulls.recallChance)) return;
   const team = state.teams.racing_bulls;
-  const candidates = Object.values(state.drivers).filter(d => d.role === 'reserve' && (d.teamId === 'red_bull' || d.teamId === 'racing_bulls')).map(d => d.id);
+  const candidates = Object.values(state.drivers)
+    .filter(d => d.role === 'reserve' && (d.teamId === 'red_bull' || d.teamId === 'racing_bulls') && (team.isPlayer || d.teamId !== state.meta.playerTeamId))
+    .map(d => d.id);
   if (!team?.cars.length || !candidates.length) return;
   const car = team.cars[rng.int(0, team.cars.length - 1)];
   if (!car.driverId) return;

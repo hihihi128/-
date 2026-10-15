@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { continuationSuffix, F1Controller, HUD_TAG, INJECT_ID, LEADERSHIP_PREFIX, PLAYER_REPLACED_LEADERSHIP } from '../../src/tavern/controller';
+import { continuationSuffix, F1Controller, HUD_TAG, INJECT_ID, LEADERSHIP_PREFIX, PLAYER_REPLACED_LEADERSHIP, principalRole } from '../../src/tavern/controller';
 import { PTR, STORE_KEY } from '../../src/tavern/store';
 import { cardWorldbook, FakeTavern } from './fakeEnv';
 
@@ -1046,6 +1046,12 @@ describe('数据错误', () => {
     expect(hud.ferrari).toMatchObject({ media: st.rules.ferrari.startMedia, gap: 0, dismissed: null });
     expect(hud.ferrari!.fans).toHaveLength(2);
     expect((await ctrl.loadData()).teams.find(t => t.id === 'ferrari')?.special).toBe('ferrari');
+  });
+
+  it('领队称谓只按玩家车队的特殊机制判断', () => {
+    expect(principalRole('mclaren')).toBe('临时领队');
+    expect(principalRole('ferrari')).toBe('过渡领队');
+    expect(principalRole(null)).toBe('领队');
   });
 
   it('被法拉利撤职后状态条不再显示下一步', async () => {

@@ -38,8 +38,7 @@ function restoreAlpinePuSpecs(state: GameState): void {
   alpine.penalizedPowerSpecs = {};
 }
 
-export function initManagementSpecials(state: GameState, team: TeamState, preserveExisting = false): void {
-  void team;
+export function initManagementSpecials(state: GameState, preserveExisting = false): void {
   const r = state.rules;
   const alpineTeam = Object.values(state.teams).find(value => value.special === 'alpine');
   const initializeAlpine = !preserveExisting || !state.alpine;
@@ -103,12 +102,12 @@ function applyAlpineManagement(state: GameState, strategy: 'back_colapinto' | 'r
     a.fanPressure = round1(clamp(a.fanPressure - 14, 0, 100));
     a.gaslyCommitment = round1(clamp(a.gaslyCommitment - 8, 0, 100));
     a.briatoreSatisfaction = round1(clamp(a.briatoreSatisfaction + 4, 0, 100));
-    text = '玩家公开支持科拉平托，并要求车队避免把赛道事故责任全部推给他。粉丝压力下降，但加斯利感到被冷落。';
+    text = `${state.teams.alpine?.isPlayer ? '玩家' : '阿尔派管理层'}公开支持科拉平托，并要求车队避免把赛道事故责任全部推给他。粉丝压力下降，但加斯利感到被冷落。`;
   } else if (strategy === 'reassure_gasly') {
     a.fanPressure = round1(clamp(a.fanPressure + 7, 0, 100));
     a.gaslyCommitment = round1(clamp(a.gaslyCommitment + 14, 0, 100));
     a.briatoreSatisfaction = round1(clamp(a.briatoreSatisfaction - 3, 0, 100));
-    text = '玩家向加斯利保证公平待遇和核心地位。加斯利留队意愿回升，但科拉平托粉丝开始质疑车队。';
+    text = `${state.teams.alpine?.isPlayer ? '玩家' : '阿尔派管理层'}向加斯利保证公平待遇和核心地位。加斯利留队意愿回升，但科拉平托粉丝开始质疑车队。`;
   } else {
     a.puIntegration = Math.min(100, a.puIntegration + state.rules.alpine.integrationGain);
     a.fanPressure = round1(clamp(a.fanPressure + 3, 0, 100));
@@ -158,21 +157,21 @@ function applyHaasBalance(state: GameState, strategy: 'protect_independence' | '
     h.geneSupport = round1(clamp(h.geneSupport + 12, 0, 100));
     h.toyotaSupport = round1(clamp(h.toyotaSupport - 8, 0, 100));
     h.toyotaInfluence = round1(clamp(h.toyotaInfluence - 3, 0, 100));
-    text = '玩家支持吉恩·哈斯保留最终决定权。车队独立性增强，但丰田放慢资源投入。';
+    text = `${team.isPlayer ? '玩家' : '哈斯管理层'}支持吉恩·哈斯保留最终决定权。车队独立性增强，但丰田放慢资源投入。`;
   } else if (strategy === 'accept_toyota') {
     h.geneSupport = round1(clamp(h.geneSupport - 8, 0, 100));
     h.toyotaSupport = round1(clamp(h.toyotaSupport + 12, 0, 100));
     h.toyotaInfluence = round1(clamp(h.toyotaInfluence + 10, 0, 100));
     team.funds = round2(team.funds + 5);
     h.fundingProvided = round2(h.fundingProvided + 5);
-    text = '玩家接受丰田追加技术与资金支持。车队获得 $5.0M，但丰田对日常事务的影响明显扩大。';
+    text = `${team.isPlayer ? '玩家' : '哈斯管理层'}接受丰田追加技术与资金支持。车队获得 $5.0M，但丰田对日常事务的影响明显扩大。`;
   } else {
     h.geneSupport = round1(clamp(h.geneSupport + 4, 0, 100));
     h.toyotaSupport = round1(clamp(h.toyotaSupport + 5, 0, 100));
     h.toyotaInfluence = round1(clamp(h.toyotaInfluence + 4, 0, 100));
     team.funds = round2(team.funds + 2);
     h.fundingProvided = round2(h.fundingProvided + 2);
-    text = '玩家达成折中：丰田提供 $2.0M，吉恩·哈斯保留关键否决权。';
+    text = `${team.isPlayer ? '玩家' : '哈斯管理层'}达成折中：丰田提供 $2.0M，吉恩·哈斯保留关键否决权。`;
   }
   append(state, h, text); addNews(state, '股东', text);
   return { ok: true, message: text };
@@ -190,7 +189,7 @@ function applyWilliamsBudgetFocus(state: GameState, focus: 'facilities' | 'devel
   if (w.focusRound === key) return { ok: false, message: '本周预算方向已经确定' };
   w.focus = focus; w.focusRound = key; w.focusRace = raceKey(state);
   const label = focus === 'facilities' ? '设施更新' : focus === 'development' ? '赛车升级' : '保留现金';
-  const text = `玩家把本周有限预算的优先级设为${label}。`;
+  const text = `${state.teams.williams?.isPlayer ? '玩家' : '威廉姆斯管理层'}把本周有限预算的优先级设为${label}。`;
   append(state, w, text); addNews(state, '预算', text);
   return { ok: true, message: text };
 }
@@ -231,18 +230,28 @@ export function afterManagementRace(state: GameState): void {
     a.briatoreSatisfaction = round1(clamp(a.briatoreSatisfaction, 0, 100));
     a.fanPressure = round1(clamp(a.fanPressure, 0, 100));
     a.gaslyCommitment = round1(clamp(a.gaslyCommitment, 0, 100));
-    if (a.gaslyCommitment <= 0 && !a.gaslyLeaving) { a.gaslyLeaving = true; addNarration(state, 'gasly_exit', '加斯利决定离开阿尔派', '长期偏袒科拉平托使加斯利失去信心。他通知车队，赛季结束后不会续约。'); }
+    if (a.gaslyCommitment <= 0 && !a.gaslyLeaving) {
+      a.gaslyLeaving = true;
+      const text = '长期偏袒科拉平托使加斯利失去信心。他通知车队，赛季结束后不会续约。';
+      if (state.teams.alpine?.isPlayer) addNarration(state, 'gasly_exit', '加斯利决定离开阿尔派', text);
+      else addNews(state, '车手', `阿尔派：${text}`);
+    }
     if (a.briatoreSatisfaction < state.rules.alpine.dismissBriatoreSatisfaction && !a.dismissed) {
-      a.dismissed = `布里亚托利满意度降至 ${a.briatoreSatisfaction}`;
-      if (state.teams.alpine?.isPlayer) { state.flags.fired = true; state.flags.firedReason = a.dismissed; }
-      else addNews(state, '车队', '阿尔派因管理层满意度过低调整了领队分工。');
+      if (state.teams.alpine?.isPlayer) {
+        a.dismissed = `布里亚托利满意度降至 ${a.briatoreSatisfaction}`;
+        state.flags.fired = true;
+        state.flags.firedReason = a.dismissed;
+      } else {
+        a.briatoreSatisfaction = Math.max(state.rules.alpine.dismissBriatoreSatisfaction + 8, state.rules.alpine.startBriatoreSatisfaction - 10);
+        addNews(state, '车队', '阿尔派因管理层满意度过低调整了领队分工。');
+      }
     }
     if ((state.season.roundIndex + 1) % 3 === 0) { a.rndDirection = [...DIRECTIONS[Math.floor((state.season.roundIndex + 1) / 3) % DIRECTIONS.length]]; addNews(state, '研发', `布里亚托利将下一阶段研发方向定为${a.rndDirection.map(type => state.rules.parts[type]?.name ?? type).join('与')}。`); }
   }
   if (state.haas) {
     const h = state.haas;
     const team = Object.values(state.teams).find(value => value.special === 'haas');
-    if (!team) return;
+    if (!team) throw new Error('哈斯车队数据缺失');
     h.toyotaInfluence = round1(clamp(h.toyotaInfluence + state.rules.haas.influencePerRace, 0, 100));
     if (h.lastActionRace !== key) { h.geneSupport -= 4; h.toyotaSupport -= 4; }
     if (!h.partnershipWithdrawn && h.toyotaSupport > 20) {
@@ -252,9 +261,14 @@ export function afterManagementRace(state: GameState): void {
     h.geneSupport = round1(clamp(h.geneSupport, 0, 100)); h.toyotaSupport = round1(clamp(h.toyotaSupport, 0, 100));
     if (h.toyotaSupport <= 10 && !h.partnershipWithdrawn) { h.partnershipWithdrawn = true; addNews(state, '股东', '丰田冻结进一步资金与技术投入。'); }
     if (h.geneSupport < state.rules.haas.dismissGeneSupport && !h.dismissed) {
-      h.dismissed = `吉恩·哈斯支持度降至 ${h.geneSupport}`;
-      if (team.isPlayer) { state.flags.fired = true; state.flags.firedReason = h.dismissed; }
-      else addNews(state, '车队', '哈斯因股东支持不足调整了管理架构。');
+      if (team.isPlayer) {
+        h.dismissed = `吉恩·哈斯支持度降至 ${h.geneSupport}`;
+        state.flags.fired = true;
+        state.flags.firedReason = h.dismissed;
+      } else {
+        h.geneSupport = Math.max(state.rules.haas.dismissGeneSupport + 8, state.rules.haas.startGeneSupport - 10);
+        addNews(state, '车队', '哈斯因股东支持不足调整了管理架构。');
+      }
     }
     if ((state.season.roundIndex + 1) % 3 === 0) h.preferredParts = [...DIRECTIONS[(Math.floor((state.season.roundIndex + 1) / 3) + 1) % DIRECTIONS.length]];
   }
@@ -275,7 +289,7 @@ export function advanceAiManagementSpecial(state: GameState, team: TeamState): v
       : state.alpine!.gaslyCommitment < 45 ? 'reassure_gasly' : 'back_colapinto';
     applyAlpineManagement(state, strategy);
   } else if (team.special === 'haas' && state.haas?.lastActionRound !== weekKey(state)) {
-    const strategy = state.haas!.geneSupport < 35 ? 'protect_independence' : state.haas!.toyotaSupport < 35 ? 'accept_toyota' : 'compromise';
+    const strategy = state.haas!.geneSupport <= state.haas!.toyotaSupport ? 'protect_independence' : 'accept_toyota';
     applyHaasBalance(state, strategy);
   } else if (team.special === 'williams' && state.williams?.focusRound !== weekKey(state)) {
     const choices = ['development', 'facilities', 'reserve'] as const;
@@ -287,11 +301,16 @@ export function completeWilliamsHandover(state: GameState): void {
   const w = state.williams;
   if (!w || w.vowlesDeparted || state.season.number !== 1) return;
   w.vowlesDeparted = true;
-  if (!state.flags.fired && w.vowlesConfidence >= state.rules.williams.dismissVowlesConfidence && w.successionReadiness >= state.rules.williams.successionThreshold) {
+  const isPlayer = state.teams.williams?.isPlayer === true;
+  if ((!isPlayer || !state.flags.fired) && w.vowlesConfidence >= state.rules.williams.dismissVowlesConfidence && w.successionReadiness >= state.rules.williams.successionThreshold) {
     w.confirmedSuccessor = true;
-    addNarration(state, 'williams_handover', '沃尔斯返回梅赛德斯', `${state.season.year} 赛季结束后，James Vowles 返回梅赛德斯。董事会确认玩家接任威廉姆斯正式领队。`);
+    const text = `${state.season.year} 赛季结束后，James Vowles 返回梅赛德斯。董事会确认接班计划正式完成。`;
+    if (isPlayer) addNarration(state, 'williams_handover', '沃尔斯返回梅赛德斯', `${text} 玩家接任威廉姆斯正式领队。`);
+    else addNews(state, '车队', `威廉姆斯：${text}`);
   } else {
-    addNarration(state, 'williams_handover_delayed', '威廉姆斯延长接班考核', '沃尔斯返回梅赛德斯后，董事会暂未确认玩家为正式领队，并延长代理考核。');
+    const text = '沃尔斯返回梅赛德斯后，董事会延长了威廉姆斯接班考核。';
+    if (isPlayer) addNarration(state, 'williams_handover_delayed', '威廉姆斯延长接班考核', `${text} 玩家暂未转正。`);
+    else addNews(state, '车队', text);
   }
 }
 
@@ -306,5 +325,7 @@ export function completeAlpineDriverExit(state: GameState): void {
   state.alpine.gaslyLeaving = false;
   state.alpine.gaslyCommitment = state.rules.alpine.startGaslyCommitment;
   addNews(state, '车手', '加斯利拒绝与阿尔派续约，赛季结束后成为自由车手。');
-  addNarration(state, 'gasly_departure', '加斯利离开阿尔派', '长期的队内失衡最终造成实际后果。加斯利在合同市场开放前离队，阿尔派必须签下一名新车手。');
+  const text = '长期的队内失衡最终造成实际后果。加斯利在合同市场开放前离队，阿尔派必须签下一名新车手。';
+  if (state.teams.alpine?.isPlayer) addNarration(state, 'gasly_departure', '加斯利离开阿尔派', text);
+  else addNews(state, '车手', text);
 }

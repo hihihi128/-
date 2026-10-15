@@ -90,6 +90,16 @@ export const PLAYER_REPLACED_LEADERSHIP: Readonly<Record<string, readonly string
 };
 export const MANAGED_LEADERSHIP_ENTRIES = [...new Set(Object.values(PLAYER_REPLACED_LEADERSHIP).flat())];
 
+export function principalRole(special: string | null | undefined): string {
+  return special === 'ferrari' ? '过渡领队'
+    : special === 'mclaren' || special === 'aston_martin' ? '临时领队'
+      : special === 'mercedes' || special === 'racing_bulls' || special === 'audi' || special === 'alpine' ? '副领队'
+        : special === 'haas' ? '共同领队'
+          : special === 'williams' ? '接班人'
+            : special === 'red_bull' ? '助理领队'
+              : '领队';
+}
+
 interface ProcessOptions {
   type?: string;
   force?: boolean;
@@ -909,7 +919,7 @@ export class F1Controller {
     this.invalidateStrategyReviews();
     await this.syncLeadershipWorldbook(state);
     this.notify('new_game');
-    const role = state.ferrari ? '过渡领队' : state.mclaren || state.astonMartin ? '临时领队' : state.mercedes || state.racingBulls || state.audi || state.alpine ? '副领队' : state.haas ? '共同领队' : state.williams ? '接班人' : state.redBull ? '助理领队' : '领队';
+    const role = principalRole(state.teams[state.meta.playerTeamId].special);
     return { ok: true, message: `已开局：你现在是 ${state.teams[state.meta.playerTeamId].name} 的${role}` };
   }
 

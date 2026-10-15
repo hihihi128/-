@@ -220,7 +220,7 @@ function runCommands(state: GameState, commands: AiCommand[], messageId: number 
       case 'fans': {
         const id = resolveDriver(state, cmd.driver);
         const delta = Number(cmd.delta);
-        if (!ferrariActive(state)) {
+        if (team.special !== 'ferrari' || !ferrariActive(state)) {
           log({ op: 'fans', target: cmd.driver ?? '', requested: cmd.delta ?? null, applied: null, reason, ok: false, note: '只有法拉利过渡领队存档有粉丝意见' });
           return;
         }

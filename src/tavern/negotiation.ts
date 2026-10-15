@@ -49,11 +49,16 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       alliance: { label: '达成四队联盟', action: { type: 'AUDI_ALLIANCE' } },
     },
     context: state => {
-      if (state.ferrari) return `法拉利尚有 ${homologationsLeft(state, state.teams.ferrari)} 次 ADUO 机会。联盟目标是与奥迪、梅赛德斯和阿斯顿·马丁共同游说 FIA；成功后法拉利可额外获得一次认证机会。`;
+      if (state.teams[state.meta.playerTeamId]?.special === 'ferrari') return `法拉利尚有 ${homologationsLeft(state, state.teams.ferrari)} 次 ADUO 机会。联盟目标是与奥迪、梅赛德斯和阿斯顿·马丁共同游说 FIA；成功后法拉利可额外获得一次认证机会。`;
       const audi = state.audi!;
       return `奥迪 ADUO 进度 ${audi.aduoProgress}%，政治支持 ${audi.politicalSupport}。联盟目标是与法拉利、梅赛德斯和阿斯顿·马丁共同推动 ADUO。`;
     },
-    unavailable: state => !state.audi && !state.ferrari ? '当前车队不能参加 ADUO 四队联盟' : state.audi?.alliance || state.ferrari?.aduoAlliance ? '四队联盟已经成立' : null,
+    unavailable: state => {
+      const special = state.teams[state.meta.playerTeamId]?.special;
+      if (special === 'audi') return state.audi?.alliance ? '四队联盟已经成立' : null;
+      if (special === 'ferrari') return state.ferrari?.aduoAlliance ? '四队联盟已经成立' : null;
+      return '当前车队不能参加 ADUO 四队联盟';
+    },
   },
   fia_roundtable: {
     kind: 'fia_roundtable',
@@ -88,7 +93,7 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       const m = state.mercedes!;
       return `ADUO 审批 ${m.aduoProgress}%，政治压力 ${m.politicalPressure}/120，Toto 满意度 ${m.totoSatisfaction}，压缩比 ${m.compressionRatio}。`;
     },
-    unavailable: state => !state.mercedes ? '当前车队没有梅赛德斯政治机制' : state.mercedes.dismissed ? '玩家已被 Toto 撤职' : state.mercedes.lastActionRound === weekKey(state) ? '本周已经执行过政治行动' : null,
+    unavailable: state => state.teams[state.meta.playerTeamId]?.special !== 'mercedes' || !state.mercedes ? '当前车队没有梅赛德斯政治机制' : state.mercedes.dismissed ? '玩家已被 Toto 撤职' : state.mercedes.lastActionRound === weekKey(state) ? '本周已经执行过政治行动' : null,
   },
   aston_honda: {
     kind: 'aston_honda',
@@ -104,7 +109,7 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       const a = state.astonMartin!;
       return `ADUO 提前进度 ${a.aduoProgress}%，本田与纽维冲突 ${a.hondaConflict}，纽维车体进度 ${a.neweyProgress}%，媒体压力 ${a.mediaPressure}。`;
     },
-    unavailable: state => !state.astonMartin ? '当前车队没有阿斯顿·马丁危机机制' : state.astonMartin.lastActionRound === weekKey(state) ? '本周已经执行过危机行动' : null,
+    unavailable: state => state.teams[state.meta.playerTeamId]?.special !== 'aston_martin' || !state.astonMartin ? '当前车队没有阿斯顿·马丁危机机制' : state.astonMartin.lastActionRound === weekKey(state) ? '本周已经执行过危机行动' : null,
   },
   red_bull_gp: {
     kind: 'red_bull_gp',
@@ -118,7 +123,7 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       const r = state.redBull!;
       return `GP 留任意愿 ${r.gpRetention}。留任方案成本 ${state.rules.redBull.gpNegotiationCost}M，车队资金 ${state.teams[state.meta.playerTeamId].funds}M。`;
     },
-    unavailable: state => !state.redBull
+    unavailable: state => state.teams[state.meta.playerTeamId]?.special !== 'red_bull' || !state.redBull
       ? '当前车队没有红牛 GP 留任机制'
       : state.redBull.gpTransferred
         ? 'GP 已经转投迈凯伦'
@@ -142,7 +147,7 @@ export const NEGOTIATIONS: Record<NegotiationKind, NegotiationDefinition> = {
       const h = state.haas!;
       return `吉恩支持 ${h.geneSupport}，丰田支持 ${h.toyotaSupport}，丰田影响力 ${h.toyotaInfluence}%，丰田累计投入 ${h.fundingProvided}M。`;
     },
-    unavailable: state => !state.haas ? '当前车队没有哈斯股东机制' : state.haas.lastActionRound === weekKey(state) ? '本周已经执行过股东行动' : null,
+    unavailable: state => state.teams[state.meta.playerTeamId]?.special !== 'haas' || !state.haas ? '当前车队没有哈斯股东机制' : state.haas.lastActionRound === weekKey(state) ? '本周已经执行过股东行动' : null,
   },
 };
 

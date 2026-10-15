@@ -8,7 +8,7 @@
  * - 撤职：正赛后检查。媒体支持率低于下限，或两边粉丝满意度差距超过上限 → 撤销领队职务。
  */
 import { addNarration, addNews, driverName, playerTeam } from './log';
-import type { ClassificationEntry, FerrariState, GameState, RaceResult, TeamState } from './types';
+import type { ClassificationEntry, FerrariState, GameState, RaceResult } from './types';
 import { clamp, pushCapped, round1, stamp } from './util';
 
 const LOG_CAP = 8;
@@ -19,8 +19,7 @@ export function ferrariActive(state: GameState): state is GameState & { ferrari:
 }
 
 /** 开局：玩家选择了 special = ferrari 的车队时初始化 */
-export function initFerrari(state: GameState, team: TeamState, preserveExisting = false): void {
-  void team;
+export function initFerrari(state: GameState, preserveExisting = false): void {
   const ferrari = Object.values(state.teams).find(value => value.special === 'ferrari');
   const raceDrivers = ferrari?.cars.map(c => c.driverId).filter((id): id is string => !!id) ?? [];
   if (!ferrari || raceDrivers.length < 2) {
@@ -218,12 +217,14 @@ export function ferrariAfterRace(state: GameState, result: RaceResult): void {
   } else if (gap <= r.warnFanGap - 5) f.warned.gap = false;
 
   if (warnings.length) addNews(state, '媒体', warnings.join('；'));
-  addNarration(
-    state,
-    'ferrari_pressure',
-    warnings.length ? '马拉内罗的压力升级' : '媒体与粉丝的反应',
-    [`媒体支持率 ${media.toFixed(0)}，${fansLine}（差距 ${gap.toFixed(0)}）。`, fanText ? `本站变化：${fanText}。` : '', notes.join('；'), warnings.length ? `警告：${warnings.join('；')}。` : '']
-      .filter(Boolean)
-      .join(''),
-  );
+  if (team.isPlayer) {
+    addNarration(
+      state,
+      'ferrari_pressure',
+      warnings.length ? '马拉内罗的压力升级' : '媒体与粉丝的反应',
+      [`媒体支持率 ${media.toFixed(0)}，${fansLine}（差距 ${gap.toFixed(0)}）。`, fanText ? `本站变化：${fanText}。` : '', notes.join('；'), warnings.length ? `警告：${warnings.join('；')}。` : '']
+        .filter(Boolean)
+        .join(''),
+    );
+  }
 }

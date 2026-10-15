@@ -8,8 +8,7 @@ const LOG_CAP = 10;
 const weekKey = (state: GameState) => `${state.season.number}-w${state.season.week}`;
 const log = (state: GameState, target: { log: Array<{ at: string; text: string }> }, text: string) => pushCapped(target.log, { at: stamp(state), text }, LOG_CAP);
 
-export function initTeamSpecials(state: GameState, team: TeamState, preserveExisting = false): void {
-  void team;
+export function initTeamSpecials(state: GameState, preserveExisting = false): void {
   const mclaren = Object.values(state.teams).find(value => value.special === 'mclaren');
   const mercedes = Object.values(state.teams).find(value => value.special === 'mercedes');
   const redBull = Object.values(state.teams).find(value => value.special === 'red_bull');
@@ -52,7 +51,8 @@ function applyMcLarenFix(state: GameState, route: 'independent' | 'mercedes'): {
     : `迈凯伦与梅赛德斯启动联合适配项目，预计 ${m.weeksLeft} 周完成；迈凯伦将共享车体资料。`;
   log(state, m, text);
   addNews(state, '研发', text);
-  addNarration(state, 'mclaren_fix', '迈凯伦软件适配路线确定', text);
+  if (state.teams.mclaren?.isPlayer) addNarration(state, 'mclaren_fix', '迈凯伦软件适配路线确定', text);
+  else addNews(state, '技术', text);
   return { ok: true, message: text };
 }
 
@@ -132,7 +132,8 @@ export function advanceSpecialWeeks(state: GameState): void {
   }
   log(state, m, routeText);
   addNews(state, '研发', routeText);
-  addNarration(state, 'mclaren_fix_done', '动力单元软件适配完成', routeText);
+  if (state.teams.mclaren?.isPlayer) addNarration(state, 'mclaren_fix_done', '动力单元软件适配完成', routeText);
+  else addNews(state, '技术', `迈凯伦：${routeText}`);
 }
 
 /** 让非玩家车队按稳定、可复现的规则处理自己的特殊机制。 */
@@ -233,12 +234,15 @@ export function afterSpecialRace(state: GameState): void {
       addNews(state, 'FIA', 'FIA 禁止梅赛德斯利用热胀冷缩维持 1:18 压缩比，动力单元必须恢复 1:16。');
     }
     if (m.totoSatisfaction < state.rules.mercedes.dismissTotoSatisfaction && !m.dismissed) {
-      m.dismissed = `Toto 满意度降至 ${m.totoSatisfaction}`;
       if (state.teams.mercedes?.isPlayer) {
+        m.dismissed = `Toto 满意度降至 ${m.totoSatisfaction}`;
         state.flags.fired = true;
         state.flags.firedReason = m.dismissed;
         addNarration(state, 'fired', 'Toto 终止接班人计划', `Toto Wolff 认为玩家没有通过副领队考核，并立即解除职务。${m.dismissed}。`);
-      } else addNews(state, '车队', `Toto Wolff 因管理层满意度过低调整了梅赛德斯管理架构。`);
+      } else {
+        m.totoSatisfaction = Math.max(state.rules.mercedes.dismissTotoSatisfaction + 8, state.rules.mercedes.startTotoSatisfaction - 10);
+        addNews(state, '车队', 'Toto Wolff 因管理层满意度过低调整了梅赛德斯管理架构。');
+      }
     }
   }
   if (state.redBull) {
@@ -257,7 +261,8 @@ export function afterSpecialRace(state: GameState): void {
         r.verstappenExit = true;
         transferVerstappenToMercedes(state);
         addNews(state, '车手', `夏休到来时维斯塔潘仅列车手榜第 ${pos}，其解约条款触发并转会梅赛德斯。`);
-        addNarration(state, 'verstappen_clause', '维斯塔潘触发解约条款', '维斯塔潘在夏休时未进入积分榜前三，合同解约条款生效。他立即转投梅赛德斯，梅赛德斯原一号车手转入红牛填补席位。');
+        if (state.teams.red_bull?.isPlayer || state.teams.mercedes?.isPlayer) addNarration(state, 'verstappen_clause', '维斯塔潘触发解约条款', '维斯塔潘在夏休时未进入积分榜前三，合同解约条款生效。他立即转投梅赛德斯，梅赛德斯原一号车手转入红牛填补席位。');
+        else addNews(state, '车手市场', '维斯塔潘触发解约条款并转投梅赛德斯，红牛接收梅赛德斯原一号车手。');
       } else addNews(state, '车手', `夏休检查：维斯塔潘位列车手榜第 ${pos}，解约条款没有触发。`);
     }
   }
