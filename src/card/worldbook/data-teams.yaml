@@ -66,7 +66,7 @@ teams:
     sponsorIncome: 7.2
     operatingCost: 2.6
     targetPosition: 1
-    selectionDifficulty: easy
+    selectionDifficulty: medium
     facilities: { windTunnel: 5, cfd: 5, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 詹姆斯·艾利森, skill: 90, salary: 3.5 }
@@ -105,7 +105,7 @@ teams:
     sponsorIncome: 7.4
     operatingCost: 2.6
     targetPosition: 1
-    selectionDifficulty: medium
+    selectionDifficulty: hard
     facilities: { windTunnel: 5, cfd: 5, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 罗布·马歇尔, skill: 87, salary: 3 }
@@ -145,7 +145,7 @@ teams:
     sponsorIncome: 7.4
     operatingCost: 2.6
     targetPosition: 2
-    selectionDifficulty: medium
+    selectionDifficulty: hard
     facilities: { windTunnel: 4, cfd: 5, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 皮埃尔·瓦谢, skill: 87, salary: 3 }
@@ -188,7 +188,7 @@ teams:
     sponsorIncome: 7.5
     operatingCost: 2.6
     targetPosition: 4
-    selectionDifficulty: easy
+    selectionDifficulty: medium
     facilities: { windTunnel: 4, cfd: 4, simulator: 5, factory: 5 }
     staff:
       technicalDirector: { name: 洛伊克·塞拉（底盘技术总监）, skill: 84, salary: 3 }
@@ -464,7 +464,7 @@ teams:
     sponsorIncome: 4.5
     operatingCost: 2.4
     targetPosition: 11
-    selectionDifficulty: hard
+    selectionDifficulty: easy
     facilities: { windTunnel: 3, cfd: 3, simulator: 4, factory: 4 }
     staff:
       technicalDirector: { name: 尼克·切斯特, skill: 74, salary: 1.8 }

@@ -6,9 +6,9 @@ import NewGame from '../../src/ui/panel/views/NewGame.vue';
 import { cardSources } from '../helpers';
 
 const expected = {
-  easy: ['梅赛德斯车队', '法拉利车队', '小红牛车队', '阿尔派车队'],
-  medium: ['迈凯伦车队', '红牛车队', '哈斯车队', '奥迪车队'],
-  hard: ['威廉姆斯车队', '阿斯顿·马丁车队', '凯迪拉克车队'],
+  easy: ['小红牛车队', '阿尔派车队', '凯迪拉克车队'],
+  medium: ['梅赛德斯车队', '法拉利车队', '哈斯车队', '奥迪车队'],
+  hard: ['迈凯伦车队', '红牛车队', '威廉姆斯车队', '阿斯顿·马丁车队'],
 };
 
 afterEach(() => {
