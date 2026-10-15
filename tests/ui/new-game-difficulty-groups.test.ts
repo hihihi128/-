@@ -49,6 +49,11 @@ describe('开局选队难度分组', () => {
     const sections = [...host.querySelectorAll<HTMLElement>('.team-group')];
     expect(sections.map(s => s.dataset.difficulty)).toEqual(['easy', 'medium', 'hard']);
     expect(sections.map(s => s.querySelector('.group-head b')?.textContent)).toEqual(['简单车队', '中等车队', '困难车队']);
+    expect(sections.map(s => s.querySelector('.group-head .tiny')?.textContent)).toEqual([
+      '董事会期望与赛车实力接近，压力较小 · 3 支',
+      '有竞争力，但特殊机制或资源会带来压力 · 4 支',
+      '目标远超当前实力或面临严重危机 · 4 支',
+    ]);
     for (const section of sections) {
       const names = [...section.querySelectorAll('.team-card b')].map(b => b.textContent);
       expect(names).toEqual(expected[section.dataset.difficulty as keyof typeof expected]);

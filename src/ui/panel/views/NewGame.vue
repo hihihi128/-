@@ -14,9 +14,9 @@ const selectionReason = ref('');
 const REASON_MAX = 300;
 
 const difficultyGroups = [
-  { id: 'easy', label: '简单车队', hint: '赛车基础较好，目标相对容易达成' },
+  { id: 'easy', label: '简单车队', hint: '董事会期望与赛车实力接近，压力较小' },
   { id: 'medium', label: '中等车队', hint: '有竞争力，但特殊机制或资源会带来压力' },
-  { id: 'hard', label: '困难车队', hint: '起点差或危机严重，需要长期追赶' },
+  { id: 'hard', label: '困难车队', hint: '目标远超当前实力或面临严重危机' },
 ] as const;
 const teamGroups = computed(() =>
   difficultyGroups
