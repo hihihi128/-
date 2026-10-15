@@ -8,21 +8,41 @@ const open = ref(false);
 const root = ref<HTMLElement | null>(null);
 const narrow = ref(false);
 let sizeObserver: ResizeObserver | null = null;
+let frameObserver: ResizeObserver | null = null;
 
 function setNarrow(shell: HTMLElement, value: boolean) {
   narrow.value = value;
   shell.classList.toggle('tower-narrow', value);
 }
 
+function renderedWidth(shell: HTMLElement) {
+  const frame = window.frameElement as HTMLElement | null;
+  const frameWidth = frame?.getBoundingClientRect().width ?? 0;
+  return frameWidth > 0 && window.innerWidth > 0
+    ? shell.clientWidth * frameWidth / window.innerWidth
+    : shell.clientWidth;
+}
+
+function updateNarrow(shell: HTMLElement) {
+  setNarrow(shell, renderedWidth(shell) <= 960);
+}
+
 onMounted(() => {
   const shell = root.value?.parentElement;
   if (!shell) return;
-  if (typeof ResizeObserver === 'undefined') { setNarrow(shell, shell.clientWidth <= 960); return; }
-  sizeObserver = new ResizeObserver(entries => setNarrow(shell, (entries[0]?.contentRect.width ?? shell.clientWidth) <= 960));
+  if (typeof ResizeObserver === 'undefined') { updateNarrow(shell); return; }
+  sizeObserver = new ResizeObserver(() => updateNarrow(shell));
   sizeObserver.observe(shell);
+  const frame = window.frameElement as HTMLElement | null;
+  if (frame) {
+    frameObserver = new ResizeObserver(() => updateNarrow(shell));
+    frameObserver.observe(frame);
+  }
+  updateNarrow(shell);
 });
 onBeforeUnmount(() => {
   sizeObserver?.disconnect();
+  frameObserver?.disconnect();
   root.value?.parentElement?.classList.remove('tower-narrow');
 });
 
