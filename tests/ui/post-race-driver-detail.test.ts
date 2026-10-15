@@ -49,5 +49,11 @@ describe('post-race driver details', () => {
     expect(detail.textContent).toContain(`静止 ${entry.pitStops![0].actualStationary.toFixed(1)}s`);
     expect(detail.querySelector('.chart')).not.toBeNull();
     expect(result.lapChart[entry.driverId]).toHaveLength(result.laps);
+
+    const close = detail.querySelector<HTMLButtonElement>('[aria-label="关闭车手比赛详情"]')!;
+    close.click();
+    await nextTick();
+    expect(host.querySelector('.result-driver-detail')).toBeNull();
+    expect(document.activeElement).toBe(button);
   });
 });

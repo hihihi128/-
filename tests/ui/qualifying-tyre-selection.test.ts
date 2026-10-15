@@ -141,6 +141,21 @@ describe('segmented qualifying tyre selection UI', () => {
     cluster?.click();
     await nextTick();
     expect(host.querySelectorAll('.mobile-cluster-picker button')).toHaveLength(4);
+
+    const liveCars = store.view!.weekend!.liveQualifying!.cars;
+    const moved = liveCars.find(car => car.driverId === cars[3].driverId)!;
+    moved.progress = .9;
+    await nextTick();
+    const regrouped = [...host.querySelectorAll<HTMLButtonElement>('.mobile-marker.cluster')].find(button => button.textContent === '+3');
+    expect(regrouped).toBe(cluster);
+    expect(host.querySelectorAll('.mobile-cluster-picker button')).toHaveLength(4);
+
+    for (const original of cars) liveCars.find(car => car.driverId === original.driverId)!.phase = 'garage';
+    await nextTick();
+    expect(host.querySelector('.mobile-cluster-picker')).toBeNull();
+    liveCars.find(car => car.driverId === cars[0].driverId)!.phase = 'flying_lap';
+    await nextTick();
+    expect(host.querySelector('.mobile-cluster-picker')).toBeNull();
   });
 
   it('stages a physical set without releasing, then sends one guarded release action', async () => {
