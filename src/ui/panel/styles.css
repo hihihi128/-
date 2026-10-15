@@ -360,6 +360,8 @@ html.f1m-mobile .race-actions button { min-width: 0; }
 /* The iframe keeps a desktop CSS viewport in some embedded hosts. Mirror the
    host's narrow mode for layouts that otherwise rely on media queries. */
 html.f1m-mobile .broadcast-shell { flex-direction: column !important; }
+.broadcast-shell:has(> .timing.narrow) { flex-direction: column; }
+.broadcast-shell:has(> .timing.narrow) > .panel-main { width: 100%; }
 html.f1m-mobile .timing { width: 100% !important; flex: none !important; position: relative; z-index: 30; }
 html.f1m-mobile .tower-strip { width: 100%; height: 40px; padding: 0; display: flex !important; align-items: center; border: 0; border-bottom: 1px solid var(--line); border-radius: 0; background: #06070a; overflow: hidden; }
 html.f1m-mobile .tower { position: fixed !important; top: 0; bottom: 0; left: 0; z-index: 41; width: min(320px, 88vw) !important; min-height: 0; transform: translateX(-105%); transition: transform var(--t-med) var(--ease); box-shadow: 12px 0 32px rgba(0,0,0,.65); }

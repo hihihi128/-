@@ -12,8 +12,8 @@ let sizeObserver: ResizeObserver | null = null;
 onMounted(() => {
   const shell = root.value?.parentElement;
   if (!shell) return;
-  if (typeof ResizeObserver === 'undefined') { narrow.value = shell.clientWidth <= 767; return; }
-  sizeObserver = new ResizeObserver(entries => { narrow.value = (entries[0]?.contentRect.width ?? shell.clientWidth) <= 767; });
+  if (typeof ResizeObserver === 'undefined') { narrow.value = shell.clientWidth <= 960; return; }
+  sizeObserver = new ResizeObserver(entries => { narrow.value = (entries[0]?.contentRect.width ?? shell.clientWidth) <= 960; });
   sizeObserver.observe(shell);
 });
 onBeforeUnmount(() => sizeObserver?.disconnect());
