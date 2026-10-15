@@ -27,13 +27,17 @@ function audiDriverIds(session: ReturnType<typeof createRaceSession>): string[] 
 }
 
 describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
-  it('按车队初始化状态，凯迪拉克保持无特殊机制', () => {
+  it('初始化所有车队状态，但凯迪拉克玩家仍只看到通用机制', () => {
     expect(game('aston_martin').astonMartin).toMatchObject({ aduoEngineArrived: false, aduoProgress: 0 });
     expect(game('racing_bulls').racingBulls).toMatchObject({ pendingRecall: null, activeRecall: null });
     expect(game('audi').audi).toMatchObject({ turboFixed: false, alliance: false });
     const cadillac = game('cadillac');
-    expect(cadillac.astonMartin).toBeNull();
-    expect(cadillac.audi).toBeNull();
+    expect(cadillac.astonMartin).not.toBeNull();
+    expect(cadillac.racingBulls).not.toBeNull();
+    expect(cadillac.audi).not.toBeNull();
+    expect(buildView(cadillac).astonMartin).toBeNull();
+    expect(buildView(cadillac).racingBulls).toBeNull();
+    expect(buildView(cadillac).audi).toBeNull();
     expect(cadillac.narration.at(-1)?.title).toContain('凯迪拉克');
   });
 
@@ -126,7 +130,10 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
 
   it('非奥迪玩家时，两台 AI 奥迪仍会在正赛起步随机掉位', () => {
     const state = atRace('ferrari');
-    expect(state.audi).toBeNull();
+    expect(state.audi).not.toBeNull();
+    expect(state.audi?.alliance).toBe(true);
+    expect(state.mclaren?.route).toBe('independent');
+    expect(state.astonMartin?.lastActionRound).not.toBeNull();
     state.rules.audi.startDropMin = 3; state.rules.audi.startDropMax = 3;
     const session = createRaceSession(state, new Rng(5), 'race');
 
@@ -283,7 +290,7 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     expect(state.teams.ferrari.aduoUpgrades).toBe(1);
   });
 
-  it('旧存档补齐新车队状态和 FIA 座谈会状态', () => {
+  it('旧存档补齐所有车队状态和 FIA 座谈会状态', () => {
     const state = game('cadillac') as GameState & { fiaMeeting?: GameState['fiaMeeting'] };
     delete state.fiaMeeting;
     delete (state as Partial<GameState>).astonMartin;
@@ -297,9 +304,9 @@ describe('马丁、小红牛、奥迪、凯迪拉克与 FIA 座谈会', () => {
     delete (state.rules.ferrari as Partial<GameState['rules']['ferrari']>).turboStartGainMax;
     delete (state.rules.ferrari as Partial<GameState['rules']['ferrari']>).turboSpoolSeconds;
     migrateState(state);
-    expect(state.astonMartin).toBeNull();
-    expect(state.racingBulls).toBeNull();
-    expect(state.audi).toBeNull();
+    expect(state.astonMartin).not.toBeNull();
+    expect(state.racingBulls).not.toBeNull();
+    expect(state.audi).not.toBeNull();
     expect(state.fiaMeeting).toMatchObject({ completed: 0, current: null, ferrariTurboSpoolSeconds: 0, ferrariAduoInstalled: false, ferrariTurboDebated: false });
     expect(state.rules.fiaMeeting.interval).toBeGreaterThan(0);
     expect(state.rules.astonMartin.vibrationRetireChance).toBe(.25);

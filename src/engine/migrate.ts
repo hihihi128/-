@@ -16,6 +16,10 @@ import { migrateTyreInventory } from './tyres';
 import { requiresWetGridTyreChoice } from './race';
 import type { GameState, StaffRole } from './types';
 import { deepClone } from './util';
+import { initFerrari } from './ferrari';
+import { initTeamSpecials } from './teamSpecials';
+import { initNextTeamSpecials } from './nextTeamSpecials';
+import { initManagementSpecials } from './managementSpecials';
 
 /** 玩家可以自由增删条目的规则表：不能按默认值回填，否则会恢复被有意删除的零件 / 轮胎 */
 const OPEN_MAPS = new Set(['parts', 'tyres']);
@@ -164,7 +168,6 @@ export function migrateState(state: GameState): GameState {
   if (state.astonMartin === undefined) state.astonMartin = null;
   if (state.racingBulls === undefined) state.racingBulls = null;
   if (state.audi === undefined) state.audi = null;
-  if (state.meta?.playerTeamId !== 'audi') state.audi = null;
   if (state.alpine === undefined) state.alpine = null;
   if (state.alpine && state.alpine.penalizedPowerSpecs === undefined) state.alpine.penalizedPowerSpecs = {};
   if (state.haas === undefined) state.haas = null;
@@ -270,6 +273,13 @@ export function migrateState(state: GameState): GameState {
   fillMissing(state.rules.haas as unknown as Record<string, unknown>, DEFAULT_RULES.haas as unknown as Record<string, unknown>);
   fillMissing(state.rules.williams as unknown as Record<string, unknown>, DEFAULT_RULES.williams as unknown as Record<string, unknown>);
   fillMissing(state.rules.randomEvents as unknown as Record<string, unknown>, DEFAULT_RULES.randomEvents as unknown as Record<string, unknown>);
+  const playerTeam = state.teams[state.meta?.playerTeamId];
+  if (playerTeam) {
+    initFerrari(state, playerTeam, true);
+    initTeamSpecials(state, playerTeam, true);
+    initNextTeamSpecials(state, playerTeam, true);
+    initManagementSpecials(state, playerTeam, true);
+  }
   if (legacyEventsDisabled || configuredEventsDisabled) {
     state.rules.randomEvents.routineWeight = 0;
     state.rules.randomEvents.minPerWeek = 0;

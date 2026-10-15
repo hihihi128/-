@@ -16,7 +16,7 @@ const DIRECTIONS: PartType[][] = [
 
 export function applyAlpinePuPenalty(state: GameState, team: TeamState, partType: PartType, spec: PartSpec): void {
   const alpine = state.alpine;
-  if (!alpine?.integrationPenaltyActive || team.id !== state.meta.playerTeamId || team.special !== 'alpine') return;
+  if (!alpine?.integrationPenaltyActive || team.special !== 'alpine') return;
   const key = `${partType}:${spec.id}`;
   const tracked = alpine.penalizedPowerSpecs[key];
   if (tracked && spec.perf === tracked.perfAfter && spec.rel === tracked.relAfter) return;
@@ -27,7 +27,7 @@ export function applyAlpinePuPenalty(state: GameState, team: TeamState, partType
 
 function restoreAlpinePuSpecs(state: GameState): void {
   const alpine = state.alpine;
-  const team = state.teams[state.meta.playerTeamId];
+  const team = Object.values(state.teams).find(value => value.special === 'alpine');
   if (!alpine || !team) return;
   for (const { partType, specId } of Object.values(alpine.penalizedPowerSpecs)) {
     const spec = team.parts[partType]?.specs.find(value => value.id === specId);
@@ -38,9 +38,12 @@ function restoreAlpinePuSpecs(state: GameState): void {
   alpine.penalizedPowerSpecs = {};
 }
 
-export function initManagementSpecials(state: GameState, team: TeamState): void {
+export function initManagementSpecials(state: GameState, team: TeamState, preserveExisting = false): void {
+  void team;
   const r = state.rules;
-  state.alpine = team.special === 'alpine' ? {
+  const alpineTeam = Object.values(state.teams).find(value => value.special === 'alpine');
+  const initializeAlpine = !preserveExisting || !state.alpine;
+  if (initializeAlpine) state.alpine = alpineTeam ? {
     briatoreSatisfaction: r.alpine.startBriatoreSatisfaction,
     fanPressure: r.alpine.startFanPressure,
     gaslyCommitment: r.alpine.startGaslyCommitment,
@@ -54,10 +57,10 @@ export function initManagementSpecials(state: GameState, team: TeamState): void 
     dismissed: null,
     log: [],
   } : null;
-  if (state.alpine) for (const partType of PU_PART_TYPES) {
-    for (const spec of team.parts[partType]?.specs ?? []) applyAlpinePuPenalty(state, team, partType, spec);
+  if (initializeAlpine && state.alpine && alpineTeam) for (const partType of PU_PART_TYPES) {
+    for (const spec of alpineTeam.parts[partType]?.specs ?? []) applyAlpinePuPenalty(state, alpineTeam, partType, spec);
   }
-  state.haas = team.special === 'haas' ? {
+  if (!preserveExisting || !state.haas) state.haas = Object.values(state.teams).some(value => value.special === 'haas') ? {
     geneSupport: r.haas.startGeneSupport,
     toyotaSupport: r.haas.startToyotaSupport,
     toyotaInfluence: r.haas.startToyotaInfluence,
@@ -69,7 +72,7 @@ export function initManagementSpecials(state: GameState, team: TeamState): void 
     dismissed: null,
     log: [],
   } : null;
-  state.williams = team.special === 'williams' ? {
+  if (!preserveExisting || !state.williams) state.williams = Object.values(state.teams).some(value => value.special === 'williams') ? {
     vowlesConfidence: r.williams.startVowlesConfidence,
     successionReadiness: r.williams.startSuccessionReadiness,
     focus: null,
@@ -81,10 +84,15 @@ export function initManagementSpecials(state: GameState, team: TeamState): void 
     confirmedSuccessor: false,
     log: [],
   } : null;
-  state.randomEvents = { lastRoundKey: null, weekKey: null, weeklyQuota: 0, weeklyStarted: 0, current: null, history: [] };
+  if (!preserveExisting || !state.randomEvents) state.randomEvents = { lastRoundKey: null, weekKey: null, weeklyQuota: 0, weeklyStarted: 0, current: null, history: [] };
 }
 
 export function alpineManagement(state: GameState, strategy: 'back_colapinto' | 'reassure_gasly' | 'integrate_power_unit'): { ok: boolean; message: string } {
+  if (playerTeam(state).special !== 'alpine') return { ok: false, message: '当前车队没有阿尔派管理机制' };
+  return applyAlpineManagement(state, strategy);
+}
+
+function applyAlpineManagement(state: GameState, strategy: 'back_colapinto' | 'reassure_gasly' | 'integrate_power_unit'): { ok: boolean; message: string } {
   const a = state.alpine;
   if (!a) return { ok: false, message: '当前车队没有阿尔派管理机制' };
   if (a.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能执行一次阿尔派管理行动' };
@@ -117,6 +125,7 @@ export function alpineManagement(state: GameState, strategy: 'back_colapinto' | 
 }
 
 export function alpineOnPriority(state: GameState, driverId: string | null): void {
+  if (playerTeam(state).special !== 'alpine') return;
   const a = state.alpine;
   if (!a) return;
   if (driverId === 'colapinto') {
@@ -132,12 +141,18 @@ export function alpineOnPriority(state: GameState, driverId: string | null): voi
 }
 
 export function haasBalance(state: GameState, strategy: 'protect_independence' | 'accept_toyota' | 'compromise'): { ok: boolean; message: string } {
+  if (playerTeam(state).special !== 'haas') return { ok: false, message: '当前车队没有哈斯股东平衡机制' };
+  return applyHaasBalance(state, strategy);
+}
+
+function applyHaasBalance(state: GameState, strategy: 'protect_independence' | 'accept_toyota' | 'compromise'): { ok: boolean; message: string } {
   const h = state.haas;
   if (!h) return { ok: false, message: '当前车队没有哈斯股东平衡机制' };
   if (h.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能执行一次哈斯股东行动' };
   h.lastActionRound = weekKey(state);
   h.lastActionRace = raceKey(state);
-  const team = playerTeam(state);
+  const team = Object.values(state.teams).find(value => value.special === 'haas');
+  if (!team) return { ok: false, message: '哈斯车队数据缺失' };
   let text: string;
   if (strategy === 'protect_independence') {
     h.geneSupport = round1(clamp(h.geneSupport + 12, 0, 100));
@@ -164,6 +179,11 @@ export function haasBalance(state: GameState, strategy: 'protect_independence' |
 }
 
 export function williamsBudgetFocus(state: GameState, focus: 'facilities' | 'development' | 'reserve'): { ok: boolean; message: string } {
+  if (playerTeam(state).special !== 'williams') return { ok: false, message: '当前车队没有威廉姆斯接班机制' };
+  return applyWilliamsBudgetFocus(state, focus);
+}
+
+function applyWilliamsBudgetFocus(state: GameState, focus: 'facilities' | 'development' | 'reserve'): { ok: boolean; message: string } {
   const w = state.williams;
   if (!w) return { ok: false, message: '当前车队没有威廉姆斯接班机制' };
   const key = weekKey(state);
@@ -176,17 +196,18 @@ export function williamsBudgetFocus(state: GameState, focus: 'facilities' | 'dev
 }
 
 export function managementActionBlocker(state: GameState, action: Action): string | null {
+  const special = playerTeam(state).special;
   if (action.type === 'START_PROJECT') {
-    if (state.alpine && !state.alpine.rndDirection.includes(action.partType)) return `布里亚托利已经决定本阶段只研发：${state.alpine.rndDirection.map(type => state.rules.parts[type]?.name ?? type).join('、')}`;
-    if (state.haas && state.haas.toyotaInfluence >= state.rules.haas.interferenceThreshold && !state.haas.preferredParts.includes(action.partType)) return `丰田当前要求研发资源集中在：${state.haas.preferredParts.map(type => state.rules.parts[type]?.name ?? type).join('、')}`;
-    if (state.williams && (state.williams.focusRound !== weekKey(state) || state.williams.focus !== 'development')) return '请先把威廉姆斯本周预算方向设为赛车升级';
+    if (special === 'alpine' && state.alpine && !state.alpine.rndDirection.includes(action.partType)) return `布里亚托利已经决定本阶段只研发：${state.alpine.rndDirection.map(type => state.rules.parts[type]?.name ?? type).join('、')}`;
+    if (special === 'haas' && state.haas && state.haas.toyotaInfluence >= state.rules.haas.interferenceThreshold && !state.haas.preferredParts.includes(action.partType)) return `丰田当前要求研发资源集中在：${state.haas.preferredParts.map(type => state.rules.parts[type]?.name ?? type).join('、')}`;
+    if (special === 'williams' && state.williams && (state.williams.focusRound !== weekKey(state) || state.williams.focus !== 'development')) return '请先把威廉姆斯本周预算方向设为赛车升级';
   }
-  if (action.type === 'UPGRADE_FACILITY' && state.williams && (state.williams.focusRound !== weekKey(state) || state.williams.focus !== 'facilities')) return '请先把威廉姆斯本周预算方向设为设施更新';
+  if (action.type === 'UPGRADE_FACILITY' && special === 'williams' && state.williams && (state.williams.focusRound !== weekKey(state) || state.williams.focus !== 'facilities')) return '请先把威廉姆斯本周预算方向设为设施更新';
   return null;
 }
 
 export function recordManagementInvestment(state: GameState, action: Action, ok: boolean): void {
-  if (!ok || !state.williams) return;
+  if (!ok || playerTeam(state).special !== 'williams' || !state.williams) return;
   const team = playerTeam(state);
   if (action.type === 'START_PROJECT') {
     const project = team.projects[team.projects.length - 1];
@@ -211,12 +232,17 @@ export function afterManagementRace(state: GameState): void {
     a.fanPressure = round1(clamp(a.fanPressure, 0, 100));
     a.gaslyCommitment = round1(clamp(a.gaslyCommitment, 0, 100));
     if (a.gaslyCommitment <= 0 && !a.gaslyLeaving) { a.gaslyLeaving = true; addNarration(state, 'gasly_exit', '加斯利决定离开阿尔派', '长期偏袒科拉平托使加斯利失去信心。他通知车队，赛季结束后不会续约。'); }
-    if (a.briatoreSatisfaction < state.rules.alpine.dismissBriatoreSatisfaction && !a.dismissed) { a.dismissed = `布里亚托利满意度降至 ${a.briatoreSatisfaction}`; state.flags.fired = true; state.flags.firedReason = a.dismissed; }
+    if (a.briatoreSatisfaction < state.rules.alpine.dismissBriatoreSatisfaction && !a.dismissed) {
+      a.dismissed = `布里亚托利满意度降至 ${a.briatoreSatisfaction}`;
+      if (state.teams.alpine?.isPlayer) { state.flags.fired = true; state.flags.firedReason = a.dismissed; }
+      else addNews(state, '车队', '阿尔派因管理层满意度过低调整了领队分工。');
+    }
     if ((state.season.roundIndex + 1) % 3 === 0) { a.rndDirection = [...DIRECTIONS[Math.floor((state.season.roundIndex + 1) / 3) % DIRECTIONS.length]]; addNews(state, '研发', `布里亚托利将下一阶段研发方向定为${a.rndDirection.map(type => state.rules.parts[type]?.name ?? type).join('与')}。`); }
   }
   if (state.haas) {
     const h = state.haas;
-    const team = playerTeam(state);
+    const team = Object.values(state.teams).find(value => value.special === 'haas');
+    if (!team) return;
     h.toyotaInfluence = round1(clamp(h.toyotaInfluence + state.rules.haas.influencePerRace, 0, 100));
     if (h.lastActionRace !== key) { h.geneSupport -= 4; h.toyotaSupport -= 4; }
     if (!h.partnershipWithdrawn && h.toyotaSupport > 20) {
@@ -225,7 +251,11 @@ export function afterManagementRace(state: GameState): void {
     }
     h.geneSupport = round1(clamp(h.geneSupport, 0, 100)); h.toyotaSupport = round1(clamp(h.toyotaSupport, 0, 100));
     if (h.toyotaSupport <= 10 && !h.partnershipWithdrawn) { h.partnershipWithdrawn = true; addNews(state, '股东', '丰田冻结进一步资金与技术投入。'); }
-    if (h.geneSupport < state.rules.haas.dismissGeneSupport && !h.dismissed) { h.dismissed = `吉恩·哈斯支持度降至 ${h.geneSupport}`; state.flags.fired = true; state.flags.firedReason = h.dismissed; }
+    if (h.geneSupport < state.rules.haas.dismissGeneSupport && !h.dismissed) {
+      h.dismissed = `吉恩·哈斯支持度降至 ${h.geneSupport}`;
+      if (team.isPlayer) { state.flags.fired = true; state.flags.firedReason = h.dismissed; }
+      else addNews(state, '车队', '哈斯因股东支持不足调整了管理架构。');
+    }
     if ((state.season.roundIndex + 1) % 3 === 0) h.preferredParts = [...DIRECTIONS[(Math.floor((state.season.roundIndex + 1) / 3) + 1) % DIRECTIONS.length]];
   }
   if (state.williams) {
@@ -233,6 +263,23 @@ export function afterManagementRace(state: GameState): void {
     if (w.focusRace !== key) { w.vowlesConfidence -= 4; w.successionReadiness -= 2; }
     else if (w.focus === 'reserve') { w.vowlesConfidence += 1; w.successionReadiness += 1; }
     w.vowlesConfidence = round1(clamp(w.vowlesConfidence, 0, 100)); w.successionReadiness = round1(clamp(w.successionReadiness, 0, 100));
+  }
+}
+
+/** 让非玩家车队按周处理管理型特殊机制。 */
+export function advanceAiManagementSpecial(state: GameState, team: TeamState): void {
+  if (team.isPlayer) return;
+  if (team.special === 'alpine' && state.alpine?.lastActionRound !== weekKey(state)) {
+    const strategy = state.alpine!.integrationPenaltyActive
+      ? 'integrate_power_unit'
+      : state.alpine!.gaslyCommitment < 45 ? 'reassure_gasly' : 'back_colapinto';
+    applyAlpineManagement(state, strategy);
+  } else if (team.special === 'haas' && state.haas?.lastActionRound !== weekKey(state)) {
+    const strategy = state.haas!.geneSupport < 35 ? 'protect_independence' : state.haas!.toyotaSupport < 35 ? 'accept_toyota' : 'compromise';
+    applyHaasBalance(state, strategy);
+  } else if (team.special === 'williams' && state.williams?.focusRound !== weekKey(state)) {
+    const choices = ['development', 'facilities', 'reserve'] as const;
+    applyWilliamsBudgetFocus(state, choices[state.season.week % choices.length]);
   }
 }
 

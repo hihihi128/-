@@ -468,7 +468,7 @@ function aduoView(state: GameState): AduoView {
 
 function ferrariView(state: GameState): FerrariView | null {
   const f = state.ferrari;
-  if (!f) return null;
+  if (!f || state.teams[state.meta.playerTeamId]?.special !== 'ferrari') return null;
   const r = state.rules.ferrari;
   return {
     media: state.teams[state.meta.playerTeamId].mediaReputation,
@@ -710,9 +710,9 @@ export function buildView(state: GameState): GameView {
     supernatural: supernaturalView(state),
     flags: state.flags,
     ferrari: ferrariView(state),
-    mclaren: state.mclaren ?? null,
-    mercedes: state.mercedes ?? null,
-    redBull: state.redBull ? {
+    mclaren: team.special === 'mclaren' ? state.mclaren ?? null : null,
+    mercedes: team.special === 'mercedes' ? state.mercedes ?? null : null,
+    redBull: team.special === 'red_bull' && state.redBull ? {
       ...state.redBull,
       verstappenPosition: driverPos.get('verstappen') ?? 0,
     } : null,
@@ -722,15 +722,15 @@ export function buildView(state: GameState): GameView {
       mercedes: { ...rules.mercedes },
       redBull: { ...rules.redBull },
     },
-    astonMartin: state.astonMartin ?? null,
-    racingBulls: state.racingBulls ? {
+    astonMartin: team.special === 'aston_martin' ? state.astonMartin ?? null : null,
+    racingBulls: team.special === 'racing_bulls' && state.racingBulls ? {
       ...state.racingBulls,
       candidates: state.racingBulls.pendingRecall?.candidateIds.map(id => ({ id, name: state.drivers[id]?.name ?? id })) ?? [],
     } : null,
-    audi: state.audi ?? null,
-    alpine: state.alpine ?? null,
-    haas: state.haas ?? null,
-    williams: state.williams ?? null,
+    audi: team.special === 'audi' ? state.audi ?? null : null,
+    alpine: team.special === 'alpine' ? state.alpine ?? null : null,
+    haas: team.special === 'haas' ? state.haas ?? null : null,
+    williams: team.special === 'williams' ? state.williams ?? null : null,
     randomEvents: state.randomEvents,
     fiaMeeting: state.fiaMeeting,
     nextSpecialRules: {

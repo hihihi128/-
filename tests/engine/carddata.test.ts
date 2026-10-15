@@ -18,7 +18,7 @@ const REAL_GAPS: Record<string, number> = {
   ferrari: 0.422,
   mclaren: 0.502,
   red_bull: 0.676,
-  alpine: 1.657,
+      alpine: 1.717,
   audi: 1.866,
   racing_bulls: 1.877,
   haas: 2.242,

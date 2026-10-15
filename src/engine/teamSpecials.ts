@@ -8,9 +8,13 @@ const LOG_CAP = 10;
 const weekKey = (state: GameState) => `${state.season.number}-w${state.season.week}`;
 const log = (state: GameState, target: { log: Array<{ at: string; text: string }> }, text: string) => pushCapped(target.log, { at: stamp(state), text }, LOG_CAP);
 
-export function initTeamSpecials(state: GameState, team: TeamState): void {
-  state.mclaren = team.special === 'mclaren' ? { softwareResolved: false, route: null, weeksLeft: 0, weeksTotal: 0, mercedesBuffApplied: false, log: [] } : null;
-  state.mercedes = team.special === 'mercedes' ? {
+export function initTeamSpecials(state: GameState, team: TeamState, preserveExisting = false): void {
+  void team;
+  const mclaren = Object.values(state.teams).find(value => value.special === 'mclaren');
+  const mercedes = Object.values(state.teams).find(value => value.special === 'mercedes');
+  const redBull = Object.values(state.teams).find(value => value.special === 'red_bull');
+  if (!preserveExisting || !state.mclaren) state.mclaren = mclaren ? { softwareResolved: false, route: null, weeksLeft: 0, weeksTotal: 0, mercedesBuffApplied: false, log: [] } : null;
+  if (!preserveExisting || !state.mercedes) state.mercedes = mercedes ? {
     aduoApproved: false,
     aduoProgress: 0,
     politicalPressure: state.rules.mercedes.startPoliticalPressure,
@@ -20,7 +24,7 @@ export function initTeamSpecials(state: GameState, team: TeamState): void {
     lastActionRound: null,
     log: [],
   } : null;
-  state.redBull = team.special === 'red_bull' ? {
+  if (!preserveExisting || !state.redBull) state.redBull = redBull ? {
     gpRetention: state.rules.redBull.startGpRetention,
     gpTransferred: false,
     summerChecked: false,
@@ -31,6 +35,11 @@ export function initTeamSpecials(state: GameState, team: TeamState): void {
 }
 
 export function startMcLarenFix(state: GameState, route: 'independent' | 'mercedes'): { ok: boolean; message: string } {
+  if (playerTeam(state).special !== 'mclaren') return { ok: false, message: '当前车队没有迈凯伦软件适配机制' };
+  return applyMcLarenFix(state, route);
+}
+
+function applyMcLarenFix(state: GameState, route: 'independent' | 'mercedes'): { ok: boolean; message: string } {
   const m = state.mclaren;
   if (!m) return { ok: false, message: '当前车队没有迈凯伦软件适配机制' };
   if (m.softwareResolved) return { ok: false, message: '动力单元软件适配问题已经解决' };
@@ -48,6 +57,11 @@ export function startMcLarenFix(state: GameState, route: 'independent' | 'merced
 }
 
 export function mercedesPolitics(state: GameState, strategy: 'lobby_aduo' | 'defend' | 'compromise'): { ok: boolean; message: string } {
+  if (playerTeam(state).special !== 'mercedes') return { ok: false, message: '当前车队没有梅赛德斯政治机制' };
+  return applyMercedesPolitics(state, strategy);
+}
+
+function applyMercedesPolitics(state: GameState, strategy: 'lobby_aduo' | 'defend' | 'compromise'): { ok: boolean; message: string } {
   const m = state.mercedes;
   if (!m) return { ok: false, message: '当前车队没有梅赛德斯政治机制' };
   if (m.dismissed) return { ok: false, message: `你已被 Toto Wolff 撤职：${m.dismissed}` };
@@ -77,9 +91,15 @@ export function mercedesPolitics(state: GameState, strategy: 'lobby_aduo' | 'def
 }
 
 export function retainGp(state: GameState): { ok: boolean; message: string } {
+  if (playerTeam(state).special !== 'red_bull') return { ok: false, message: '当前车队没有红牛 GP 留任机制' };
+  return applyRetainGp(state);
+}
+
+function applyRetainGp(state: GameState): { ok: boolean; message: string } {
   const r = state.redBull;
-  const team = playerTeam(state);
+  const team = Object.values(state.teams).find(value => value.special === 'red_bull');
   if (!r) return { ok: false, message: '当前车队没有红牛 GP 留任机制' };
+  if (!team) return { ok: false, message: '红牛车队数据缺失' };
   if (r.gpTransferred) return { ok: false, message: 'GP 已经决定转投迈凯伦' };
   if (r.lastActionRound === weekKey(state)) return { ok: false, message: '每周只能与 GP 谈判一次' };
   const cost = state.rules.redBull.gpNegotiationCost;
@@ -113,6 +133,23 @@ export function advanceSpecialWeeks(state: GameState): void {
   log(state, m, routeText);
   addNews(state, '研发', routeText);
   addNarration(state, 'mclaren_fix_done', '动力单元软件适配完成', routeText);
+}
+
+/** 让非玩家车队按稳定、可复现的规则处理自己的特殊机制。 */
+export function advanceAiTeamSpecial(state: GameState, team: TeamState): void {
+  if (team.isPlayer) return;
+  if (team.special === 'mclaren' && state.mclaren && !state.mclaren.route) {
+    applyMcLarenFix(state, 'independent');
+  } else if (team.special === 'mercedes' && state.mercedes && state.mercedes.lastActionRound !== weekKey(state)) {
+    const strategy = state.mercedes.politicalPressure >= state.rules.mercedes.banPoliticalPressure - 12
+      ? 'defend'
+      : state.mercedes.aduoApproved ? 'defend' : 'lobby_aduo';
+    applyMercedesPolitics(state, strategy);
+  } else if (team.special === 'red_bull' && state.redBull && !state.redBull.gpTransferred
+    && state.redBull.gpRetention <= state.rules.redBull.startGpRetention
+    && state.redBull.lastActionRound !== weekKey(state)) {
+    applyRetainGp(state);
+  }
 }
 
 function driverPosition(state: GameState, id: string): number {
@@ -197,9 +234,11 @@ export function afterSpecialRace(state: GameState): void {
     }
     if (m.totoSatisfaction < state.rules.mercedes.dismissTotoSatisfaction && !m.dismissed) {
       m.dismissed = `Toto 满意度降至 ${m.totoSatisfaction}`;
-      state.flags.fired = true;
-      state.flags.firedReason = m.dismissed;
-      addNarration(state, 'fired', 'Toto 终止接班人计划', `Toto Wolff 认为玩家没有通过副领队考核，并立即解除职务。${m.dismissed}。`);
+      if (state.teams.mercedes?.isPlayer) {
+        state.flags.fired = true;
+        state.flags.firedReason = m.dismissed;
+        addNarration(state, 'fired', 'Toto 终止接班人计划', `Toto Wolff 认为玩家没有通过副领队考核，并立即解除职务。${m.dismissed}。`);
+      } else addNews(state, '车队', `Toto Wolff 因管理层满意度过低调整了梅赛德斯管理架构。`);
     }
   }
   if (state.redBull) {
@@ -225,7 +264,12 @@ export function afterSpecialRace(state: GameState): void {
 }
 
 export function dismissalReason(state: GameState): string | null {
-  return state.ferrari?.dismissed ?? state.mercedes?.dismissed ?? state.alpine?.dismissed ?? state.haas?.dismissed ?? null;
+  const special = playerTeam(state).special;
+  if (special === 'ferrari') return state.ferrari?.dismissed ?? null;
+  if (special === 'mercedes') return state.mercedes?.dismissed ?? null;
+  if (special === 'alpine') return state.alpine?.dismissed ?? null;
+  if (special === 'haas') return state.haas?.dismissed ?? null;
+  return null;
 }
 
 export function redBullCrashMultiplier(state: GameState, teamId: string): number {

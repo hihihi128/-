@@ -14,7 +14,9 @@ import { affordError, capRemaining, charge, income, payWeeklySalaries } from './
 import { addNews, addNarration, driverName } from './log';
 import { managementActionBlocker } from './managementSpecials';
 import { recordPuFit } from './powerunit';
-import { advanceSpecialWeeks } from './teamSpecials';
+import { advanceAiTeamSpecial, advanceSpecialWeeks } from './teamSpecials';
+import { advanceAiNextTeamSpecial } from './nextTeamSpecials';
+import { advanceAiManagementSpecial } from './managementSpecials';
 import { bestDisclosedPerf, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec } from './ratings';
 import type { Rng } from './rng';
 import type {
@@ -553,7 +555,12 @@ export function advanceWeeks(state: GameState, weeks: number, rng: Rng): void {
     advanceSpecialWeeks(state);
     for (const tid of state.teamOrder) {
       const team = state.teams[tid];
-      if (!team.isPlayer) aiTeamWeek(state, team, rng);
+      if (!team.isPlayer) {
+        advanceAiTeamSpecial(state, team);
+        advanceAiNextTeamSpecial(state, team);
+        advanceAiManagementSpecial(state, team);
+        aiTeamWeek(state, team, rng);
+      }
       for (const p of [...team.projects]) {
         p.weeksLeft -= 1;
         if (p.weeksLeft <= 0) {

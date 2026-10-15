@@ -94,7 +94,7 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
   const aduo = aduoLine(state);
   if (aduo) L.push(aduo);
   if (state.meta.selectionReason) L.push(`玩家被选中的原因（玩家自述）：${state.meta.selectionReason}`);
-  if (state.ferrari) {
+  if (team.special === 'ferrari' && state.ferrari) {
     const f = state.ferrari;
     const fr = rules.ferrari;
     const fans = fanCamps(f).map(id => `${driverName(state, id)}粉丝 ${f.fans[id].toFixed(0)}`).join(' / ');
@@ -104,42 +104,42 @@ export function buildStatePrompt(state: GameState, opts: PromptOptions = {}): st
         : `【法拉利·过渡领队考核】媒体支持率 ${team.mediaReputation.toFixed(0)}（低于 ${fr.minMedia} 撤职，低于 ${fr.warnMedia} 告急）· ${fans}（差距 ${fanGap(f).toFixed(0)}，超过 ${fr.maxFanGap} 撤职）。升级件分配、优先车手、车队指令和成绩都会影响两边粉丝；意大利媒体比别处苛刻。小涡轮起步优势${ferrariTurboAdvantageActive(state) ? `仍生效，每场正赛提升 ${fr.turboStartGainMin}–${fr.turboStartGainMax} 位` : '已经消失'}；ADUO 四队联盟${f.aduoAlliance ? `已加入${f.aduoLobbyGranted ? '，且已获得一次额外认证机会' : '，等待后续 FIA 游说'}` : '尚未加入'}。`,
     );
   }
-  if (state.mclaren) {
+  if (team.special === 'mclaren' && state.mclaren) {
     const m = state.mclaren;
     L.push(`【迈凯伦·临时领队】斯特拉因交通事故至少休养一年，玩家受扎克·布朗邀请临时执掌车队。动力单元软件${m.softwareResolved ? '已经完成适配' : m.route ? `正在走${m.route === 'independent' ? '自主适配' : '与梅赛德斯合作'}路线（剩余 ${m.weeksLeft} 周）` : `尚未选择适配路线，每场正赛有 ${Math.round(rules.mclaren.failureChance * 100)}% 异常风险`}。诺里斯与皮亚斯特里首次近距离缠斗时存在 5% 额外队友碰撞风险。`);
   }
-  if (state.mercedes) {
+  if (team.special === 'mercedes' && state.mercedes) {
     const m = state.mercedes;
     L.push(m.dismissed
       ? `【梅赛德斯·已撤职】Toto Wolff 已终止玩家的接班人培养计划：${m.dismissed}。`
       : `【梅赛德斯·接班人计划】Toto 满意度 ${m.totoSatisfaction.toFixed(0)}（低于 ${rules.mercedes.dismissTotoSatisfaction} 撤职）· 政治压力 ${m.politicalPressure.toFixed(0)}/${rules.mercedes.banPoliticalPressure} · 热态压缩比 ${m.compressionRatio} · ADUO ${m.aduoApproved ? '已批准' : `审批 ${m.aduoProgress}%（批准前每场正赛有 ${Math.round(rules.mercedes.failureChance * 100)}% 动力单元故障风险）`}。`);
   }
-  if (state.redBull) {
+  if (team.special === 'red_bull' && state.redBull) {
     const r = state.redBull;
     const maxPos = sortedDrivers(state).indexOf('verstappen') + 1;
     L.push(`【红牛·人手危机】RB22 准备不足使车手更容易失误。GP 留任意愿 ${r.gpRetention.toFixed(0)}${r.gpTransferred ? '，已经转投迈凯伦' : ''}。夏休检查${r.summerChecked ? '已完成' : '尚未进行'}；维斯塔潘当前车手榜 P${maxPos}${r.verstappenExit ? '，解约条款已经触发并已转投梅赛德斯' : '，夏休时必须位列前三'}。`);
   }
-  if (state.astonMartin) {
+  if (team.special === 'aston_martin' && state.astonMartin) {
     const a = state.astonMartin;
     L.push(`【阿斯顿·马丁·替罪羊危机】Jonathan Wheatley 因 AMR26 预期表现极差被撤职，玩家与纽维接手残局。本田动力单元约少 100 马力，且与车体产生危险振动。${a.aduoEngineArrived ? '首批 ADUO 动力单元已经到货，保护性退赛检查停止' : `每 ${rules.astonMartin.vibrationInterval} 圈以 ${Math.round(rules.astonMartin.vibrationRetireChance * 100)}% 概率为防止永久性手部损伤强制退赛；ADUO 提前进度 ${a.aduoProgress}%`}。本田冲突 ${a.hondaConflict} · 纽维适配 ${a.neweyProgress}% · 西班牙媒体压力 ${a.mediaPressure} · 老斯特罗尔满意 ${a.strollFavor} · 阿隆索粉丝愤怒 ${a.alonsoFanAnger}。`);
   }
-  if (state.racingBulls) {
+  if (team.special === 'racing_bulls' && state.racingBulls) {
     const r = state.racingBulls;
     L.push(`【小红牛·副领队】玩家辅佐艾伦·佩尔曼。红牛每站可能临时调走一名正式车手。${r.pendingRecall ? `当前必须从储备车手中选择替补，待替车手：${driverName(state, r.pendingRecall.driverId)}` : r.activeRecall ? `当前由 ${driverName(state, r.activeRecall.replacementId)} 顶替 ${driverName(state, r.activeRecall.driverId)} 一站` : '当前阵容正常'}。`);
   }
-  if (state.audi) {
+  if (team.special === 'audi' && state.audi) {
     const a = state.audi;
     L.push(`【奥迪·副领队】比诺托负责技术，玩家处理围场政治。奥迪涡轮问题${a.turboFixed ? '已经通过 ADUO 解决' : `尚未解决，起步随机丢 ${rules.audi.startDropMin}–${rules.audi.startDropMax} 位`}。ADUO 进度 ${a.aduoProgress}% · 政治支持 ${a.politicalSupport}${a.alliance ? ' · 已与阿斯顿·马丁、梅赛德斯和法拉利结盟' : ' · 尚未组成四队联盟'}。`);
   }
-  if (state.alpine) {
+  if (team.special === 'alpine' && state.alpine) {
     const a = state.alpine;
     L.push(`【阿尔派·布里亚托利接班人】布里亚托利满意度 ${a.briatoreSatisfaction} · 科拉平托粉丝压力 ${a.fanPressure} · 加斯利留队意愿 ${a.gaslyCommitment}${a.gaslyLeaving ? '（已经决定离队）' : ''} · 梅赛德斯动力单元匹配 ${a.puIntegration}% · 当前研发方向 ${a.rndDirection.map(type => rules.parts[type]?.name ?? type).join('、')}。玩家无权改变布里亚托利决定的大方向。`);
   }
-  if (state.haas) {
+  if (team.special === 'haas' && state.haas) {
     const h = state.haas;
     L.push(`【哈斯·共同领队】吉恩·哈斯支持 ${h.geneSupport} · 丰田支持 ${h.toyotaSupport} · 丰田影响力 ${h.toyotaInfluence}% · 丰田累计投入 $${h.fundingProvided.toFixed(1)}M${h.partnershipWithdrawn ? ' · 丰田已冻结投入' : ''}。影响力达到 ${rules.haas.interferenceThreshold}% 后，丰田会限制研发方向。`);
   }
-  if (state.williams) {
+  if (team.special === 'williams' && state.williams) {
     const w = state.williams;
     const currentFocus = w.focusRound === `${state.season.number}-w${state.season.week}` ? w.focus : null;
     const focus = currentFocus === 'facilities' ? '设施' : currentFocus === 'development' ? '赛车升级' : currentFocus === 'reserve' ? '保留现金' : '尚未决定';
