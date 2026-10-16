@@ -21,7 +21,7 @@ const wetGrid = computed(() => !!gridTyreOptions.value?.length && gridTyreOption
 const gridEligible = computed(() => new Set(live.value?.pendingDecision?.eligibleDriverIds ?? []));
 const missingGridChoices = computed(() => drivers.value.filter(d => gridEligible.value.has(d.id) && !selections[d.id]?.startCompound).map(d => driverShort(d.id)));
 const canConfirmGrid = computed(() => gridTyreChoice.value && !missingGridChoices.value.length && !store.busy);
-const autoRunning = ref(!live.value || live.value.completedLaps === 0);
+const autoRunning = ref(!live.value);
 const pauseRequested = ref(false);
 const lapDelay = ref(1000);
 let lapTimer: ReturnType<typeof setTimeout> | undefined;
@@ -68,7 +68,10 @@ function selectRedFlagTyre(compound: string) {
   draft.compound = compound;
   closeTyrePicker();
 }
-async function start() { await act({ type: 'START_RACE', kind: v.value.season.phase === 'sprint' ? 'sprint' : 'race' }); }
+async function start() {
+  autoRunning.value = true;
+  await act({ type: 'START_RACE', kind: v.value.season.phase === 'sprint' ? 'sprint' : 'race' });
+}
 async function advance(until: 'next_lap' | 'next_decision') {
   if (!live.value) return;
   const advanced = await act({ type: 'ADVANCE_RACE', sessionId: live.value.id, expectedRevision: live.value.revision, until }, { silent: true });
@@ -104,6 +107,12 @@ function pause() {
 function resume() { pauseRequested.value = false; autoRunning.value = true; }
 watch(() => store.busy, busy => { if (!busy && pauseRequested.value) void commitPause(); });
 watch(() => [live.value?.id, live.value?.revision, live.value?.pendingDecision?.id, store.busy, autoRunning.value, lapDelay.value, store.panelVisible, store.tab], scheduleNextLap, { immediate: true });
+watch(() => ({ gameId: v.value.gameId, id: live.value?.id ?? '' }), (next, previous) => {
+  if (next.gameId !== previous.gameId || (!!previous.id && next.id !== previous.id)) stopHiddenPlayback();
+});
+watch(() => ({ id: live.value?.id ?? '', revision: live.value?.revision ?? -1 }), (next, previous) => {
+  if (next.id && next.id === previous.id && next.revision < previous.revision) stopHiddenPlayback();
+});
 watch(() => [store.tab, store.panelVisible] as const, ([tab, visible]) => { if (tab !== 'weekend' || !visible) stopHiddenPlayback(); });
 onMounted(() => document.addEventListener('visibilitychange', onVisibilityChange));
 onUnmounted(() => { document.removeEventListener('visibilitychange', onVisibilityChange); clearLapTimer(); });
@@ -135,7 +144,7 @@ async function narratePause() {
   <section v-if="live" class="live stack" aria-label="实时比赛指挥">
     <div class="race-ribbon" :class="{ pause: !!live.pendingDecision, control: !!live.raceControl }">
       <div><div class="tiny muted">当前圈 / {{ live.totalLaps }}</div><b class="lap mono">{{ live.completedLaps }}</b></div>
-      <div class="grow"><b>{{ live.pendingDecision ? '比赛已暂停，等待你的指令' : live.raceControl === 'red_flag' ? '红旗暂停' : live.restart ? `${live.restart === 'standing' ? '静态' : '滚动'}重启准备中` : live.raceControl === 'sc' ? '安全车部署中' : live.raceControl === 'vsc' ? '虚拟安全车部署中' : '比赛进行中' }}</b><div class="small muted">{{ weatherLabel() }}<span v-if="live.raceControl"> · {{ live.raceControl === 'red_flag' ? 'RED FLAG' : live.raceControl.toUpperCase() }}</span></div></div>
+      <div class="grow"><b>{{ live.pendingDecision ? '比赛已暂停，等待你的指令' : !autoRunning ? '时间轴已暂停' : live.raceControl === 'red_flag' ? '红旗暂停' : live.restart ? `${live.restart === 'standing' ? '静态' : '滚动'}重启准备中` : live.raceControl === 'sc' ? '安全车部署中' : live.raceControl === 'vsc' ? '虚拟安全车部署中' : '比赛进行中' }}</b><div class="small muted">{{ weatherLabel() }}<span v-if="live.raceControl"> · {{ live.raceControl === 'red_flag' ? 'RED FLAG' : live.raceControl.toUpperCase() }}</span></div></div>
       <span v-if="live.pendingDecision" class="badge warn">{{ live.pendingDecision.reasons.map(reasonLabel).join(' · ') }}</span>
       <button v-if="importantPause" class="narrate-pause" :disabled="store.busy || !!store.status?.generating" @click="narratePause">让 AI 叙述当前暂停</button>
       <div v-if="!importantPause" class="race-actions"><label class="speed tiny">时间轴速度<select v-model.number="lapDelay" :disabled="store.busy"><option :value="1800">慢速</option><option :value="1000">标准</option><option :value="450">快速</option></select></label><button v-if="pauseRequested" class="primary" disabled>正在暂停…</button><button v-else-if="autoRunning" class="primary" @click="pause">暂停比赛</button><button v-else class="primary" :disabled="store.busy" @click="resume">继续比赛</button></div>
