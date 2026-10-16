@@ -84,8 +84,8 @@ function scheduleNextLap() {
   lapTimer = setTimeout(() => { void advance('next_lap'); }, lapDelay.value);
 }
 async function commitPause() {
-  if (!live.value) return;
   pauseRequested.value = false;
+  if (!live.value || live.value.pendingDecision) return;
   const paused = await act({ type: 'PAUSE_RACE', sessionId: live.value.id, expectedRevision: live.value.revision });
   if (!paused) autoRunning.value = true;
 }

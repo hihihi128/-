@@ -443,6 +443,34 @@ describe('engineer strategy execution', () => {
     });
   });
 
+  it('uses an early stop when a selected late stop cannot affect the final stint', () => {
+    const scenario = weatherChaosScenario('ferrari', 7316);
+    const probability = severeDryChaosProbability(scenario.state.teams.ferrari);
+    scenario.live.weatherRngState = dryMistakeSeed(scenario.live, 'ferrari', probability, 'late_stop');
+    scenario.live.weatherTrajectory.fill(0);
+    scenario.car.plannedCompounds = [scenario.car.tyre];
+    scenario.car.stints = [scenario.live.totalLaps];
+    const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
+    while (scenario.live.lap < triggerLap - 1) advanceWeatherChaosLap(scenario, 0, 0);
+    const pits = scenario.car.pits;
+    advanceWeatherChaosLap(scenario, 0, 0);
+    expect(scenario.car.engineerStrategyMistake).toBe('early_stop');
+    expect(scenario.car.pits).toBe(pits + 1);
+  });
+
+  it('finishes the second stop from a legacy in-progress dry-chaos save', () => {
+    const scenario = weatherChaosScenario('ferrari', 7317);
+    scenario.live.weatherTrajectory.fill(0);
+    scenario.car.engineerDryChaosAssessed = true;
+    scenario.car.engineerDryChaosStage = 1;
+    scenario.car.engineerDryChaosNextLap = scenario.live.lap;
+    scenario.car.engineerStrategyMistake = undefined;
+    const pits = scenario.car.pits;
+    advanceWeatherChaosLap(scenario, 0, 0);
+    expect(scenario.car.engineerDryChaosStage).toBe(2);
+    expect(scenario.car.pits).toBe(pits + 1);
+  });
+
   it('skips player decision windows when both drivers listen to engineers', () => {
     let state = advanceUntil(newTestGame(7190), current => current.season.phase === 'race');
     const driverIds = Object.values(state.drivers).filter(driver => driver.teamId === state.meta.playerTeamId).map(driver => driver.id);

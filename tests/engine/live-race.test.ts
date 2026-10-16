@@ -107,6 +107,29 @@ describe('resumable live race', () => {
     expect(JSON.stringify(launched.weekend!.liveRace)).toBe(before);
   });
 
+  it('keeps a queued manual box order when another window accepts automatic choices', () => {
+    const launched = act(raceReady(706), { type: 'START_RACE', kind: 'race' });
+    const grid = launched.weekend!.liveRace!;
+    const started = act(launched, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id,
+      drivers: automaticChoices(launched, grid),
+    });
+    const live = started.weekend!.liveRace!;
+    const player = Object.values(live.cars).find(car => car.player && car.status === 'running')!;
+    const compound = started.rules.dryCompounds.find(value => value !== player.tyre)!;
+    player.pendingPit = 'box';
+    player.pendingCompound = compound;
+    const pits = player.pits;
+    live.pendingDecision = {
+      id: `${live.id}:incident-test`, lap: live.completedLaps + 1, stage: 'before_pit', reasons: ['incident'],
+      affectedDriverIds: [player.driverId], eligibleDriverIds: [player.driverId], observedEventIds: [],
+    };
+    live.stage = 'before_pit';
+    expect(applyRaceDecision(started, live, live.pendingDecision.id, [{ driverId: player.driverId, pit: 'auto', repairWing: false }])).toBe(true);
+    expect(player.pits).toBe(pits + 1);
+    expect(player.tyre).toBe(compound);
+  });
+
   it('uses the AI safety-car reaction for an opportunistic live-race stop', () => {
     const ready = raceReady();
     const aiIds = Object.values(ready.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));

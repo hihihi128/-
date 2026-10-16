@@ -1014,10 +1014,12 @@ function applyEngineerDryChaos(state: GameState, session: LiveRaceState, car: Li
   const team = state.teams[car.teamId];
   const probability = team ? strategyMistakeProbability(team) : 0;
   if (probability <= 0 || !engineerDecisionRoll(session, { driverId: car.teamId }, 'dry-chaos', probability)) return null;
-  const mistake = strategyMistakeKind(session, car.teamId);
+  let mistake = strategyMistakeKind(session, car.teamId);
+  const lateStopLap = session.lap + Math.max(3, pitTriggerLap(car) - car.tyreAge + 2);
+  if (mistake === 'late_stop' && (car.stintIndex >= car.plannedCompounds.length - 1 || lateStopLap >= session.totalLaps)) mistake = 'early_stop';
   car.engineerStrategyMistake = mistake;
   if (mistake === 'late_stop') {
-    car.engineerStrategyDelayUntilLap = session.lap + Math.max(3, pitTriggerLap(car) - car.tyreAge + 2);
+    car.engineerStrategyDelayUntilLap = lateStopLap;
     liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组错过最佳窗口，决定把当前轮胎留到第 ${car.engineerStrategyDelayUntilLap} 圈`, [car.driverId], car.player);
     return null;
   }
@@ -1493,7 +1495,8 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
       liveEvent(session, session.lap, 'order', `${car.driverId} 拒绝临场策略指令，继续按自己的判断比赛`, [car.driverId], true);
       continue;
     }
-    car.pendingPit = choice.pit;
+    const preservesManualBox = choice.pit === 'auto' && car.pendingPit === 'box' && !!car.pendingCompound;
+    if (!preservesManualBox) car.pendingPit = choice.pit;
     if (choice.pit === 'stay_out') {
       const firstAcknowledgement = car.stayOutUntilLap < session.lap;
       car.stayOutUntilLap = session.lap + 3;
