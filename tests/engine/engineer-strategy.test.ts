@@ -293,7 +293,18 @@ describe('engineer strategy execution', () => {
       expect(scenario.car.engineerStrategyMistake, teamId).toBe(wanted);
       if (wanted === 'late_stop') {
         expect(scenario.car.pits).toBe(pits);
-        expect(scenario.car.engineerStrategyDelayUntilLap).toBeGreaterThan(scenario.live.lap);
+        const delayUntil = scenario.car.engineerStrategyDelayUntilLap!;
+        expect(delayUntil).toBeGreaterThan(scenario.live.lap);
+        while (scenario.live.lap < delayUntil - 1) {
+          scenario.live.scLeft = 0;
+          scenario.live.vscLeft = 0;
+          advanceWeatherChaosLap(scenario, 0, 0);
+          expect(scenario.car.pits).toBe(pits);
+        }
+        scenario.live.scLeft = 0;
+        scenario.live.vscLeft = 0;
+        advanceWeatherChaosLap(scenario, 0, 0);
+        expect(scenario.car.pits).toBe(pits + 1);
       } else {
         expect(scenario.car.pits).toBe(pits + 1);
       }
@@ -400,6 +411,35 @@ describe('engineer strategy execution', () => {
       stage: scenario.car.engineerDryChaosStage,
       nextLap: scenario.car.engineerDryChaosNextLap,
       events: scenario.live.events.filter(event => event.drivers.includes(scenario.car.driverId)),
+    });
+  });
+
+  it('preserves a delayed strategy stop through JSON save and resume', () => {
+    const scenario = weatherChaosScenario('aston_martin', 7313);
+    if (scenario.state.astonMartin) scenario.state.astonMartin.aduoEngineArrived = true;
+    const probability = severeDryChaosProbability(scenario.state.teams.aston_martin);
+    scenario.live.weatherRngState = dryMistakeSeed(scenario.live, 'aston_martin', probability, 'late_stop');
+    scenario.live.weatherTrajectory.fill(0);
+    const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
+    while (scenario.live.lap < triggerLap) {
+      scenario.live.scLeft = 0;
+      scenario.live.vscLeft = 0;
+      advanceWeatherChaosLap(scenario, 0, 0);
+    }
+    scenario.live.scLeft = 0;
+    scenario.live.vscLeft = 0;
+    advanceWeatherChaosLap(scenario, 0, 0);
+    expect(scenario.car.engineerStrategyMistake).toBe('late_stop');
+    const resumed = restoreWeatherChaosScenario(scenario);
+    const delayUntil = scenario.car.engineerStrategyDelayUntilLap!;
+    while (scenario.live.lap < delayUntil) {
+      scenario.live.scLeft = resumed.live.scLeft = 0;
+      scenario.live.vscLeft = resumed.live.vscLeft = 0;
+      advanceWeatherChaosLap(scenario, 0, 0);
+      advanceWeatherChaosLap(resumed, 0, 0);
+    }
+    expect({ tyre: resumed.car.tyre, pits: resumed.car.pits, stint: resumed.car.stintIndex }).toEqual({
+      tyre: scenario.car.tyre, pits: scenario.car.pits, stint: scenario.car.stintIndex,
     });
   });
 

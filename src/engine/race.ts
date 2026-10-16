@@ -984,7 +984,7 @@ export function severeDryChaosProbability(team: Pick<TeamState, 'id' | 'staff'>)
   return severeWeatherChaosProbability(team) * .8;
 }
 
-/** One dry-race strategy-error roll per engineer-controlled AI car. */
+/** One dry-race strategy-error roll per AI team. */
 export function strategyMistakeProbability(team: Pick<TeamState, 'id' | 'staff'>): number {
   return CHAOTIC_WEATHER_TEAMS.has(team.id)
     ? severeDryChaosProbability(team)
@@ -1000,7 +1000,7 @@ function strategyMistakeKind(session: LiveRaceState, teamId: string): NonNullabl
 function applyEngineerDryChaos(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound | null {
   if (session.kind !== 'race' || car.player || car.plan.strategySource !== 'engineer' || session.wetness >= .03 || session.scLeft > 0 || session.vscLeft > 0) return null;
   const dry = state.rules.dryCompounds;
-  if (car.engineerStrategyMistake === 'double_stop' && car.engineerDryChaosStage === 1 && session.lap >= (car.engineerDryChaosNextLap ?? Number.MAX_SAFE_INTEGER)) {
+  if ((car.engineerStrategyMistake === 'double_stop' || !car.engineerStrategyMistake) && car.engineerDryChaosStage === 1 && session.lap >= (car.engineerDryChaosNextLap ?? Number.MAX_SAFE_INTEGER)) {
     const correction = dry[1] === car.tyre ? (dry[2] ?? dry[0]) : (dry[1] ?? dry[0]);
     if (!correction || correction === car.tyre) return null;
     car.engineerDryChaosStage = 2;
@@ -1017,7 +1017,7 @@ function applyEngineerDryChaos(state: GameState, session: LiveRaceState, car: Li
   const mistake = strategyMistakeKind(session, car.teamId);
   car.engineerStrategyMistake = mistake;
   if (mistake === 'late_stop') {
-    car.engineerStrategyDelayUntilLap = Math.max(session.lap + 3, pitTriggerLap(car) + 2);
+    car.engineerStrategyDelayUntilLap = session.lap + Math.max(3, pitTriggerLap(car) - car.tyreAge + 2);
     liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组错过最佳窗口，决定把当前轮胎留到第 ${car.engineerStrategyDelayUntilLap} 圈`, [car.driverId], car.player);
     return null;
   }
@@ -1510,7 +1510,7 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
   }
   if (orders) session.teamOrders = { ...orders };
   session.pendingDecision = null;
-  if (window.stage === 'grid') session.stage = 'ready';
+  if (window.stage === 'grid' || window.reasons.includes('manual_pause')) session.stage = 'ready';
   else if (window.reasons.includes('red_flag') && session.redFlag?.active) {
     for (const choice of drivers) {
       const car = session.cars[choice.driverId];

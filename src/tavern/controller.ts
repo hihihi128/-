@@ -972,7 +972,8 @@ export class F1Controller {
       this.staleSpecialAction();
       this.invalidateStrategyReviews();
       this.notify('action');
-      if (this.settings.autoNarrate && isSimulation(action as Action) && res.state.narration.length) {
+      const finishedLiveRace = action.type === 'ADVANCE_RACE' && !!cur.state.weekend?.liveRace && !res.state.weekend?.liveRace;
+      if (this.settings.autoNarrate && (isSimulation(action as Action) || finishedLiveRace) && res.state.narration.length) {
         void this.requestNarration();
       }
       return { ok: true, message: `${res.message}${strategySummary}` };

@@ -79,12 +79,32 @@ describe('resumable live race', () => {
       drivers: automaticChoices(launched, grid),
     });
     const live = started.weekend!.liveRace!;
+    const pits = Object.fromEntries(Object.values(live.cars).map(car => [car.driverId, car.pits]));
     const paused = act(started, { type: 'PAUSE_RACE', sessionId: live.id, expectedRevision: live.revision });
     expect(paused.weekend!.liveRace!.pendingDecision).toMatchObject({
       lap: live.completedLaps,
       reasons: ['manual_pause'],
       eligibleDriverIds: expect.arrayContaining(Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => car.driverId)),
     });
+    const window = paused.weekend!.liveRace!.pendingDecision!;
+    const resumed = act(paused, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: paused.weekend!.liveRace!.revision, windowId: window.id,
+      drivers: automaticChoices(paused, paused.weekend!.liveRace!),
+    });
+    expect(resumed.weekend!.liveRace!.pendingDecision).toBeNull();
+    expect(Object.fromEntries(Object.values(resumed.weekend!.liveRace!.cars).map(car => [car.driverId, car.pits]))).toEqual(pits);
+  });
+
+  it('rejects a manual pause atomically when both player cars delegate strategy', () => {
+    const launched = act(raceReady(705), { type: 'START_RACE', kind: 'race' });
+    const grid = launched.weekend!.liveRace!;
+    for (const car of Object.values(grid.cars).filter(car => car.player)) car.plan.strategySource = 'engineer';
+    grid.pendingDecision = null;
+    grid.stage = 'ready';
+    const before = JSON.stringify(grid);
+    const result = tryAct(launched, { type: 'PAUSE_RACE', sessionId: grid.id, expectedRevision: grid.revision });
+    expect(result).toMatchObject({ ok: false, message: '当前没有可指挥的赛车' });
+    expect(JSON.stringify(launched.weekend!.liveRace)).toBe(before);
   });
 
   it('uses the AI safety-car reaction for an opportunistic live-race stop', () => {

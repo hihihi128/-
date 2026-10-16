@@ -22,6 +22,7 @@ const gridEligible = computed(() => new Set(live.value?.pendingDecision?.eligibl
 const missingGridChoices = computed(() => drivers.value.filter(d => gridEligible.value.has(d.id) && !selections[d.id]?.startCompound).map(d => driverShort(d.id)));
 const canConfirmGrid = computed(() => gridTyreChoice.value && !missingGridChoices.value.length && !store.busy);
 const autoRunning = ref(true);
+const pauseRequested = ref(false);
 const lapDelay = ref(1000);
 let lapTimer: ReturnType<typeof setTimeout> | undefined;
 const tyrePickerDriverId = ref('');
@@ -70,7 +71,8 @@ function selectRedFlagTyre(compound: string) {
 async function start() { await act({ type: 'START_RACE', kind: v.value.season.phase === 'sprint' ? 'sprint' : 'race' }); }
 async function advance(until: 'next_lap' | 'next_decision') {
   if (!live.value) return;
-  await act({ type: 'ADVANCE_RACE', sessionId: live.value.id, expectedRevision: live.value.revision, until });
+  const advanced = await act({ type: 'ADVANCE_RACE', sessionId: live.value.id, expectedRevision: live.value.revision, until }, { silent: true });
+  if (!advanced) autoRunning.value = false;
 }
 function clearLapTimer() {
   if (lapTimer !== undefined) clearTimeout(lapTimer);
@@ -81,12 +83,20 @@ function scheduleNextLap() {
   if (!autoRunning.value || store.busy || !live.value || live.value.pendingDecision) return;
   lapTimer = setTimeout(() => { void advance('next_lap'); }, lapDelay.value);
 }
-async function pause() {
+async function commitPause() {
   if (!live.value) return;
+  pauseRequested.value = false;
+  const paused = await act({ type: 'PAUSE_RACE', sessionId: live.value.id, expectedRevision: live.value.revision });
+  if (!paused) autoRunning.value = true;
+}
+function pause() {
   autoRunning.value = false;
   clearLapTimer();
-  await act({ type: 'PAUSE_RACE', sessionId: live.value.id, expectedRevision: live.value.revision });
+  if (store.busy) pauseRequested.value = true;
+  else void commitPause();
 }
+function resume() { pauseRequested.value = false; autoRunning.value = true; }
+watch(() => store.busy, busy => { if (!busy && pauseRequested.value) void commitPause(); });
 watch(() => [live.value?.id, live.value?.revision, live.value?.pendingDecision?.id, store.busy, autoRunning.value, lapDelay.value], scheduleNextLap, { immediate: true });
 onUnmounted(clearLapTimer);
 async function tactics() {
@@ -120,7 +130,7 @@ async function narratePause() {
       <div class="grow"><b>{{ live.pendingDecision ? '比赛已暂停，等待你的指令' : live.raceControl === 'red_flag' ? '红旗暂停' : live.restart ? `${live.restart === 'standing' ? '静态' : '滚动'}重启准备中` : live.raceControl === 'sc' ? '安全车部署中' : live.raceControl === 'vsc' ? '虚拟安全车部署中' : '比赛进行中' }}</b><div class="small muted">{{ weatherLabel() }}<span v-if="live.raceControl"> · {{ live.raceControl === 'red_flag' ? 'RED FLAG' : live.raceControl.toUpperCase() }}</span></div></div>
       <span v-if="live.pendingDecision" class="badge warn">{{ live.pendingDecision.reasons.map(reasonLabel).join(' · ') }}</span>
       <button v-if="importantPause" class="narrate-pause" :disabled="store.busy || !!store.status?.generating" @click="narratePause">让 AI 叙述当前暂停</button>
-      <div v-if="!importantPause" class="race-actions"><label class="speed tiny">时间轴速度<select v-model.number="lapDelay" :disabled="store.busy"><option :value="1800">慢速</option><option :value="1000">标准</option><option :value="450">快速</option></select></label><button class="primary" :disabled="store.busy" @click="pause">暂停比赛</button></div>
+      <div v-if="!importantPause" class="race-actions"><label class="speed tiny">时间轴速度<select v-model.number="lapDelay" :disabled="store.busy"><option :value="1800">慢速</option><option :value="1000">标准</option><option :value="450">快速</option></select></label><button v-if="pauseRequested" class="primary" disabled>正在暂停…</button><button v-else-if="autoRunning" class="primary" @click="pause">暂停比赛</button><button v-else class="primary" :disabled="store.busy" @click="resume">继续比赛</button></div>
     </div>
     <div class="lap-timeline" aria-label="正赛时间轴"><i :style="{ width: `${live.completedLaps / live.totalLaps * 100}%` }"></i><span>L1</span><b>第 {{ live.completedLaps }} 圈</b><span>L{{ live.totalLaps }}</span></div>
 
