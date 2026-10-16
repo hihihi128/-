@@ -850,6 +850,23 @@ describe('resumable live race', () => {
     expect(beyondTrajectory.intensityRange[0]).toBeGreaterThan(.5);
   });
 
+  it('uses the current weather sample for the race-loop forecast window', () => {
+    const launched = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const state = act(launched, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: launched.weekend!.liveRace!.id,
+      expectedRevision: launched.weekend!.liveRace!.revision, windowId: launched.weekend!.liveRace!.pendingDecision!.id,
+      drivers: automaticChoices(launched, launched.weekend!.liveRace!),
+    });
+    const live = state.weekend!.liveRace!;
+    live.weatherTrajectory = [0, 1, 1, 1, 1, ...live.weatherTrajectory.slice(5)];
+    live.weatherCursor = 0;
+    const expected = createForecast(live.weatherTrajectory, 0, live.strategistSkill, Rng.restore(live.forecastRngState), 0);
+
+    advanceRaceSession(state, live, 'next_lap');
+
+    expect(live.forecast).toEqual(expected);
+  });
+
   it('restores an exact zero RNG state', () => {
     const rng = Rng.restore(0);
     expect(rng.state).toBe(0);
