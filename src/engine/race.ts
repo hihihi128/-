@@ -962,7 +962,8 @@ export function severeWeatherChaosProbability(team: Pick<TeamState, 'id' | 'staf
 function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, car: LiveRaceCar): 'none' | 'ordinary' | 'chaos' {
   if (car.plan.strategySource !== 'engineer') return 'none';
   if (session.wetness < .02) {
-    if (car.engineerLightRainAssessed || car.engineerWetAssessed) car.engineerWeatherSpell = (car.engineerWeatherSpell ?? 0) + 1;
+    if (car.engineerWeatherSpellActive || car.engineerLightRainAssessed || car.engineerWetAssessed) car.engineerWeatherSpell = (car.engineerWeatherSpell ?? 0) + 1;
+    car.engineerWeatherSpellActive = false;
     car.engineerLightRainAssessed = false;
     car.engineerWetAssessed = false;
     car.engineerTyreOverride = null;
@@ -970,6 +971,7 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
     car.engineerWeatherChaosStage = undefined;
     car.engineerWeatherChaosNextLap = undefined;
   }
+  if (session.wetness >= .03) car.engineerWeatherSpellActive = true;
   const team = state.teams[car.teamId];
   const dry = state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0];
   if (car.engineerWeatherChaosStage === 1 && session.lap > (car.lastWeatherPitLap ?? -99) && dry) {
@@ -997,6 +999,7 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
     && chaosProbability > 0
     && engineerDecisionRoll(session, { driverId: car.teamId }, `weather-chaos:${car.engineerWeatherSpell ?? 0}`, chaosProbability)) {
     car.engineerWeatherChaosStage = 1;
+    car.engineerLightRainAssessed = true;
     car.engineerTyreOverride = state.rules.wetCompound;
     car.engineerTyreOverrideUntilLap = session.lap;
     liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组看见小雨便过度反应，立即要求换半雨胎`, [car.driverId], car.player);

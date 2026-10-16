@@ -4,6 +4,22 @@ import { advanceRaceSession, engineerDecisionRoll, engineerWeatherRisk, severeWe
 import { staffAbility } from '../../src/engine/staff';
 
 describe('engineer strategy execution', () => {
+  function makeMclarenScenario(state: ReturnType<typeof newTestGame>) {
+    const live = state.weekend!.liveRace!;
+    const car = Object.values(live.cars).find(candidate => candidate.teamId === 'ferrari')!;
+    const ferrari = state.teams.ferrari;
+    state.teams.mclaren = {
+      ...ferrari,
+      id: 'mclaren',
+      staff: {
+        ...ferrari.staff,
+        strategist: { ...ferrari.staff.strategist, skill: 70, abilities: { strategy: 70, weather: 69, reaction: 69, risk: 71 } },
+      },
+    };
+    car.teamId = 'mclaren';
+    return { live, car };
+  }
+
   it('uses neutral risk for legacy staff without specialist abilities', () => {
     expect(staffAbility({ name: 'legacy', skill: 95, salary: 1 }, 'risk')).toBe(70);
   });
@@ -51,6 +67,68 @@ describe('engineer strategy execution', () => {
     advanceRaceSession(state, live, 'next_lap');
     expect(state.rules.tyres[car.tyre].wet).toBe(true);
     expect(car.pits).toBeGreaterThanOrEqual(3);
+  });
+
+  it('does not force an ordinary McLaren weather suggestion into a pit stop', () => {
+    let state = advanceUntil(newTestGame(7195), current => current.season.phase === 'race');
+    state = act(state, { type: 'START_RACE', kind: 'race' });
+    const { live, car } = makeMclarenScenario(state);
+    for (const candidate of Object.values(live.cars)) candidate.player = false;
+    live.pendingDecision = null;
+    live.stage = 'ready';
+    car.plan.strategySource = 'engineer';
+    car.tyre = state.rules.wetCompound;
+    car.tyreAge = 0;
+    car.raceEngineerWeather = 50;
+    car.raceEngineerReaction = 50;
+    const risk = engineerWeatherRisk(50, 50, state.teams[car.teamId].staff.strategist.abilities!.risk!, .4)!;
+    let matchingSeed = 0;
+    while (!engineerDecisionRoll({ id: live.id, weatherRngState: matchingSeed }, car, 'wet-dry-tyre:0', risk.probability)) matchingSeed++;
+    live.weatherRngState = matchingSeed;
+    live.wetness = .4;
+    live.weatherTrajectory[live.completedLaps] = .2;
+    const pits = car.pits;
+
+    advanceRaceSession(state, live, 'next_lap');
+
+    expect(car.pits).toBe(pits);
+    expect(car.tyre).toBe(state.rules.wetCompound);
+    expect(car.engineerTyreOverride).not.toBeNull();
+  });
+
+  it('uses a new chaos roll after the track dries between showers', () => {
+    let state = advanceUntil(newTestGame(7196), current => current.season.phase === 'race');
+    state = act(state, { type: 'START_RACE', kind: 'race' });
+    const { live, car } = makeMclarenScenario(state);
+    for (const candidate of Object.values(live.cars)) candidate.player = false;
+    live.pendingDecision = null;
+    live.stage = 'ready';
+    car.plan.strategySource = 'engineer';
+    car.tyre = state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0];
+    car.tyreAge = 6;
+    const probability = severeWeatherChaosProbability(state.teams[car.teamId]);
+    let matchingSeed = 0;
+    while (!(engineerDecisionRoll({ id: live.id, weatherRngState: matchingSeed }, { driverId: car.teamId }, 'weather-chaos:0', probability)
+      && !engineerDecisionRoll({ id: live.id, weatherRngState: matchingSeed }, { driverId: car.teamId }, 'weather-chaos:1', probability))) matchingSeed++;
+    live.weatherRngState = matchingSeed;
+
+    live.wetness = .1;
+    live.weatherTrajectory[live.completedLaps] = .1;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(car.engineerWeatherChaosStage).toBe(1);
+
+    live.wetness = 0;
+    live.weatherTrajectory[live.completedLaps] = 0;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(car.engineerWeatherSpell).toBe(1);
+    expect(car.engineerWeatherChaosStage).toBeUndefined();
+
+    car.tyre = state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0];
+    car.tyreAge = 6;
+    live.wetness = .1;
+    live.weatherTrajectory[live.completedLaps] = .1;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(car.engineerWeatherChaosStage).toBeUndefined();
   });
 
   it('makes each weather decision deterministic without using a supplied race RNG', () => {
