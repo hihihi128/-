@@ -3,6 +3,7 @@ import { strategyDecisionSkill } from '../../src/engine/staff';
 import { cardSources } from '../helpers';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
+import { severeWeatherChaosProbability } from '../../src/engine/race';
 
 describe('2026 车队策略组层级', () => {
   it('保持红牛、梅奔、其他车队、小红牛、迈凯伦、马丁、法拉利的严格顺序', () => {
@@ -22,5 +23,17 @@ describe('2026 车队策略组层级', () => {
     for (let index = 0; index < tiers.length - 1; index++) {
       expect(Math.min(...tiers[index])).toBeGreaterThan(Math.max(...tiers[index + 1]));
     }
+  });
+
+  it('只让后三个策略组出现严重天气换胎反复', () => {
+    const loaded = normalizeDatabase(cardSources());
+    if (!loaded.db) throw new Error('card database failed to load');
+    const state = createGame(loaded.db, { playerTeamId: 'cadillac', principalName: '测试领队', seed: 43, gameId: 'weather-chaos', now: 1 });
+    for (const id of ['red_bull', 'mercedes', 'williams', 'haas', 'audi', 'alpine', 'cadillac', 'racing_bulls']) {
+      expect(severeWeatherChaosProbability(state.teams[id])).toBe(0);
+    }
+    expect(severeWeatherChaosProbability(state.teams.mclaren)).toBeCloseTo(.315, 3);
+    expect(severeWeatherChaosProbability(state.teams.aston_martin)).toBeCloseTo(.57, 3);
+    expect(severeWeatherChaosProbability(state.teams.ferrari)).toBe(.75);
   });
 });

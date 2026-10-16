@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { act, advanceUntil, newTestGame } from '../helpers';
-import { engineerDecisionRoll, engineerWeatherRisk } from '../../src/engine/race';
+import { advanceRaceSession, engineerDecisionRoll, engineerWeatherRisk, severeWeatherChaosProbability } from '../../src/engine/race';
 import { staffAbility } from '../../src/engine/staff';
 
 describe('engineer strategy execution', () => {
@@ -13,6 +13,44 @@ describe('engineer strategy execution', () => {
     expect(engineerWeatherRisk(75, 74, 86, .1)).toMatchObject({ preference: 'intermediate', holdLaps: 3 });
     expect(engineerWeatherRisk(90, 90, 70, .1)).toBeNull();
     expect(engineerWeatherRisk(72, 70, 84, .5)!.probability).toBeGreaterThan(engineerWeatherRisk(90, 88, 68, .5)!.probability);
+  });
+
+  it('can make Ferrari switch wet, dry, then wet again during one changing shower', () => {
+    let state = advanceUntil(newTestGame(7194), current => current.season.phase === 'race');
+    state = act(state, { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    const car = Object.values(live.cars).find(candidate => candidate.teamId === 'ferrari')!;
+    for (const candidate of Object.values(live.cars)) candidate.player = false;
+    live.pendingDecision = null;
+    live.stage = 'ready';
+    car.plan.strategySource = 'engineer';
+    car.tyre = state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0];
+    car.tyreAge = 6;
+    const probability = severeWeatherChaosProbability(state.teams[car.teamId]);
+    let matchingSeed = 0;
+    while (!engineerDecisionRoll({ id: live.id, weatherRngState: matchingSeed }, { driverId: car.teamId }, 'weather-chaos:0', probability)) matchingSeed++;
+    live.weatherRngState = matchingSeed;
+
+    live.wetness = .1;
+    live.weatherTrajectory[live.completedLaps] = .1;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(car.tyre).toBe(state.rules.wetCompound);
+
+    live.wetness = .1;
+    live.weatherTrajectory[live.completedLaps] = .1;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(state.rules.tyres[car.tyre].wet).toBe(false);
+
+    live.wetness = .1;
+    live.weatherTrajectory[live.completedLaps] = .1;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(state.rules.tyres[car.tyre].wet).toBe(false);
+
+    live.wetness = .2;
+    live.weatherTrajectory[live.completedLaps] = .3;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(state.rules.tyres[car.tyre].wet).toBe(true);
+    expect(car.pits).toBeGreaterThanOrEqual(3);
   });
 
   it('makes each weather decision deterministic without using a supplied race RNG', () => {

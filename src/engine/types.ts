@@ -1021,6 +1021,9 @@ export interface LiveRaceCar {
   engineerWeatherSpell?: number;
   engineerTyreOverride?: Compound | null;
   engineerTyreOverrideUntilLap?: number;
+  /** Low-skill weather calls can create a wet → dry → wet tyre sequence. */
+  engineerWeatherChaosStage?: 1 | 2 | 3;
+  engineerWeatherChaosNextLap?: number;
   /** Stable public-weather target and the first lap when this AI will act on it. */
   engineerWeatherTarget?: Compound | null;
   engineerWeatherEligibleLap?: number;
