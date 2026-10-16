@@ -254,34 +254,130 @@ describe('engineer strategy execution', () => {
     expect(rate).toBeLessThanOrEqual(.78);
   });
 
-  it('turns low dry-strategy skill into consecutive unnecessary Ferrari stops', () => {
-    const scenario = weatherChaosScenario('ferrari', 7310);
-    const probability = severeDryChaosProbability(scenario.state.teams.ferrari);
-    expect(probability).toBe(.5);
-    scenario.live.weatherRngState = weatherDecisionSeed(scenario.live, 'ferrari', 'dry-chaos', probability, true);
-    scenario.live.weatherTrajectory.fill(0);
-    const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
-    while (scenario.live.lap < triggerLap - 1) advanceWeatherChaosLap(scenario, 0, 0);
-    const pits = scenario.car.pits;
+  it('turns every low dry-strategy team into consecutive unnecessary stops', () => {
+    for (const teamId of ['mclaren', 'aston_martin', 'ferrari'] as const) {
+      const scenario = weatherChaosScenario(teamId, 7310);
+      const probability = severeDryChaosProbability(scenario.state.teams[teamId]);
+      expect(probability).toBeGreaterThan(0);
+      if (teamId === 'aston_martin' && scenario.state.astonMartin) scenario.state.astonMartin.aduoEngineArrived = true;
+      scenario.live.weatherRngState = weatherDecisionSeed(scenario.live, teamId, 'dry-chaos', probability, true);
+      scenario.live.weatherTrajectory.fill(0);
+      const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
+      while (scenario.live.lap < triggerLap - 1) {
+        scenario.live.scLeft = 0;
+        scenario.live.vscLeft = 0;
+        advanceWeatherChaosLap(scenario, 0, 0);
+      }
+      const pits = scenario.car.pits;
 
-    advanceWeatherChaosLap(scenario, 0, 0);
-    expect(scenario.car.engineerDryChaosStage).toBe(1);
-    expect(scenario.car.pits).toBe(pits + 1);
+      scenario.live.scLeft = 0;
+      scenario.live.vscLeft = 0;
+      advanceWeatherChaosLap(scenario, 0, 0);
+      expect(scenario.car.engineerDryChaosStage, teamId).toBe(1);
+      expect(scenario.car.pits, teamId).toBe(pits + 1);
 
-    advanceWeatherChaosLap(scenario, 0, 0);
-    expect(scenario.car.engineerDryChaosStage).toBe(2);
-    expect(scenario.car.pits).toBe(pits + 2);
-    expect(scenario.live.events.filter(event => event.drivers.includes(scenario.car.driverId) && event.text.includes('策略组')).map(event => event.text)).toEqual(expect.arrayContaining([
-      expect.stringContaining('误判轮胎窗口'),
-      expect.stringContaining('一圈后推翻决定'),
-    ]));
+      scenario.live.scLeft = 0;
+      scenario.live.vscLeft = 0;
+      advanceWeatherChaosLap(scenario, 0, 0);
+      expect(scenario.car.engineerDryChaosStage).toBe(2);
+      expect(scenario.car.pits).toBe(pits + 2);
+      expect(scenario.live.events.filter(event => event.drivers.includes(scenario.car.driverId) && event.text.includes('策略组')).map(event => event.text)).toEqual(expect.arrayContaining([
+        expect.stringContaining('误判轮胎窗口'),
+        expect.stringContaining('再次推翻决定'),
+        expect.stringContaining('连续进站换胎'),
+      ]));
+    }
   });
 
   it('never applies severe dry-strategy chaos outside the bottom three teams', () => {
     for (const teamId of ['red_bull', 'mercedes', 'williams', 'haas', 'audi', 'alpine', 'cadillac', 'racing_bulls']) {
       const scenario = weatherChaosScenario(teamId, 7311);
       expect(severeDryChaosProbability(scenario.state.teams[teamId])).toBe(0);
+      scenario.live.weatherTrajectory.fill(0);
+      scenario.car.tyreAge = 0;
+      scenario.car.plannedCompounds = [scenario.car.tyre];
+      scenario.car.stints = [scenario.live.totalLaps + 1];
+      const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
+      while (scenario.live.lap < triggerLap) {
+        scenario.live.scLeft = 0;
+        scenario.live.vscLeft = 0;
+        advanceWeatherChaosLap(scenario, 0, 0);
+      }
+      expect(scenario.car.engineerDryChaosStage).toBeUndefined();
+      expect(scenario.car.pits).toBe(0);
     }
+  });
+
+  it('excludes player cars and sprints, and requires another dry compound before dry chaos starts', () => {
+    const prepareAtTrigger = (seed: number) => {
+      const scenario = weatherChaosScenario('ferrari', seed);
+      const probability = severeDryChaosProbability(scenario.state.teams.ferrari);
+      scenario.live.weatherRngState = weatherDecisionSeed(scenario.live, 'ferrari', 'dry-chaos', probability, true);
+      scenario.live.weatherTrajectory.fill(0);
+      const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
+      while (scenario.live.lap < triggerLap - 1) {
+        scenario.live.scLeft = 0;
+        scenario.live.vscLeft = 0;
+        advanceWeatherChaosLap(scenario, 0, 0);
+      }
+      return scenario;
+    };
+
+    const playerCar = prepareAtTrigger(7313);
+    playerCar.car.player = true;
+    advanceWeatherChaosLap(playerCar, 0, 0);
+    expect(playerCar.car.engineerDryChaosAssessed).toBeUndefined();
+    expect(playerCar.car.engineerDryChaosStage).toBeUndefined();
+
+    const sprint = prepareAtTrigger(7314);
+    sprint.live.kind = 'sprint';
+    advanceWeatherChaosLap(sprint, 0, 0);
+    expect(sprint.car.engineerDryChaosAssessed).toBeUndefined();
+    expect(sprint.car.engineerDryChaosStage).toBeUndefined();
+
+    const noAlternative = prepareAtTrigger(7315);
+    noAlternative.state.rules.dryCompounds = [noAlternative.car.tyre];
+    const pits = noAlternative.car.pits;
+    advanceWeatherChaosLap(noAlternative, 0, 0);
+    expect(noAlternative.car.engineerDryChaosAssessed).toBe(true);
+    expect(noAlternative.car.engineerDryChaosStage).toBeUndefined();
+    expect(noAlternative.car.pits).toBe(pits);
+  });
+
+  it('preserves dry-chaos state through JSON save and resume', () => {
+    const scenario = weatherChaosScenario('ferrari', 7312);
+    const probability = severeDryChaosProbability(scenario.state.teams.ferrari);
+    scenario.live.weatherRngState = weatherDecisionSeed(scenario.live, 'ferrari', 'dry-chaos', probability, true);
+    scenario.live.weatherTrajectory.fill(0);
+    const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
+    while (scenario.live.lap < triggerLap) {
+      scenario.live.scLeft = 0;
+      scenario.live.vscLeft = 0;
+      advanceWeatherChaosLap(scenario, 0, 0);
+    }
+    expect(scenario.car).toMatchObject({ engineerDryChaosAssessed: true, engineerDryChaosStage: 1, engineerDryChaosNextLap: scenario.live.lap + 1 });
+
+    const resumed = restoreWeatherChaosScenario(scenario);
+    expect(resumed.car).toMatchObject({ engineerDryChaosAssessed: true, engineerDryChaosStage: 1, engineerDryChaosNextLap: scenario.car.engineerDryChaosNextLap });
+    scenario.live.scLeft = 0;
+    scenario.live.vscLeft = 0;
+    resumed.live.scLeft = 0;
+    resumed.live.vscLeft = 0;
+    advanceWeatherChaosLap(scenario, 0, 0);
+    advanceWeatherChaosLap(resumed, 0, 0);
+    expect({
+      tyre: resumed.car.tyre,
+      pits: resumed.car.pits,
+      stage: resumed.car.engineerDryChaosStage,
+      nextLap: resumed.car.engineerDryChaosNextLap,
+      events: resumed.live.events.filter(event => event.drivers.includes(resumed.car.driverId)),
+    }).toEqual({
+      tyre: scenario.car.tyre,
+      pits: scenario.car.pits,
+      stage: scenario.car.engineerDryChaosStage,
+      nextLap: scenario.car.engineerDryChaosNextLap,
+      events: scenario.live.events.filter(event => event.drivers.includes(scenario.car.driverId)),
+    });
   });
 
   it('skips player decision windows when both drivers listen to engineers', () => {

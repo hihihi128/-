@@ -513,8 +513,8 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(playerIds).toHaveLength(2);
     const ferrari = Object.values(state.teams).find(team => team.id === 'ferrari')!;
     ferrari.staff.strategist = { ...ferrari.staff.strategist, skill: 54, abilities: { strategy: 54, weather: 52, reaction: 52, risk: 82 } };
-    ferrari.staff.raceEngineer = { ...ferrari.staff.raceEngineer, skill: 54, abilities: { ...ferrari.staff.raceEngineer.abilities, reaction: 52, communication: 52 } };
-    ferrari.staff.raceEngineer2 = { ...(ferrari.staff.raceEngineer2 ?? ferrari.staff.raceEngineer), skill: 54, abilities: { ...(ferrari.staff.raceEngineer2 ?? ferrari.staff.raceEngineer).abilities, reaction: 52, communication: 52 } };
+    ferrari.staff.raceEngineer = { ...ferrari.staff.raceEngineer, skill: 79, abilities: { ...ferrari.staff.raceEngineer.abilities, reaction: 78, communication: 82 } };
+    ferrari.staff.raceEngineer2 = { ...(ferrari.staff.raceEngineer2 ?? ferrari.staff.raceEngineer), skill: 82, abilities: { ...(ferrari.staff.raceEngineer2 ?? ferrari.staff.raceEngineer).abilities, reaction: 81, communication: 84 } };
     expect((await ctrl.importSave(JSON.stringify(state))).ok).toBe(true);
     expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[0], plan: { tyrePlan: ['soft', 'medium'], paceMode: 'push', pitTiming: 'early', scReaction: false } })).ok).toBe(true);
     expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[1], plan: { tyrePlan: ['hard', 'medium'], paceMode: 'conserve', pitTiming: 'late', scReaction: true } })).ok).toBe(true);

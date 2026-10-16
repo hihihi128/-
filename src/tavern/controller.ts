@@ -1397,7 +1397,7 @@ export class F1Controller {
         plans[driverId] = {
           strategySource: 'engineer',
           tyrePlan: [...option.compounds],
-          paceMode: candidate.decision < 60 ? 'push' : row.paceMode,
+          paceMode: candidate.decision < 63 ? 'push' : row.paceMode,
           pitTiming: candidate.decision < 65 ? 'late' : candidate.decision < 75 && row.pitTiming === 'early' ? 'standard' : row.pitTiming,
           scReaction: candidate.decision >= 68 ? row.scReaction : false,
         };

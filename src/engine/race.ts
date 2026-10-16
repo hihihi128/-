@@ -964,12 +964,13 @@ export function severeDryChaosProbability(team: Pick<TeamState, 'id' | 'staff'>)
 }
 
 function applyEngineerDryChaos(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound | null {
-  if (car.plan.strategySource !== 'engineer' || session.wetness >= .03 || session.scLeft > 0 || session.vscLeft > 0) return null;
+  if (session.kind !== 'race' || car.player || car.plan.strategySource !== 'engineer' || session.wetness >= .03 || session.scLeft > 0 || session.vscLeft > 0) return null;
   const dry = state.rules.dryCompounds;
   if (car.engineerDryChaosStage === 1 && session.lap >= (car.engineerDryChaosNextLap ?? Number.MAX_SAFE_INTEGER)) {
-    car.engineerDryChaosStage = 2;
     const correction = dry[1] === car.tyre ? (dry[2] ?? dry[0]) : (dry[1] ?? dry[0]);
-    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组一圈后推翻决定，要求再次进站换胎`, [car.driverId], car.player);
+    if (!correction || correction === car.tyre) return null;
+    car.engineerDryChaosStage = 2;
+    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组再次推翻决定，要求连续进站换胎`, [car.driverId], car.player);
     return correction;
   }
   if (car.engineerDryChaosAssessed || car.engineerDryChaosStage) return null;
@@ -979,9 +980,10 @@ function applyEngineerDryChaos(state: GameState, session: LiveRaceState, car: Li
   const team = state.teams[car.teamId];
   const probability = team ? severeDryChaosProbability(team) : 0;
   if (probability <= 0 || !engineerDecisionRoll(session, { driverId: car.teamId }, 'dry-chaos', probability)) return null;
+  const premature = dry[0] === car.tyre ? (dry[2] ?? dry[1]) : dry[0];
+  if (!premature || premature === car.tyre) return null;
   car.engineerDryChaosStage = 1;
   car.engineerDryChaosNextLap = session.lap + 1;
-  const premature = dry[0] === car.tyre ? (dry[2] ?? dry[1]) : dry[0];
   liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组误判轮胎窗口，要求提前进站`, [car.driverId], car.player);
   return premature;
 }
