@@ -1077,7 +1077,7 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
   }
   if (car.engineerWeatherChaosStage === 2
     && session.lap >= (car.engineerWeatherChaosNextLap ?? Number.MAX_SAFE_INTEGER)
-    && session.wetness >= .22) {
+    && session.wetness >= WET_TYRE_MIN_WETNESS) {
     car.engineerWeatherChaosStage = 3;
     car.engineerTyreOverride = wetCompoundFor(state.rules, session.wetness);
     car.engineerTyreOverrideUntilLap = session.lap;

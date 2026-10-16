@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, reactive, ref, watch } from 'vue';
 import { act, call, store } from '../bridge';
 import Tyre from './Tyre.vue';
 import RaceWeatherForecast from './RaceWeatherForecast.vue';
@@ -21,7 +21,7 @@ const wetGrid = computed(() => !!gridTyreOptions.value?.length && gridTyreOption
 const gridEligible = computed(() => new Set(live.value?.pendingDecision?.eligibleDriverIds ?? []));
 const missingGridChoices = computed(() => drivers.value.filter(d => gridEligible.value.has(d.id) && !selections[d.id]?.startCompound).map(d => driverShort(d.id)));
 const canConfirmGrid = computed(() => gridTyreChoice.value && !missingGridChoices.value.length && !store.busy);
-const autoRunning = ref(true);
+const autoRunning = ref(!live.value || live.value.completedLaps === 0);
 const pauseRequested = ref(false);
 const lapDelay = ref(1000);
 let lapTimer: ReturnType<typeof setTimeout> | undefined;
@@ -80,9 +80,15 @@ function clearLapTimer() {
 }
 function scheduleNextLap() {
   clearLapTimer();
-  if (!autoRunning.value || store.busy || !live.value || live.value.pendingDecision) return;
+  if (!autoRunning.value || store.busy || !live.value || live.value.pendingDecision || !store.panelVisible || store.tab !== 'weekend' || document.hidden) return;
   lapTimer = setTimeout(() => { void advance('next_lap'); }, lapDelay.value);
 }
+function stopHiddenPlayback() {
+  autoRunning.value = false;
+  pauseRequested.value = false;
+  clearLapTimer();
+}
+function onVisibilityChange() { if (document.hidden) stopHiddenPlayback(); }
 async function commitPause() {
   pauseRequested.value = false;
   if (!live.value || live.value.pendingDecision) return;
@@ -97,8 +103,10 @@ function pause() {
 }
 function resume() { pauseRequested.value = false; autoRunning.value = true; }
 watch(() => store.busy, busy => { if (!busy && pauseRequested.value) void commitPause(); });
-watch(() => [live.value?.id, live.value?.revision, live.value?.pendingDecision?.id, store.busy, autoRunning.value, lapDelay.value], scheduleNextLap, { immediate: true });
-onUnmounted(clearLapTimer);
+watch(() => [live.value?.id, live.value?.revision, live.value?.pendingDecision?.id, store.busy, autoRunning.value, lapDelay.value, store.panelVisible, store.tab], scheduleNextLap, { immediate: true });
+watch(() => [store.tab, store.panelVisible] as const, ([tab, visible]) => { if (tab !== 'weekend' || !visible) stopHiddenPlayback(); });
+onMounted(() => document.addEventListener('visibilitychange', onVisibilityChange));
+onUnmounted(() => { document.removeEventListener('visibilitychange', onVisibilityChange); clearLapTimer(); });
 async function tactics() {
   if (!live.value) return;
   await act({ type: 'SET_RACE_TACTICS', sessionId: live.value.id, expectedRevision: live.value.revision, drivers: drivers.value.filter(d => live.value?.timing.find(t => t.driverId === d.id)?.status === 'running').map(d => ({ driverId: d.id, paceMode: choice(d.id).paceMode, energyMode: choice(d.id).energyMode, pitTiming: choice(d.id).pitTiming })), orders: { ...orders } });
