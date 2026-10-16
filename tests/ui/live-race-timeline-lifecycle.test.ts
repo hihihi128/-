@@ -100,7 +100,7 @@ describe('live-race timeline lifecycle', () => {
     expect(host.textContent).toContain('时间轴已暂停');
   });
 
-  it('stops when another game or race session replaces the active view', async () => {
+  it('stops when another game replaces the active view', async () => {
     const initial = runningLiveRaceView();
     const { host, dispatch } = mount(initial);
     await flushUi();
@@ -109,6 +109,22 @@ describe('live-race timeline lifecycle', () => {
 
     const replacement = structuredClone(initial);
     replacement.gameId = `${initial.gameId}-replacement`;
+    store.view = replacement;
+    await flushUi();
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    expect(dispatch).not.toHaveBeenCalled();
+    expect(host.textContent).toContain('时间轴已暂停');
+  });
+
+  it('stops when another race session replaces the active view', async () => {
+    const initial = runningLiveRaceView();
+    const { host, dispatch } = mount(initial);
+    await flushUi();
+    continueButton(host).click();
+    await flushUi();
+
+    const replacement = structuredClone(initial);
     replacement.weekend!.liveRace!.id = `${initial.weekend!.liveRace!.id}:replacement`;
     store.view = replacement;
     await flushUi();
