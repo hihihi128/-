@@ -7,7 +7,7 @@ import type { LiveRaceState } from '../../src/engine/types';
 import { createForecast, createWeatherTrajectory } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
 import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
-import { advanceRaceSession, aiWeatherReactionDelay, applyRaceDecision, engineerDecisionRoll, finishRaceSession, redFlagProbability, requiresWetGridTyreChoice } from '../../src/engine/race';
+import { advanceRaceSession, aiWeatherReactionDelay, applyRaceDecision, engineerDecisionRoll, finishRaceSession, redFlagProbability, requiresWetGridTyreChoice, simulateRedFlagWeather } from '../../src/engine/race';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -407,6 +407,63 @@ describe('resumable live race', () => {
     expect(resumed.redFlag).toMatchObject({ active: false, restartPending: true, restart: 'standing' });
     expect(resumed.events.some(event => event.type === 'restart')).toBe(true);
     expect(resumed.events.some(event => event.text.includes('免费更换前翼'))).toBe(true);
+  });
+
+  it('advances rain, wetness, forecast, and restart type during a red-flag suspension', () => {
+    const state = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    live.completedLaps = 8;
+    live.lap = 8;
+    live.weatherCursor = 8;
+    live.weatherTrajectory.fill(1, 8);
+    live.rain = 0;
+    live.wetness = .1;
+    live.surface = 'dry';
+    live.redFlag = { active: true, triggerLap: 8, restart: 'standing', restartPending: false, suspensionTicks: 4, suspensionMinutes: 20 };
+
+    simulateRedFlagWeather(live, new Rng(55));
+
+    expect(live.completedLaps).toBe(8);
+    expect(live.weatherCursor).toBe(12);
+    expect(live.wetness).toBeGreaterThan(.45);
+    expect(live.redFlag).toMatchObject({ restart: 'rolling', suspensionMinutes: 20, weatherBefore: .1, weatherAfter: live.wetness });
+    expect(live.forecast.issuedLap).toBe(8);
+    expect(buildView(state).weekend?.liveRace?.weather).toMatchObject({ rain: 1, wetness: live.wetness, surface: live.surface });
+    expect(live.events.at(-1)?.text).toContain('滚动重启');
+
+    const restored = JSON.parse(JSON.stringify(state));
+    expect(restored.weekend.liveRace.weatherCursor).toBe(12);
+    expect(restored.weekend.liveRace.redFlag.weatherAfter).toBe(live.wetness);
+  });
+
+  it('can dry during a red flag and gives AI cars restart-time tyres', () => {
+    const state = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    live.completedLaps = 8;
+    live.lap = 8;
+    live.stage = 'before_pit';
+    live.weatherCursor = 8;
+    live.weatherTrajectory.fill(0);
+    live.rain = .8;
+    live.wetness = .55;
+    live.surface = 'wet';
+    live.redFlag = { active: true, triggerLap: 8, restart: 'rolling', restartPending: false, suspensionTicks: 6, suspensionMinutes: 30 };
+    live.pendingDecision = {
+      id: `${live.id}:w-red-weather`, lap: 8, stage: 'before_pit', reasons: ['red_flag'],
+      affectedDriverIds: Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => car.driverId),
+      eligibleDriverIds: Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => car.driverId), observedEventIds: [],
+    };
+
+    simulateRedFlagWeather(live, new Rng(77));
+    expect(live.wetness).toBeLessThan(.45);
+    expect(live.redFlag.restart).toBe('standing');
+
+    const window = live.pendingDecision;
+    const applied = applyRaceDecision(state, live, window.id, window.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto' })));
+    expect(applied).toBe(true);
+    const aiCars = Object.values(live.cars).filter(car => !car.player && car.status === 'running');
+    expect(aiCars.every(car => !state.rules.tyres[car.tyre]?.wet)).toBe(true);
+    expect(live.redFlag).toMatchObject({ active: false, restartPending: true, restart: 'standing' });
   });
 
   it('compresses the field only after every car completes the red-flag trigger lap', () => {

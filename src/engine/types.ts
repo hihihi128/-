@@ -1174,6 +1174,8 @@ export interface LiveRaceState {
   cars: Record<string, LiveRaceCar>;
   order: string[];
   weatherTrajectory: number[];
+  /** Next hidden weather sample. Red-flag time can advance it without consuming a race lap. */
+  weatherCursor?: number;
   weatherHistory: number[];
   rain: number;
   wetness: number;
@@ -1188,6 +1190,11 @@ export interface LiveRaceState {
     triggerLap: number;
     restart: 'standing' | 'rolling';
     restartPending: boolean;
+    /** Five-minute weather ticks elapsed while the race is stopped. */
+    suspensionTicks?: number;
+    suspensionMinutes?: number;
+    weatherBefore?: number;
+    weatherAfter?: number;
   } | null;
   fastestLap: { driverId: string; time: number; lap: number } | null;
   events: Array<RaceEvent & { id: string }>;
