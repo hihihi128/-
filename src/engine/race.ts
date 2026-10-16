@@ -622,10 +622,10 @@ export function simulateRedFlagWeather(session: LiveRaceState, forecastRng: Rng)
   if (!flag?.active || flag.weatherAfter !== undefined) return;
   const beforeWetness = session.wetness;
   const beforeSurface = session.surface;
-  const ticks = flag.suspensionTicks ?? 1;
+  const ticks = flag.suspensionTicks ?? 2;
   let cursor = session.weatherCursor ?? session.completedLaps;
+  const fallback = session.weatherTrajectory.at(-1) ?? 0;
   for (let tick = 0; tick < ticks; tick++) {
-    const fallback = session.weatherTrajectory.at(-1) ?? 0;
     session.rain = session.weatherTrajectory[cursor] ?? fallback;
     session.wetness = nextWetness(session.wetness, session.rain);
     session.surface = surfaceFor(session.wetness, session.surface);
@@ -1233,7 +1233,7 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     session.surface = surfaceFor(session.wetness, previousSurface);
     session.weatherCursor = weatherIndex + 1;
     session.weatherHistory.push(session.rain);
-    session.forecast = createForecast(session.weatherTrajectory, session.completedLaps, session.strategistSkill, forecastRng, session.weatherCursor);
+    session.forecast = createForecast(session.weatherTrajectory, session.completedLaps, session.strategistSkill, forecastRng, weatherIndex);
     const scActive = session.scLeft > 0, vscActive = session.vscLeft > 0;
     const restartType = session.redFlag?.restartPending ? session.redFlag.restart : null;
     // Consume the pending restart once at lap entry. A decision later in this
