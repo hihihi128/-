@@ -112,6 +112,8 @@ interface ProcessOptions {
 
 interface AiGridStrategyCandidate {
   driverId: string;
+  teamId: string;
+  decision: number;
   options: ReturnType<typeof strategyOptions>;
 }
 
@@ -1325,6 +1327,8 @@ export class F1Controller {
         const performanceContext = buildPerformanceContext({ driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
         return {
           driverId: entry.driver.id,
+          teamId: entry.team.id,
+          decision: strategyDecisionSkill(entry.team, entry.car.slot),
           options: strategyOptions(state.rules, track, track.laps, {
             driverTyre: entry.driver.attrs.tyre,
             carTyre: ratings.tyre,
@@ -1379,7 +1383,13 @@ export class F1Controller {
         const driverId = typeof row.driverId === 'string' ? row.driverId : '';
         const candidate = byDriver.get(driverId);
         const optionIndex = typeof row.option === 'number' && Number.isInteger(row.option) ? row.option : -1;
-        const option = candidate?.options[optionIndex];
+        const minimumOption = candidate && ['mclaren', 'aston_martin', 'ferrari'].includes(candidate.teamId)
+          ? candidate.decision >= 68 ? 1 : candidate.decision >= 60 ? 2 : 3
+          : 0;
+        const constrainedOptionIndex = candidate && optionIndex >= 0 && optionIndex < candidate.options.length
+          ? Math.min(candidate.options.length - 1, Math.max(optionIndex, minimumOption))
+          : -1;
+        const option = candidate?.options[constrainedOptionIndex];
         if (!candidate || !option || plans[driverId]) continue;
         if (row.paceMode !== 'conserve' && row.paceMode !== 'balanced' && row.paceMode !== 'push') continue;
         if (row.pitTiming !== 'early' && row.pitTiming !== 'standard' && row.pitTiming !== 'late') continue;
@@ -1387,9 +1397,9 @@ export class F1Controller {
         plans[driverId] = {
           strategySource: 'engineer',
           tyrePlan: [...option.compounds],
-          paceMode: row.paceMode,
-          pitTiming: row.pitTiming,
-          scReaction: row.scReaction,
+          paceMode: candidate.decision < 60 ? 'push' : row.paceMode,
+          pitTiming: candidate.decision < 65 ? 'late' : candidate.decision < 75 && row.pitTiming === 'early' ? 'standard' : row.pitTiming,
+          scReaction: candidate.decision >= 68 ? row.scReaction : false,
         };
       }
       const count = Object.keys(plans).length;

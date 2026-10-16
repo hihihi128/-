@@ -511,6 +511,11 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(Object.values(state.teams)).toHaveLength(11);
     expect(aiIds).toHaveLength(20);
     expect(playerIds).toHaveLength(2);
+    const ferrari = Object.values(state.teams).find(team => team.id === 'ferrari')!;
+    ferrari.staff.strategist = { ...ferrari.staff.strategist, skill: 54, abilities: { strategy: 54, weather: 52, reaction: 52, risk: 82 } };
+    ferrari.staff.raceEngineer = { ...ferrari.staff.raceEngineer, skill: 54, abilities: { ...ferrari.staff.raceEngineer.abilities, reaction: 52, communication: 52 } };
+    ferrari.staff.raceEngineer2 = { ...(ferrari.staff.raceEngineer2 ?? ferrari.staff.raceEngineer), skill: 54, abilities: { ...(ferrari.staff.raceEngineer2 ?? ferrari.staff.raceEngineer).abilities, reaction: 52, communication: 52 } };
+    expect((await ctrl.importSave(JSON.stringify(state))).ok).toBe(true);
     expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[0], plan: { tyrePlan: ['soft', 'medium'], paceMode: 'push', pitTiming: 'early', scReaction: false } })).ok).toBe(true);
     expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[1], plan: { tyrePlan: ['hard', 'medium'], paceMode: 'conserve', pitTiming: 'late', scReaction: true } })).ok).toBe(true);
     let calls = 0;
@@ -535,6 +540,10 @@ describe('后端控制器（模拟酒馆环境）', () => {
     const live = ctrl.stateAt()!.weekend!.liveRace!;
     expect(aiIds.every(id => live.cars[id].plan.strategySource === 'engineer' && live.cars[id].plan.tyrePlan !== 'auto')).toBe(true);
     expect(new Set(aiIds.map(id => `${live.cars[id].plan.paceMode}:${live.cars[id].plan.pitTiming}:${live.cars[id].plan.scReaction}`)).size).toBeGreaterThan(1);
+    const teamById = (teamId: string) => Object.values(state.teams).find(team => team.id === teamId)!;
+    const ferrariIds = teamById('ferrari').cars.map(car => car.driverId).filter((id): id is string => !!id);
+    expect(ferrariIds.every(id => live.cars[id].plan.paceMode === 'push' && live.cars[id].plan.pitTiming === 'late' && !live.cars[id].plan.scReaction)).toBe(true);
+    expect(ferrariIds.every(id => Array.isArray(live.cars[id].plan.tyrePlan) && live.cars[id].plan.tyrePlan.join('-') !== 'soft-medium')).toBe(true);
     expect(live.cars[playerIds[0]].plan).toMatchObject({ tyrePlan: ['soft', 'medium'], paceMode: 'push', pitTiming: 'early', scReaction: false });
     expect(live.cars[playerIds[1]].plan).toMatchObject({ tyrePlan: ['hard', 'medium'], paceMode: 'conserve', pitTiming: 'late', scReaction: true });
     expect(capturedPrompt).not.toContain(`driverId=${playerIds[0]}；`);

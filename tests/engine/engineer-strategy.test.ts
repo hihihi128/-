@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { act, advanceUntil, newTestGame } from '../helpers';
-import { advanceRaceSession, engineerDecisionRoll, engineerWeatherRisk, severeWeatherChaosProbability } from '../../src/engine/race';
+import { advanceRaceSession, engineerDecisionRoll, engineerWeatherRisk, severeDryChaosProbability, severeWeatherChaosProbability } from '../../src/engine/race';
 import { staffAbility } from '../../src/engine/staff';
 import { advanceWeatherChaosLap, armWeatherChaosDecision, restoreWeatherChaosScenario, weatherChaosScenario, weatherDecisionSeed } from '../fixtures/weather-chaos';
 
@@ -252,6 +252,36 @@ describe('engineer strategy execution', () => {
     const rate = decisions.filter(Boolean).length / decisions.length;
     expect(rate).toBeGreaterThanOrEqual(.72);
     expect(rate).toBeLessThanOrEqual(.78);
+  });
+
+  it('turns low dry-strategy skill into consecutive unnecessary Ferrari stops', () => {
+    const scenario = weatherChaosScenario('ferrari', 7310);
+    const probability = severeDryChaosProbability(scenario.state.teams.ferrari);
+    expect(probability).toBe(.5);
+    scenario.live.weatherRngState = weatherDecisionSeed(scenario.live, 'ferrari', 'dry-chaos', probability, true);
+    scenario.live.weatherTrajectory.fill(0);
+    const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
+    while (scenario.live.lap < triggerLap - 1) advanceWeatherChaosLap(scenario, 0, 0);
+    const pits = scenario.car.pits;
+
+    advanceWeatherChaosLap(scenario, 0, 0);
+    expect(scenario.car.engineerDryChaosStage).toBe(1);
+    expect(scenario.car.pits).toBe(pits + 1);
+
+    advanceWeatherChaosLap(scenario, 0, 0);
+    expect(scenario.car.engineerDryChaosStage).toBe(2);
+    expect(scenario.car.pits).toBe(pits + 2);
+    expect(scenario.live.events.filter(event => event.drivers.includes(scenario.car.driverId) && event.text.includes('策略组')).map(event => event.text)).toEqual(expect.arrayContaining([
+      expect.stringContaining('误判轮胎窗口'),
+      expect.stringContaining('一圈后推翻决定'),
+    ]));
+  });
+
+  it('never applies severe dry-strategy chaos outside the bottom three teams', () => {
+    for (const teamId of ['red_bull', 'mercedes', 'williams', 'haas', 'audi', 'alpine', 'cadillac', 'racing_bulls']) {
+      const scenario = weatherChaosScenario(teamId, 7311);
+      expect(severeDryChaosProbability(scenario.state.teams[teamId])).toBe(0);
+    }
   });
 
   it('skips player decision windows when both drivers listen to engineers', () => {

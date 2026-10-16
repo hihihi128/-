@@ -959,6 +959,33 @@ export function severeWeatherChaosProbability(team: Pick<TeamState, 'id' | 'staf
   return clamp((80 - judgment) * .03, 0, .75);
 }
 
+export function severeDryChaosProbability(team: Pick<TeamState, 'id' | 'staff'>): number {
+  return severeWeatherChaosProbability(team) * (2 / 3);
+}
+
+function applyEngineerDryChaos(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound | null {
+  if (car.plan.strategySource !== 'engineer' || session.wetness >= .03 || session.scLeft > 0 || session.vscLeft > 0) return null;
+  const dry = state.rules.dryCompounds;
+  if (car.engineerDryChaosStage === 1 && session.lap >= (car.engineerDryChaosNextLap ?? Number.MAX_SAFE_INTEGER)) {
+    car.engineerDryChaosStage = 2;
+    const correction = dry[1] === car.tyre ? (dry[2] ?? dry[0]) : (dry[1] ?? dry[0]);
+    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组一圈后推翻决定，要求再次进站换胎`, [car.driverId], car.player);
+    return correction;
+  }
+  if (car.engineerDryChaosAssessed || car.engineerDryChaosStage) return null;
+  const triggerLap = Math.max(5, Math.round(session.totalLaps * .3));
+  if (session.lap < triggerLap) return null;
+  car.engineerDryChaosAssessed = true;
+  const team = state.teams[car.teamId];
+  const probability = team ? severeDryChaosProbability(team) : 0;
+  if (probability <= 0 || !engineerDecisionRoll(session, { driverId: car.teamId }, 'dry-chaos', probability)) return null;
+  car.engineerDryChaosStage = 1;
+  car.engineerDryChaosNextLap = session.lap + 1;
+  const premature = dry[0] === car.tyre ? (dry[2] ?? dry[1]) : dry[0];
+  liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组误判轮胎窗口，要求提前进站`, [car.driverId], car.player);
+  return premature;
+}
+
 function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, car: LiveRaceCar): 'none' | 'ordinary' | 'chaos' {
   if (car.plan.strategySource !== 'engineer') return 'none';
   if (session.wetness < .02) {
@@ -1044,11 +1071,13 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const track = currentTrack(state);
   const planned = car.stintIndex < car.plannedCompounds.length - 1;
   const engineerDecision = applyEngineerWeatherDecision(state, session, car);
-  const targetCompound = replacementCompound(state, session, car);
+  const dryChaosCompound = engineerDecision === 'none' ? applyEngineerDryChaos(state, session, car) : null;
+  const targetCompound = dryChaosCompound ?? replacementCompound(state, session, car);
   const differentCompound = targetCompound !== car.tyre;
   const weatherReady = aiWeatherStopReady(state, session, car, targetCompound);
   const forcedEngineerStop = engineerDecision === 'chaos' || (car.teamId === 'ferrari' && engineerDecision === 'ordinary');
   const weatherStop = differentCompound && (weatherReady || forcedEngineerStop);
+  const dryChaosStop = dryChaosCompound !== null && differentCompound;
   const plannedStop = !weatherStop && planned && car.tyreAge >= pitTriggerLap(car);
   const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
   const neutralActive = session.scLeft > 0 || session.vscLeft > 0;
@@ -1056,14 +1085,14 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   const neutralOpportunity = car.plan.scReaction && neutralActive && !car.neutralStopTaken && planned
     && car.tyreAge >= Math.max(2, Math.round(pitTriggerLap(car) * .5)) && targetCompound !== car.tyre;
   const plannedAdvance = plannedStop || neutralOpportunity;
-  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || neutralOpportunity || plannedStop));
+  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || dryChaosStop || neutralOpportunity || plannedStop));
   if (!shouldPit) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
   const repair = car.repairPending;
   const stop = actualStationaryTime(state.teams[car.teamId], () => rng.next(), repair);
   const stationary = stop.actual;
   if (car.repairPending) { car.damage = 0; car.repairPending = false; const damage = [...session.damageLedger].reverse().find(d => d.driverId === car.driverId && !d.repairedInRace); if (damage) damage.repairedInRace = true; }
-  if (car.pendingPit === 'box' || plannedAdvance || weatherStop) {
+  if (car.pendingPit === 'box' || plannedAdvance || weatherStop || dryChaosStop) {
     if (plannedAdvance) car.stintIndex += 1;
     // A decision can choose a compound, but it takes effect only after this car
     // has actually entered the pits. AI changes respond to the public surface.
