@@ -1,10 +1,22 @@
 import { describe, expect, it } from 'vitest';
 import { act, advanceUntil, newTestGame } from '../helpers';
-import { advanceRaceSession, engineerDecisionRoll, engineerWeatherRisk, severeDryChaosProbability, severeWeatherChaosProbability } from '../../src/engine/race';
+import { advanceRaceSession, engineerDecisionRoll, engineerWeatherRisk, severeDryChaosProbability, severeWeatherChaosProbability, strategyMistakeProbability } from '../../src/engine/race';
 import { staffAbility } from '../../src/engine/staff';
 import { advanceWeatherChaosLap, armWeatherChaosDecision, restoreWeatherChaosScenario, weatherChaosScenario, weatherDecisionSeed } from '../fixtures/weather-chaos';
 
 describe('engineer strategy execution', () => {
+  function dryMistakeSeed(live: { id: string }, teamId: string, probability: number, wanted: 'early_stop' | 'double_stop' | 'late_stop'): number {
+    for (let weatherRngState = 0; weatherRngState < 100_000; weatherRngState++) {
+      const session = { id: live.id, weatherRngState };
+      if (!engineerDecisionRoll(session, { driverId: teamId }, 'dry-chaos', probability)) continue;
+      const kind = engineerDecisionRoll(session, { driverId: teamId }, 'dry-chaos-kind:early', 1 / 3)
+        ? 'early_stop'
+        : engineerDecisionRoll(session, { driverId: teamId }, 'dry-chaos-kind:double', .5) ? 'double_stop' : 'late_stop';
+      if (kind === wanted) return weatherRngState;
+    }
+    throw new Error(`Unable to find ${wanted} seed for ${teamId}`);
+  }
+
   function makeMclarenScenario(state: ReturnType<typeof newTestGame>) {
     const live = state.weekend!.liveRace!;
     const car = Object.values(live.cars).find(candidate => candidate.teamId === 'ferrari')!;
@@ -254,13 +266,18 @@ describe('engineer strategy execution', () => {
     expect(rate).toBeLessThanOrEqual(.28);
   });
 
-  it('turns every low dry-strategy team into consecutive unnecessary stops', () => {
-    for (const teamId of ['mclaren', 'aston_martin', 'ferrari'] as const) {
+  it('selects several dry-strategy mistakes for the bottom three without another probability roll', () => {
+    const cases = [
+      ['mclaren', 'early_stop'],
+      ['aston_martin', 'late_stop'],
+      ['ferrari', 'double_stop'],
+    ] as const;
+    for (const [teamId, wanted] of cases) {
       const scenario = weatherChaosScenario(teamId, 7310);
       const probability = severeDryChaosProbability(scenario.state.teams[teamId]);
       expect(probability).toBeGreaterThan(0);
       if (teamId === 'aston_martin' && scenario.state.astonMartin) scenario.state.astonMartin.aduoEngineArrived = true;
-      scenario.live.weatherRngState = weatherDecisionSeed(scenario.live, teamId, 'dry-chaos', probability, true);
+      scenario.live.weatherRngState = dryMistakeSeed(scenario.live, teamId, probability, wanted);
       scenario.live.weatherTrajectory.fill(0);
       const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
       while (scenario.live.lap < triggerLap - 1) {
@@ -273,38 +290,44 @@ describe('engineer strategy execution', () => {
       scenario.live.scLeft = 0;
       scenario.live.vscLeft = 0;
       advanceWeatherChaosLap(scenario, 0, 0);
-      expect(scenario.car.engineerDryChaosStage, teamId).toBe(1);
-      expect(scenario.car.pits, teamId).toBe(pits + 1);
-
-      scenario.live.scLeft = 0;
-      scenario.live.vscLeft = 0;
-      advanceWeatherChaosLap(scenario, 0, 0);
-      expect(scenario.car.engineerDryChaosStage).toBe(2);
-      expect(scenario.car.pits).toBe(pits + 2);
-      expect(scenario.live.events.filter(event => event.drivers.includes(scenario.car.driverId) && event.text.includes('策略组')).map(event => event.text)).toEqual(expect.arrayContaining([
-        expect.stringContaining('误判轮胎窗口'),
-        expect.stringContaining('再次推翻决定'),
-        expect.stringContaining('连续进站换胎'),
-      ]));
+      expect(scenario.car.engineerStrategyMistake, teamId).toBe(wanted);
+      if (wanted === 'late_stop') {
+        expect(scenario.car.pits).toBe(pits);
+        expect(scenario.car.engineerStrategyDelayUntilLap).toBeGreaterThan(scenario.live.lap);
+      } else {
+        expect(scenario.car.pits).toBe(pits + 1);
+      }
+      if (wanted === 'double_stop') {
+        scenario.live.scLeft = 0;
+        scenario.live.vscLeft = 0;
+        advanceWeatherChaosLap(scenario, 0, 0);
+        expect(scenario.car.engineerDryChaosStage).toBe(2);
+        expect(scenario.car.pits).toBe(pits + 2);
+      }
     }
   });
 
-  it('never applies severe dry-strategy chaos outside the bottom three teams', () => {
+  it('gives the other eight teams their smaller single-error probabilities', () => {
     for (const teamId of ['red_bull', 'mercedes', 'williams', 'haas', 'audi', 'alpine', 'cadillac', 'racing_bulls']) {
       const scenario = weatherChaosScenario(teamId, 7311);
       expect(severeDryChaosProbability(scenario.state.teams[teamId])).toBe(0);
+      const probability = strategyMistakeProbability(scenario.state.teams[teamId]);
+      expect(probability).toBeGreaterThan(0);
+      scenario.live.weatherRngState = weatherDecisionSeed(scenario.live, teamId, 'dry-chaos', probability, true);
       scenario.live.weatherTrajectory.fill(0);
-      scenario.car.tyreAge = 0;
-      scenario.car.plannedCompounds = [scenario.car.tyre];
-      scenario.car.stints = [scenario.live.totalLaps + 1];
       const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
-      while (scenario.live.lap < triggerLap) {
+      while (scenario.live.lap < triggerLap - 1) {
         scenario.live.scLeft = 0;
         scenario.live.vscLeft = 0;
         advanceWeatherChaosLap(scenario, 0, 0);
       }
+      const pits = scenario.car.pits;
+      scenario.live.scLeft = 0;
+      scenario.live.vscLeft = 0;
+      advanceWeatherChaosLap(scenario, 0, 0);
+      expect(scenario.car.engineerStrategyMistake).toBe('early_stop');
       expect(scenario.car.engineerDryChaosStage).toBeUndefined();
-      expect(scenario.car.pits).toBe(0);
+      expect(scenario.car.pits).toBe(pits + 1);
     }
   });
 
@@ -347,7 +370,7 @@ describe('engineer strategy execution', () => {
   it('preserves dry-chaos state through JSON save and resume', () => {
     const scenario = weatherChaosScenario('ferrari', 7312);
     const probability = severeDryChaosProbability(scenario.state.teams.ferrari);
-    scenario.live.weatherRngState = weatherDecisionSeed(scenario.live, 'ferrari', 'dry-chaos', probability, true);
+    scenario.live.weatherRngState = dryMistakeSeed(scenario.live, 'ferrari', probability, 'double_stop');
     scenario.live.weatherTrajectory.fill(0);
     const triggerLap = Math.max(5, Math.round(scenario.live.totalLaps * .3));
     while (scenario.live.lap < triggerLap) {
@@ -355,7 +378,7 @@ describe('engineer strategy execution', () => {
       scenario.live.vscLeft = 0;
       advanceWeatherChaosLap(scenario, 0, 0);
     }
-    expect(scenario.car).toMatchObject({ engineerDryChaosAssessed: true, engineerDryChaosStage: 1, engineerDryChaosNextLap: scenario.live.lap + 1 });
+    expect(scenario.car).toMatchObject({ engineerDryChaosAssessed: true, engineerStrategyMistake: 'double_stop', engineerDryChaosStage: 1, engineerDryChaosNextLap: scenario.live.lap + 1 });
 
     const resumed = restoreWeatherChaosScenario(scenario);
     expect(resumed.car).toMatchObject({ engineerDryChaosAssessed: true, engineerDryChaosStage: 1, engineerDryChaosNextLap: scenario.car.engineerDryChaosNextLap });

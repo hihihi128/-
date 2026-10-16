@@ -71,6 +71,22 @@ describe('resumable live race', () => {
     expect(car.tyreSetId).toBeTruthy();
   });
 
+  it('opens the existing decision window when the player pauses between laps', () => {
+    const launched = act(raceReady(704), { type: 'START_RACE', kind: 'race' });
+    const grid = launched.weekend!.liveRace!;
+    const started = act(launched, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id,
+      drivers: automaticChoices(launched, grid),
+    });
+    const live = started.weekend!.liveRace!;
+    const paused = act(started, { type: 'PAUSE_RACE', sessionId: live.id, expectedRevision: live.revision });
+    expect(paused.weekend!.liveRace!.pendingDecision).toMatchObject({
+      lap: live.completedLaps,
+      reasons: ['manual_pause'],
+      eligibleDriverIds: expect.arrayContaining(Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => car.driverId)),
+    });
+  });
+
   it('uses the AI safety-car reaction for an opportunistic live-race stop', () => {
     const ready = raceReady();
     const aiIds = Object.values(ready.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));

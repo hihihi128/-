@@ -3,7 +3,7 @@ import { strategyDecisionSkill } from '../../src/engine/staff';
 import { cardSources } from '../helpers';
 import { normalizeDatabase } from '../../src/engine/data';
 import { createGame } from '../../src/engine/newgame';
-import { severeDryChaosProbability, severeWeatherChaosProbability } from '../../src/engine/race';
+import { severeDryChaosProbability, severeWeatherChaosProbability, strategyMistakeProbability } from '../../src/engine/race';
 
 describe('2026 车队策略组层级', () => {
   it('保持红牛、梅奔、其他车队、小红牛、迈凯伦、马丁、法拉利的严格顺序', () => {
@@ -38,6 +38,19 @@ describe('2026 车队策略组层级', () => {
     expect(severeDryChaosProbability(state.teams.mclaren)).toBeCloseTo(.084, 3);
     expect(severeDryChaosProbability(state.teams.aston_martin)).toBeCloseTo(.152, 3);
     expect(severeDryChaosProbability(state.teams.ferrari)).toBe(.2);
+  });
+
+  it('为全部车队设置递增的正赛策略失误概率，并保持后三队总概率不变', () => {
+    const loaded = normalizeDatabase(cardSources());
+    if (!loaded.db) throw new Error('card database failed to load');
+    const state = createGame(loaded.db, { playerTeamId: 'cadillac', principalName: '测试领队', seed: 45, gameId: 'strategy-mistakes', now: 1 });
+    expect(strategyMistakeProbability(state.teams.red_bull)).toBe(.02);
+    expect(strategyMistakeProbability(state.teams.mercedes)).toBe(.03);
+    for (const id of ['williams', 'haas', 'audi', 'alpine', 'cadillac']) expect(strategyMistakeProbability(state.teams[id])).toBe(.05);
+    expect(strategyMistakeProbability(state.teams.racing_bulls)).toBe(.07);
+    for (const id of ['mclaren', 'aston_martin', 'ferrari']) {
+      expect(strategyMistakeProbability(state.teams[id])).toBe(severeDryChaosProbability(state.teams[id]));
+    }
   });
 
   it('uses actual strategist abilities for eligible probability boundaries and caps Ferrari', () => {
