@@ -13,7 +13,7 @@ tracks:
     tyreStress: 55
     surfaceTemperature: 36 # 模拟参考路温（°C）
     thermalDemand: 54 # 模拟参考生热需求（0–100）
-    rainChance: 0.28
+    rainChance: 0.14
     scChance: 0.58
     description: 快速改造后的公园赛道，连续高速弯与多段直道并存，赛季揭幕站容易出现安全车。
 
@@ -29,7 +29,7 @@ tracks:
     tyreStress: 65
     surfaceTemperature: 38 # 模拟参考路温（°C）
     thermalDemand: 64 # 模拟参考生热需求（0–100）
-    rainChance: 0.27
+    rainChance: 0.135
     scChance: 0.42
     description: 超长一号弯和后直道同时考验前胎、气动效率与动力，2026 年举办冲刺赛。
 
@@ -45,7 +45,7 @@ tracks:
     tyreStress: 72
     surfaceTemperature: 40 # 模拟参考路温（°C）
     thermalDemand: 70 # 模拟参考生热需求（0–100）
-    rainChance: 0.32
+    rainChance: 0.16
     scChance: 0.4
     description: 8 字形经典赛道，S 弯、130R 和高速方向变化对气动稳定性要求极高。
 
@@ -61,7 +61,7 @@ tracks:
     tyreStress: 78
     surfaceTemperature: 41 # 模拟参考路温（°C）
     thermalDemand: 75 # 模拟参考生热需求（0–100）
-    rainChance: 0.01
+    rainChance: 0.005
     scChance: 0.34
     description: 砂漠夜赛拥有多处重刹车超车点，后胎热衰减和低速牵引决定长距离表现。
 
@@ -77,7 +77,7 @@ tracks:
     tyreStress: 42
     surfaceTemperature: 33 # 模拟参考路温（°C）
     thermalDemand: 43 # 模拟参考生热需求（0–100）
-    rainChance: 0.02
+    rainChance: 0.01
     scChance: 0.72
     description: 贴墙高速街道赛，气动效率与车手信心重要，事故很容易引发安全车或红旗。
 
@@ -93,7 +93,7 @@ tracks:
     tyreStress: 58
     surfaceTemperature: 37 # 模拟参考路温（°C）
     thermalDemand: 57 # 模拟参考生热需求（0–100）
-    rainChance: 0.25
+    rainChance: 0.125
     scChance: 0.5
     description: 长直道、低速体育场区和炎热天气形成多样挑战，2026 年举办冲刺赛。
 
@@ -109,7 +109,7 @@ tracks:
     tyreStress: 48
     surfaceTemperature: 35 # 模拟参考路温（°C）
     thermalDemand: 48 # 模拟参考生热需求（0–100）
-    rainChance: 0.31
+    rainChance: 0.155
     scChance: 0.63
     description: 低下压力、路肩和连续重刹车考验制动与牵引，天气多变，2026 年首次举办冲刺赛。
 
@@ -125,7 +125,7 @@ tracks:
     tyreStress: 28
     surfaceTemperature: 30 # 模拟参考路温（°C）
     thermalDemand: 30 # 模拟参考生热需求（0–100）
-    rainChance: 0.22
+    rainChance: 0.11
     scChance: 0.76
     description: 最狭窄的街道赛，机械抓地和排位位置远比直线速度重要。
 
@@ -141,7 +141,7 @@ tracks:
     tyreStress: 76
     surfaceTemperature: 41 # 模拟参考路温（°C）
     thermalDemand: 73 # 模拟参考生热需求（0–100）
-    rainChance: 0.12
+    rainChance: 0.06
     scChance: 0.3
     description: 高速长弯对气动平台和轮胎管理要求严苛，是检验赛车综合能力的传统赛道。
 
@@ -157,7 +157,7 @@ tracks:
     tyreStress: 55
     surfaceTemperature: 36 # 模拟参考路温（°C）
     thermalDemand: 54 # 模拟参考生热需求（0–100）
-    rainChance: 0.28
+    rainChance: 0.14
     scChance: 0.38
     description: 高海拔短赛道包含三处强力加速区，圈速接近导致排位差距极小。
 
@@ -173,7 +173,7 @@ tracks:
     tyreStress: 82
     surfaceTemperature: 42 # 模拟参考路温（°C）
     thermalDemand: 79 # 模拟参考生热需求（0–100）
-    rainChance: 0.42
+    rainChance: 0.21
     scChance: 0.4
     description: 马戈茨—贝克茨高速弯组考验气动稳定性，英国天气增加策略变化，2026 年举办冲刺赛。
 
@@ -189,7 +189,7 @@ tracks:
     tyreStress: 68
     surfaceTemperature: 39 # 模拟参考路温（°C）
     thermalDemand: 66 # 模拟参考生热需求（0–100）
-    rainChance: 0.48
+    rainChance: 0.24
     scChance: 0.52
     description: 全年最长圈之一，奥鲁日与森林微气候使低阻力设定和天气判断同样关键。
 
@@ -205,7 +205,7 @@ tracks:
     tyreStress: 62
     surfaceTemperature: 38 # 模拟参考路温（°C）
     thermalDemand: 61 # 模拟参考生热需求（0–100）
-    rainChance: 0.24
+    rainChance: 0.12
     scChance: 0.34
     description: 连续弯角几乎没有喘息空间，超车困难，排位和进站窗口十分重要。
 
@@ -221,7 +221,7 @@ tracks:
     tyreStress: 70
     surfaceTemperature: 39 # 模拟参考路温（°C）
     thermalDemand: 68 # 模拟参考生热需求（0–100）
-    rainChance: 0.35
+    rainChance: 0.175
     scChance: 0.46
     description: 银行弯、海风和狭窄布局考验高下压力与轮胎，2026 年举办冲刺赛。
 
@@ -237,7 +237,7 @@ tracks:
     tyreStress: 44
     surfaceTemperature: 34 # 模拟参考路温（°C）
     thermalDemand: 45 # 模拟参考生热需求（0–100）
-    rainChance: 0.18
+    rainChance: 0.09
     scChance: 0.42
     description: 速度圣殿以超长全油门区和减速弯闻名，动力和低阻力压倒其他属性。
 
@@ -253,7 +253,7 @@ tracks:
     tyreStress: 56
     surfaceTemperature: 36 # 模拟参考路温（°C）
     thermalDemand: 55 # 模拟参考生热需求（0–100）
-    rainChance: 0.15
+    rainChance: 0.075
     scChance: 0.55
     description: 2026 年首次进入赛历的半街道赛道，包含长直道、快速弯和大倾角弯；参数按公开布局估算。
 
@@ -269,7 +269,7 @@ tracks:
     tyreStress: 42
     surfaceTemperature: 33 # 模拟参考路温（°C）
     thermalDemand: 43 # 模拟参考生热需求（0–100）
-    rainChance: 0.08
+    rainChance: 0.04
     scChance: 0.7
     description: 城堡区极窄，主直道极长，低阻力和事故规避决定比赛走势。
 
@@ -285,7 +285,7 @@ tracks:
     tyreStress: 66
     surfaceTemperature: 39 # 模拟参考路温（°C）
     thermalDemand: 64 # 模拟参考生热需求（0–100）
-    rainChance: 0.38
+    rainChance: 0.19
     scChance: 0.78
     description: 高温高湿、贴墙和漫长比赛考验机械抓地与专注力，2026 年举办冲刺赛。
 
@@ -301,7 +301,7 @@ tracks:
     tyreStress: 72
     surfaceTemperature: 40 # 模拟参考路温（°C）
     thermalDemand: 70 # 模拟参考生热需求（0–100）
-    rainChance: 0.2
+    rainChance: 0.1
     scChance: 0.38
     description: 一号弯爬坡、高速 S 弯和长直道组成完整综合测试。
 
@@ -317,7 +317,7 @@ tracks:
     tyreStress: 50
     surfaceTemperature: 35 # 模拟参考路温（°C）
     thermalDemand: 50 # 模拟参考生热需求（0–100）
-    rainChance: 0.18
+    rainChance: 0.09
     scChance: 0.43
     description: 极高海拔削弱下压力和冷却，长直道与体育场区需要折中设定。
 
@@ -333,7 +333,7 @@ tracks:
     tyreStress: 64
     surfaceTemperature: 38 # 模拟参考路温（°C）
     thermalDemand: 63 # 模拟参考生热需求（0–100）
-    rainChance: 0.44
+    rainChance: 0.22
     scChance: 0.58
     description: 逆时针短圈、持续起伏和快速变化天气经常制造混乱比赛。
 
@@ -349,7 +349,7 @@ tracks:
     tyreStress: 36
     surfaceTemperature: 32 # 模拟参考路温（°C）
     thermalDemand: 37 # 模拟参考生热需求（0–100）
-    rainChance: 0.04
+    rainChance: 0.02
     scChance: 0.62
     description: 夜间低温和超长大道直道使轮胎升温、动力和低阻力成为核心。
 
@@ -365,7 +365,7 @@ tracks:
     tyreStress: 88
     surfaceTemperature: 43 # 模拟参考路温（°C）
     thermalDemand: 84 # 模拟参考生热需求（0–100）
-    rainChance: 0.01
+    rainChance: 0.005
     scChance: 0.32
     description: 连续中高速弯和高温对轮胎结构与车手体能提出极高要求。
 
@@ -381,6 +381,6 @@ tracks:
     tyreStress: 55
     surfaceTemperature: 36 # 模拟参考路温（°C）
     thermalDemand: 54 # 模拟参考生热需求（0–100）
-    rainChance: 0.01
+    rainChance: 0.005
     scChance: 0.36
     description: 黄昏收官战由长直道和技术弯区组成，赛道温度随夜幕下降。

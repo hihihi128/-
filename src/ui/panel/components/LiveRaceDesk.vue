@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onUnmounted, reactive, ref, watch } from 'vue';
 import { act, call, store } from '../bridge';
 import Tyre from './Tyre.vue';
 import RaceWeatherForecast from './RaceWeatherForecast.vue';
@@ -21,6 +21,10 @@ const wetGrid = computed(() => !!gridTyreOptions.value?.length && gridTyreOption
 const gridEligible = computed(() => new Set(live.value?.pendingDecision?.eligibleDriverIds ?? []));
 const missingGridChoices = computed(() => drivers.value.filter(d => gridEligible.value.has(d.id) && !selections[d.id]?.startCompound).map(d => driverShort(d.id)));
 const canConfirmGrid = computed(() => gridTyreChoice.value && !missingGridChoices.value.length && !store.busy);
+const autoRunning = ref(true);
+const pauseRequested = ref(false);
+const lapDelay = ref(1000);
+let lapTimer: ReturnType<typeof setTimeout> | undefined;
 const tyrePickerDriverId = ref('');
 const tyrePickerDialog = ref<HTMLElement | null>(null);
 let tyrePickerTrigger: HTMLElement | null = null;
@@ -42,7 +46,7 @@ function weatherLabel() {
   const rain = Math.round(live.value.weather.rain * 100);
   return `${rain ? `降雨强度 ${rain}%` : '无降雨'} · 赛道湿度 ${Math.floor(live.value.weather.wetness * 100)}%`;
 }
-function reasonLabel(reason: string) { return ({ grid: '发车', pit_opportunity: '进站机会', weather_change: '天气变化', sc: '安全车', vsc: '虚拟安全车', red_flag: '红旗暂停', incident: '事故与损伤' } as Record<string, string>)[reason] ?? reason; }
+function reasonLabel(reason: string) { return ({ grid: '发车', manual_pause: '领队暂停', pit_opportunity: '进站机会', weather_change: '天气变化', sc: '安全车', vsc: '虚拟安全车', red_flag: '红旗暂停', incident: '事故与损伤' } as Record<string, string>)[reason] ?? reason; }
 function driverName(id: string) { return names.value.get(id) ?? id; }
 function driverShort(id: string) { return shortNames.value.get(id) ?? driverName(id); }
 function isEligible(id: string) { return !!live.value?.pendingDecision?.eligibleDriverIds.includes(id); }
@@ -67,8 +71,34 @@ function selectRedFlagTyre(compound: string) {
 async function start() { await act({ type: 'START_RACE', kind: v.value.season.phase === 'sprint' ? 'sprint' : 'race' }); }
 async function advance(until: 'next_lap' | 'next_decision') {
   if (!live.value) return;
-  await act({ type: 'ADVANCE_RACE', sessionId: live.value.id, expectedRevision: live.value.revision, until });
+  const advanced = await act({ type: 'ADVANCE_RACE', sessionId: live.value.id, expectedRevision: live.value.revision, until }, { silent: true });
+  if (!advanced) autoRunning.value = false;
 }
+function clearLapTimer() {
+  if (lapTimer !== undefined) clearTimeout(lapTimer);
+  lapTimer = undefined;
+}
+function scheduleNextLap() {
+  clearLapTimer();
+  if (!autoRunning.value || store.busy || !live.value || live.value.pendingDecision) return;
+  lapTimer = setTimeout(() => { void advance('next_lap'); }, lapDelay.value);
+}
+async function commitPause() {
+  pauseRequested.value = false;
+  if (!live.value || live.value.pendingDecision) return;
+  const paused = await act({ type: 'PAUSE_RACE', sessionId: live.value.id, expectedRevision: live.value.revision });
+  if (!paused) autoRunning.value = true;
+}
+function pause() {
+  autoRunning.value = false;
+  clearLapTimer();
+  if (store.busy) pauseRequested.value = true;
+  else void commitPause();
+}
+function resume() { pauseRequested.value = false; autoRunning.value = true; }
+watch(() => store.busy, busy => { if (!busy && pauseRequested.value) void commitPause(); });
+watch(() => [live.value?.id, live.value?.revision, live.value?.pendingDecision?.id, store.busy, autoRunning.value, lapDelay.value], scheduleNextLap, { immediate: true });
+onUnmounted(clearLapTimer);
 async function tactics() {
   if (!live.value) return;
   await act({ type: 'SET_RACE_TACTICS', sessionId: live.value.id, expectedRevision: live.value.revision, drivers: drivers.value.filter(d => live.value?.timing.find(t => t.driverId === d.id)?.status === 'running').map(d => ({ driverId: d.id, paceMode: choice(d.id).paceMode, energyMode: choice(d.id).energyMode, pitTiming: choice(d.id).pitTiming })), orders: { ...orders } });
@@ -83,11 +113,8 @@ async function resolve() {
       ? { driverId: d.id, pit: 'auto' as const, startCompound: draft.startCompound!, paceMode: draft.paceMode, energyMode: draft.energyMode, pitTiming: draft.pitTiming }
       : { driverId: d.id, pit: draft.pit, ...(draft.pit === 'box' ? { compound: draft.compound } : {}), repairWing: draft.repairWing, paceMode: draft.paceMode, energyMode: draft.energyMode, pitTiming: draft.pitTiming };
   });
+  autoRunning.value = true;
   await act({ type: 'RESOLVE_RACE_DECISION', sessionId: live.value.id, expectedRevision: live.value.revision, windowId: live.value.pendingDecision.id, drivers: driversPayload, orders: wetGrid.value ? undefined : { ...orders } });
-}
-async function autoFinish() {
-  if (!live.value) return;
-  await act({ type: live.value.kind === 'sprint' ? 'RUN_SPRINT' : 'RUN_RACE' });
 }
 async function narratePause() {
   if (!live.value || !importantPause.value) return;
@@ -103,8 +130,9 @@ async function narratePause() {
       <div class="grow"><b>{{ live.pendingDecision ? '比赛已暂停，等待你的指令' : live.raceControl === 'red_flag' ? '红旗暂停' : live.restart ? `${live.restart === 'standing' ? '静态' : '滚动'}重启准备中` : live.raceControl === 'sc' ? '安全车部署中' : live.raceControl === 'vsc' ? '虚拟安全车部署中' : '比赛进行中' }}</b><div class="small muted">{{ weatherLabel() }}<span v-if="live.raceControl"> · {{ live.raceControl === 'red_flag' ? 'RED FLAG' : live.raceControl.toUpperCase() }}</span></div></div>
       <span v-if="live.pendingDecision" class="badge warn">{{ live.pendingDecision.reasons.map(reasonLabel).join(' · ') }}</span>
       <button v-if="importantPause" class="narrate-pause" :disabled="store.busy || !!store.status?.generating" @click="narratePause">让 AI 叙述当前暂停</button>
-      <div v-if="!importantPause" class="race-actions"><button class="primary" :disabled="store.busy" @click="advance('next_decision')">推进至下一窗口</button><button :disabled="store.busy" @click="autoFinish">自动完成比赛</button></div>
+      <div v-if="!importantPause" class="race-actions"><label class="speed tiny">时间轴速度<select v-model.number="lapDelay" :disabled="store.busy"><option :value="1800">慢速</option><option :value="1000">标准</option><option :value="450">快速</option></select></label><button v-if="pauseRequested" class="primary" disabled>正在暂停…</button><button v-else-if="autoRunning" class="primary" @click="pause">暂停比赛</button><button v-else class="primary" :disabled="store.busy" @click="resume">继续比赛</button></div>
     </div>
+    <div class="lap-timeline" aria-label="正赛时间轴"><i :style="{ width: `${live.completedLaps / live.totalLaps * 100}%` }"></i><span>L1</span><b>第 {{ live.completedLaps }} 圈</b><span>L{{ live.totalLaps }}</span></div>
 
     <div class="live-grid">
       <div class="stack">
@@ -167,7 +195,7 @@ async function narratePause() {
           <label class="field">车队指令<select v-model="orders.mode"><option value="free">自由比赛</option><option value="hold">保持位置</option><option value="favor">偏向车手</option></select></label><label v-if="orders.mode === 'favor'" class="field">优先车手<select v-model="orders.favorDriverId"><option v-for="d in drivers" :key="d.id" :value="d.id">{{ d.name }}</option></select></label><button class="primary confirm sticky-ready" :disabled="store.busy" @click="resolve">确认指令并继续比赛</button>
           </template>
         </section>
-        <section v-else class="card"><h3>实时策略</h3><p class="small muted">节奏、能量与进站时机会在下一圈生效；比赛可逐圈推进或交给下一决策窗口。</p><button :disabled="store.busy" @click="tactics">应用两车策略</button><button :disabled="store.busy" @click="advance('next_lap')">推进一圈</button></section>
+        <section v-else class="card"><h3>实时策略</h3><p class="small muted">正赛沿时间轴逐圈运行。节奏、能量与进站时机会在下一圈生效。</p><button :disabled="store.busy" @click="tactics">应用两车策略</button></section>
       </aside>
     </div>
     <Teleport to="body">
@@ -186,6 +214,6 @@ async function narratePause() {
 </template>
 
 <style scoped>
-.race-ribbon { display:flex; align-items:center; gap:12px; padding:11px 14px; border:1px solid var(--line); border-left:4px solid var(--green); background:var(--bg2); }.race-ribbon.pause { border-left-color:var(--yellow); }.race-ribbon.control { border-left-color:var(--orange); }.narrate-pause { margin-left:auto; white-space:nowrap; }.lap { display:block; font-size:28px; line-height:1; }.live-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(290px,.52fr); gap:12px; }.cars-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }.position { font-size:23px; font-style:italic; }.telemetry { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:10px 0; }.telemetry span,.telemetry b { display:block; }.energy { display:block; height:4px; background:var(--bg4); margin-top:4px; }.energy i { display:block; height:100%; background:var(--cyan); }.tactic-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }.tactic-fields select { width:100%; }.events { max-height:170px; overflow:auto; margin-top:8px; }.events div { padding:4px 0; border-bottom:1px solid var(--line); font-size:12px; }.decision-driver { display:grid; gap:7px; padding:10px 0; border-bottom:1px solid var(--line); }.decision-driver .seg { width:max-content; }.red-flag-options { display:grid; gap:5px; }.repair-choice { display:flex; align-items:center; gap:7px; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); font-size:12px; }.decision .field { margin-top:10px; }.decision .field select { width:100%; }.grid-intro { margin:8px 0; padding:8px; border-left:3px solid var(--cyan); background:var(--bg); font-size:12px; }.grid-tyre-choice { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin:10px 0; padding:9px; border:1px solid var(--line2); }.grid-tyre-choice legend { padding:0 4px; font-weight:700; }.tyre-radio { display:flex; align-items:center; gap:7px; min-height:44px; padding:7px; border:1px solid var(--line); background:var(--bg); cursor:pointer; }.tyre-radio:focus-within { outline:2px solid var(--cyan); outline-offset:2px; }.tyre-radio.selected { border-color:var(--cyan); background:color-mix(in srgb,var(--cyan) 12%,var(--bg)); }.tyre-radio input { accent-color:var(--cyan); }.tyre-radio b { margin-left:auto; font-size:10px; color:var(--cyan); }.missing-choice { margin:8px 0 0; color:var(--yellow); font-size:12px; }.confirm { width:100%; margin-top:12px; min-height:44px; }.start-race { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }.start-race h3 { width:100%; }.tyre-modal-backdrop { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:18px; background:#05070dcc; backdrop-filter:blur(5px); }.tyre-modal { width:min(440px,100%); display:grid; gap:14px; padding:18px; border:1px solid var(--line); border-radius:14px; background:var(--bg2); box-shadow:0 24px 70px #000b; }.tyre-modal h3 { margin:3px 0 0; }.tyre-modal-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }.tyre-modal-grid button { display:flex; justify-content:center; align-items:center; gap:8px; min-height:48px; }.tyre-modal-grid button.on { border-color:var(--team); background:color-mix(in srgb,var(--team) 18%,var(--bg)); }
+.race-ribbon { display:flex; align-items:center; gap:12px; padding:11px 14px; border:1px solid var(--line); border-left:4px solid var(--green); background:var(--bg2); }.race-ribbon.pause { border-left-color:var(--yellow); }.race-ribbon.control { border-left-color:var(--orange); }.narrate-pause { margin-left:auto; white-space:nowrap; }.lap { display:block; font-size:28px; line-height:1; }.speed { display:flex; align-items:center; gap:6px; }.speed select { min-width:72px; }.lap-timeline { position:relative; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:10px; min-height:30px; padding:0 8px; overflow:hidden; border:1px solid var(--line); background:var(--bg); }.lap-timeline::before,.lap-timeline i { position:absolute; left:0; top:0; bottom:0; content:""; }.lap-timeline::before { right:0; background:linear-gradient(90deg,transparent 49%,var(--line) 50%,transparent 51%); background-size:4% 100%; opacity:.28; }.lap-timeline i { max-width:100%; background:color-mix(in srgb,var(--green) 24%,transparent); transition:width .3s ease; }.lap-timeline span,.lap-timeline b { position:relative; z-index:1; }.lap-timeline b { text-align:center; }.live-grid { display:grid; grid-template-columns:minmax(0,1fr) minmax(290px,.52fr); gap:12px; }.cars-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px; }.position { font-size:23px; font-style:italic; }.telemetry { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:8px; margin:10px 0; }.telemetry span,.telemetry b { display:block; }.energy { display:block; height:4px; background:var(--bg4); margin-top:4px; }.energy i { display:block; height:100%; background:var(--cyan); }.tactic-fields { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; }.tactic-fields select { width:100%; }.events { max-height:170px; overflow:auto; margin-top:8px; }.events div { padding:4px 0; border-bottom:1px solid var(--line); font-size:12px; }.decision-driver { display:grid; gap:7px; padding:10px 0; border-bottom:1px solid var(--line); }.decision-driver .seg { width:max-content; }.red-flag-options { display:grid; gap:5px; }.repair-choice { display:flex; align-items:center; gap:7px; padding:8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); font-size:12px; }.decision .field { margin-top:10px; }.decision .field select { width:100%; }.grid-intro { margin:8px 0; padding:8px; border-left:3px solid var(--cyan); background:var(--bg); font-size:12px; }.grid-tyre-choice { display:grid; grid-template-columns:1fr 1fr; gap:7px; margin:10px 0; padding:9px; border:1px solid var(--line2); }.grid-tyre-choice legend { padding:0 4px; font-weight:700; }.tyre-radio { display:flex; align-items:center; gap:7px; min-height:44px; padding:7px; border:1px solid var(--line); background:var(--bg); cursor:pointer; }.tyre-radio:focus-within { outline:2px solid var(--cyan); outline-offset:2px; }.tyre-radio.selected { border-color:var(--cyan); background:color-mix(in srgb,var(--cyan) 12%,var(--bg)); }.tyre-radio input { accent-color:var(--cyan); }.tyre-radio b { margin-left:auto; font-size:10px; color:var(--cyan); }.missing-choice { margin:8px 0 0; color:var(--yellow); font-size:12px; }.confirm { width:100%; margin-top:12px; min-height:44px; }.start-race { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }.start-race h3 { width:100%; }.tyre-modal-backdrop { position:fixed; inset:0; z-index:1000; display:grid; place-items:center; padding:18px; background:#05070dcc; backdrop-filter:blur(5px); }.tyre-modal { width:min(440px,100%); display:grid; gap:14px; padding:18px; border:1px solid var(--line); border-radius:14px; background:var(--bg2); box-shadow:0 24px 70px #000b; }.tyre-modal h3 { margin:3px 0 0; }.tyre-modal-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }.tyre-modal-grid button { display:flex; justify-content:center; align-items:center; gap:8px; min-height:48px; }.tyre-modal-grid button.on { border-color:var(--team); background:color-mix(in srgb,var(--team) 18%,var(--bg)); }
 @media (max-width:640px) { .live,.live-grid,.live-grid > *,.cars-grid,.driver-card,.weather,.decision { min-width:0; }.live { overflow-x:clip; }.live-grid,.cars-grid,.grid-tyre-choice { grid-template-columns:1fr; }.live-grid > aside { display:contents; }.live-grid > aside .weather { order:-2; }.live-grid > aside .decision { order:-1; padding-bottom:calc(var(--tabbar-h) + 96px); }.race-ribbon { position:sticky; top:0; z-index:5; display:grid; grid-template-columns:auto minmax(0,1fr); align-items:start; }.race-ribbon > .grow { min-width:0; }.narrate-pause { grid-column:1/-1; width:100%; margin-left:0; }.race-actions { grid-column:1/-1; width:100%; display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:6px; }.race-actions button,.tyre-radio span { min-width:0; }.tyre-radio span { overflow-wrap:anywhere; }.tactic-fields { grid-template-columns:1fr 1fr 1fr; }.telemetry { grid-template-columns:repeat(3,minmax(0,1fr)); }.telemetry > div { min-width:0; overflow-wrap:anywhere; }.decision .confirm.sticky-ready { position:sticky; bottom:calc(var(--tabbar-h) + 8px); box-shadow:0 6px 18px #000; }.start-race { padding-bottom:calc(var(--tabbar-h) + 12px); }.start-race .primary { position:relative; z-index:2; } }
 </style>

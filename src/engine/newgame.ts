@@ -178,7 +178,7 @@ export function createGame(db: Database, opts: NewGameOptions): GameState {
     news: [],
     narration: [],
     narrated: [],
-    flags: {},
+    flags: { 'strategy-rain-balance-v1': true },
     aiLog: [],
     supernatural: { pendingWeather: null },
     aduo: { evaluations: [] },

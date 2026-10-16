@@ -838,6 +838,17 @@ function createWindow(session: LiveRaceState, reasons: RaceDecisionWindow['reaso
   session.stage = 'before_pit';
 }
 
+/** Opens the existing strategy window between completed laps. */
+export function pauseRaceSession(session: LiveRaceState): boolean {
+  if (session.pendingDecision || session.stage === 'finished' || session.completedLaps >= session.totalLaps) return false;
+  const eligible = playerControlledCars(session).map(car => car.driverId);
+  if (!eligible.length) return false;
+  createWindow(session, ['manual_pause'], eligible, []);
+  const window = session.pendingDecision as RaceDecisionWindow | null;
+  if (window) window.lap = session.completedLaps;
+  return !!session.pendingDecision;
+}
+
 export function wetCompoundFor(rules: GameState['rules'], wetness: number): Compound {
   return wetness >= FULL_WET_MIN_WETNESS ? rules.fullWetCompound : rules.wetCompound;
 }
@@ -964,16 +975,129 @@ export function engineerWeatherRisk(weather: number, reaction: number, risk: num
   return { probability: error, preference: risk >= 78 ? 'soft' : 'medium', holdLaps: reaction >= 82 ? 1 : 2 };
 }
 
-function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, car: LiveRaceCar): boolean {
-  if (car.plan.strategySource !== 'engineer') return false;
+const CHAOTIC_WEATHER_TEAMS = new Set(['mclaren', 'aston_martin', 'ferrari']);
+const ORDINARY_STRATEGY_MISTAKE_PROBABILITY: Record<string, number> = {
+  red_bull: .02,
+  mercedes: .03,
+  williams: .05,
+  haas: .05,
+  audi: .05,
+  alpine: .05,
+  cadillac: .05,
+  racing_bulls: .07,
+};
+
+/** Only the three deliberately weak strategy groups can make a severe weather tyre blunder. */
+export function severeWeatherChaosProbability(team: Pick<TeamState, 'id' | 'staff'>): number {
+  if (!CHAOTIC_WEATHER_TEAMS.has(team.id)) return 0;
+  const strategist = team.staff.strategist;
+  const judgment = staffAbility(strategist, 'strategy') * .5
+    + staffAbility(strategist, 'weather') * .3
+    + staffAbility(strategist, 'reaction') * .2;
+  return clamp((80 - judgment) * .01, 0, .25);
+}
+
+export function severeDryChaosProbability(team: Pick<TeamState, 'id' | 'staff'>): number {
+  return severeWeatherChaosProbability(team) * .8;
+}
+
+/** One dry-race strategy-error roll per AI team. */
+export function strategyMistakeProbability(team: Pick<TeamState, 'id' | 'staff'>): number {
+  return CHAOTIC_WEATHER_TEAMS.has(team.id)
+    ? severeDryChaosProbability(team)
+    : ORDINARY_STRATEGY_MISTAKE_PROBABILITY[team.id] ?? .05;
+}
+
+function strategyMistakeKind(session: LiveRaceState, teamId: string): NonNullable<LiveRaceCar['engineerStrategyMistake']> {
+  if (!CHAOTIC_WEATHER_TEAMS.has(teamId)) return 'early_stop';
+  if (engineerDecisionRoll(session, { driverId: teamId }, 'dry-chaos-kind:early', 1 / 3)) return 'early_stop';
+  return engineerDecisionRoll(session, { driverId: teamId }, 'dry-chaos-kind:double', .5) ? 'double_stop' : 'late_stop';
+}
+
+function applyEngineerDryChaos(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound | null {
+  if (session.kind !== 'race' || car.player || car.plan.strategySource !== 'engineer' || session.wetness >= .03 || session.scLeft > 0 || session.vscLeft > 0) return null;
+  const dry = state.rules.dryCompounds;
+  if ((car.engineerStrategyMistake === 'double_stop' || !car.engineerStrategyMistake) && car.engineerDryChaosStage === 1 && session.lap >= (car.engineerDryChaosNextLap ?? Number.MAX_SAFE_INTEGER)) {
+    const correction = dry[1] === car.tyre ? (dry[2] ?? dry[0]) : (dry[1] ?? dry[0]);
+    if (!correction || correction === car.tyre) return null;
+    car.engineerDryChaosStage = 2;
+    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组再次推翻决定，要求连续进站换胎`, [car.driverId], car.player);
+    return correction;
+  }
+  if (car.engineerDryChaosAssessed || car.engineerDryChaosStage) return null;
+  const triggerLap = Math.max(5, Math.round(session.totalLaps * .3));
+  if (session.lap < triggerLap) return null;
+  car.engineerDryChaosAssessed = true;
+  const team = state.teams[car.teamId];
+  const probability = team ? strategyMistakeProbability(team) : 0;
+  if (probability <= 0 || !engineerDecisionRoll(session, { driverId: car.teamId }, 'dry-chaos', probability)) return null;
+  let mistake = strategyMistakeKind(session, car.teamId);
+  const lateStopLap = session.lap + Math.max(3, pitTriggerLap(car) - car.tyreAge + 2);
+  if (mistake === 'late_stop' && (car.stintIndex >= car.plannedCompounds.length - 1 || lateStopLap >= session.totalLaps)) mistake = 'early_stop';
+  car.engineerStrategyMistake = mistake;
+  if (mistake === 'late_stop') {
+    car.engineerStrategyDelayUntilLap = lateStopLap;
+    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组错过最佳窗口，决定把当前轮胎留到第 ${car.engineerStrategyDelayUntilLap} 圈`, [car.driverId], car.player);
+    return null;
+  }
+  const premature = dry[0] === car.tyre ? (dry[2] ?? dry[1]) : dry[0];
+  if (!premature || premature === car.tyre) return null;
+  if (mistake === 'double_stop') {
+    car.engineerDryChaosStage = 1;
+    car.engineerDryChaosNextLap = session.lap + 1;
+    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组误判轮胎窗口，要求提前进站`, [car.driverId], car.player);
+  } else {
+    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组过早放弃当前轮胎，安排了一次不必要的进站`, [car.driverId], car.player);
+  }
+  return premature;
+}
+
+function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, car: LiveRaceCar): 'none' | 'ordinary' | 'chaos' {
+  if (car.plan.strategySource !== 'engineer') return 'none';
   if (session.wetness < .02) {
-    if (car.engineerLightRainAssessed || car.engineerWetAssessed) car.engineerWeatherSpell = (car.engineerWeatherSpell ?? 0) + 1;
+    if (car.engineerWeatherSpellActive || car.engineerLightRainAssessed || car.engineerWetAssessed) car.engineerWeatherSpell = (car.engineerWeatherSpell ?? 0) + 1;
+    car.engineerWeatherSpellActive = false;
     car.engineerLightRainAssessed = false;
     car.engineerWetAssessed = false;
     car.engineerTyreOverride = null;
     car.engineerTyreOverrideUntilLap = 0;
+    car.engineerWeatherChaosStage = undefined;
+    car.engineerWeatherChaosNextLap = undefined;
   }
+  if (session.wetness >= .03) car.engineerWeatherSpellActive = true;
   const team = state.teams[car.teamId];
+  const dry = state.rules.dryCompounds[1] ?? state.rules.dryCompounds[0];
+  if (car.engineerWeatherChaosStage === 1 && session.lap > (car.lastWeatherPitLap ?? -99) && dry) {
+    car.engineerWeatherChaosStage = 2;
+    car.engineerWeatherChaosNextLap = session.lap + 2;
+    car.engineerTyreOverride = dry;
+    car.engineerTyreOverrideUntilLap = session.lap;
+    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组发现雨势不足，立刻改口要求换回干胎`, [car.driverId], car.player);
+    return 'chaos';
+  }
+  if (car.engineerWeatherChaosStage === 2
+    && session.lap >= (car.engineerWeatherChaosNextLap ?? Number.MAX_SAFE_INTEGER)
+    && session.wetness >= .22) {
+    car.engineerWeatherChaosStage = 3;
+    car.engineerTyreOverride = wetCompoundFor(state.rules, session.wetness);
+    car.engineerTyreOverrideUntilLap = session.lap;
+    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组再次改变判断，要求重新换回雨胎`, [car.driverId], car.player);
+    return 'chaos';
+  }
+  const chaosProbability = team ? severeWeatherChaosProbability(team) : 0;
+  if (!car.engineerWeatherChaosStage
+    && !state.rules.tyres[car.tyre]?.wet
+    && session.wetness >= .03
+    && session.wetness <= .2
+    && chaosProbability > 0
+    && engineerDecisionRoll(session, { driverId: car.teamId }, `weather-chaos:${car.engineerWeatherSpell ?? 0}`, chaosProbability)) {
+    car.engineerWeatherChaosStage = 1;
+    car.engineerLightRainAssessed = true;
+    car.engineerTyreOverride = state.rules.wetCompound;
+    car.engineerTyreOverrideUntilLap = session.lap;
+    liveEvent(session, session.lap, 'pit', `${car.driverId} 的策略组看见小雨便过度反应，立即要求换半雨胎`, [car.driverId], car.player);
+    return 'chaos';
+  }
   const strategistRisk = team ? staffAbility(team.staff.strategist, 'risk') : 70;
   const risk = engineerWeatherRisk(car.raceEngineerWeather, car.raceEngineerReaction, strategistRisk, session.wetness);
   if (risk?.preference === 'intermediate' && !car.engineerLightRainAssessed) {
@@ -983,7 +1107,7 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
       car.engineerTyreOverrideUntilLap = session.lap + risk.holdLaps;
       const call = car.teamId === 'ferrari' ? '要求' : '建议';
       liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师对小雨反应过度，${call}提前换半雨胎`, [car.driverId], car.player);
-      return true;
+      return 'ordinary';
     }
   }
   if (session.wetness > .2) car.engineerLightRainAssessed = true;
@@ -996,11 +1120,11 @@ function applyEngineerWeatherDecision(state: GameState, session: LiveRaceState, 
         car.engineerTyreOverrideUntilLap = session.lap + risk.holdLaps;
         const call = car.teamId === 'ferrari' ? '要求' : '建议';
         liveEvent(session, session.lap, 'pit', `${car.driverId} 的工程师误判湿地，${call}换上${state.rules.tyres[dry]?.name ?? dry}`, [car.driverId], car.player);
-        return true;
+        return 'ordinary';
       }
     }
   }
-  return false;
+  return 'none';
 }
 
 function pitTriggerLap(car: LiveRaceCar): number {
@@ -1012,26 +1136,30 @@ function executePit(state: GameState, session: LiveRaceState, car: LiveRaceCar, 
   if (car.status !== 'running' || session.completedLaps >= session.totalLaps) return;
   const track = currentTrack(state);
   const planned = car.stintIndex < car.plannedCompounds.length - 1;
-  const engineerOverride = applyEngineerWeatherDecision(state, session, car);
-  const targetCompound = replacementCompound(state, session, car);
+  const engineerDecision = applyEngineerWeatherDecision(state, session, car);
+  const dryChaosCompound = engineerDecision === 'none' ? applyEngineerDryChaos(state, session, car) : null;
+  const targetCompound = dryChaosCompound ?? replacementCompound(state, session, car);
   const differentCompound = targetCompound !== car.tyre;
   const weatherReady = aiWeatherStopReady(state, session, car, targetCompound);
-  const weatherStop = differentCompound && (weatherReady || (car.teamId === 'ferrari' && engineerOverride));
-  const plannedStop = !weatherStop && planned && car.tyreAge >= pitTriggerLap(car);
+  const forcedEngineerStop = engineerDecision === 'chaos' || (car.teamId === 'ferrari' && engineerDecision === 'ordinary');
+  const weatherStop = differentCompound && (weatherReady || forcedEngineerStop);
+  const dryChaosStop = dryChaosCompound !== null && differentCompound;
+  const strategyDelayActive = car.engineerStrategyMistake === 'late_stop' && session.lap < (car.engineerStrategyDelayUntilLap ?? 0);
+  const plannedStop = !weatherStop && !strategyDelayActive && planned && car.tyreAge >= pitTriggerLap(car);
   const stayOut = car.pendingPit === 'stay_out' && session.lap <= car.stayOutUntilLap;
   const neutralActive = session.scLeft > 0 || session.vscLeft > 0;
   if (!neutralActive) car.neutralStopTaken = false;
   const neutralOpportunity = car.plan.scReaction && neutralActive && !car.neutralStopTaken && planned
     && car.tyreAge >= Math.max(2, Math.round(pitTriggerLap(car) * .5)) && targetCompound !== car.tyre;
   const plannedAdvance = plannedStop || neutralOpportunity;
-  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || neutralOpportunity || plannedStop));
+  const shouldPit = force || car.pendingPit === 'box' || (!stayOut && (car.repairPending || weatherStop || dryChaosStop || neutralOpportunity || plannedStop));
   if (!shouldPit) return;
   const neutral = session.scLeft > 0 ? 0.5 : session.vscLeft > 0 ? 0.7 : 1;
   const repair = car.repairPending;
   const stop = actualStationaryTime(state.teams[car.teamId], () => rng.next(), repair);
   const stationary = stop.actual;
   if (car.repairPending) { car.damage = 0; car.repairPending = false; const damage = [...session.damageLedger].reverse().find(d => d.driverId === car.driverId && !d.repairedInRace); if (damage) damage.repairedInRace = true; }
-  if (car.pendingPit === 'box' || plannedAdvance || weatherStop) {
+  if (car.pendingPit === 'box' || plannedAdvance || weatherStop || dryChaosStop) {
     if (plannedAdvance) car.stintIndex += 1;
     // A decision can choose a compound, but it takes effect only after this car
     // has actually entered the pits. AI changes respond to the public surface.
@@ -1394,7 +1522,8 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
       liveEvent(session, session.lap, 'order', `${car.driverId} 拒绝临场策略指令，继续按自己的判断比赛`, [car.driverId], true);
       continue;
     }
-    car.pendingPit = choice.pit;
+    const preservesManualBox = choice.pit === 'auto' && car.pendingPit === 'box' && !!car.pendingCompound;
+    if (!preservesManualBox) car.pendingPit = choice.pit;
     if (choice.pit === 'stay_out') {
       const firstAcknowledgement = car.stayOutUntilLap < session.lap;
       car.stayOutUntilLap = session.lap + 3;
@@ -1411,7 +1540,7 @@ export function applyRaceDecision(state: GameState, session: LiveRaceState, wind
   }
   if (orders) session.teamOrders = { ...orders };
   session.pendingDecision = null;
-  if (window.stage === 'grid') session.stage = 'ready';
+  if (window.stage === 'grid' || window.reasons.includes('manual_pause')) session.stage = 'ready';
   else if (window.reasons.includes('red_flag') && session.redFlag?.active) {
     for (const choice of drivers) {
       const car = session.cars[choice.driverId];

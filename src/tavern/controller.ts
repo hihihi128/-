@@ -112,6 +112,8 @@ interface ProcessOptions {
 
 interface AiGridStrategyCandidate {
   driverId: string;
+  teamId: string;
+  decision: number;
   options: ReturnType<typeof strategyOptions>;
 }
 
@@ -976,7 +978,8 @@ export class F1Controller {
       const completedLiveQualifying = action.type === 'ADVANCE_QUALIFYING'
         && (cur.state.season.phase === 'qualifying' || cur.state.season.phase === 'sprint_qualifying')
         && res.state.season.phase !== cur.state.season.phase;
-      if (this.settings.autoNarrate && (isSimulation(action as Action) || completedLiveQualifying) && res.state.narration.length) {
+      const finishedLiveRace = action.type === 'ADVANCE_RACE' && !!cur.state.weekend?.liveRace && !res.state.weekend?.liveRace;
+      if (this.settings.autoNarrate && (isSimulation(action as Action) || completedLiveQualifying || finishedLiveRace) && res.state.narration.length) {
         void this.requestNarration();
       }
       return { ok: true, message: `${res.message}${strategySummary}` };
@@ -1331,6 +1334,8 @@ export class F1Controller {
         const performanceContext = buildPerformanceContext({ driverTyre: entry.driver.attrs.tyre, carTyre: ratings.tyre, setup, ratings, track });
         return {
           driverId: entry.driver.id,
+          teamId: entry.team.id,
+          decision: strategyDecisionSkill(entry.team, entry.car.slot),
           options: strategyOptions(state.rules, track, track.laps, {
             driverTyre: entry.driver.attrs.tyre,
             carTyre: ratings.tyre,
@@ -1385,7 +1390,13 @@ export class F1Controller {
         const driverId = typeof row.driverId === 'string' ? row.driverId : '';
         const candidate = byDriver.get(driverId);
         const optionIndex = typeof row.option === 'number' && Number.isInteger(row.option) ? row.option : -1;
-        const option = candidate?.options[optionIndex];
+        const minimumOption = candidate && ['mclaren', 'aston_martin', 'ferrari'].includes(candidate.teamId)
+          ? candidate.decision >= 68 ? 1 : candidate.decision >= 60 ? 2 : 3
+          : 0;
+        const constrainedOptionIndex = candidate && optionIndex >= 0 && optionIndex < candidate.options.length
+          ? Math.min(candidate.options.length - 1, Math.max(optionIndex, minimumOption))
+          : -1;
+        const option = candidate?.options[constrainedOptionIndex];
         if (!candidate || !option || plans[driverId]) continue;
         if (row.paceMode !== 'conserve' && row.paceMode !== 'balanced' && row.paceMode !== 'push') continue;
         if (row.pitTiming !== 'early' && row.pitTiming !== 'standard' && row.pitTiming !== 'late') continue;
@@ -1393,9 +1404,9 @@ export class F1Controller {
         plans[driverId] = {
           strategySource: 'engineer',
           tyrePlan: [...option.compounds],
-          paceMode: row.paceMode,
-          pitTiming: row.pitTiming,
-          scReaction: row.scReaction,
+          paceMode: candidate.decision < 63 ? 'push' : row.paceMode,
+          pitTiming: candidate.decision < 65 ? 'late' : candidate.decision < 75 && row.pitTiming === 'early' ? 'standard' : row.pitTiming,
+          scReaction: candidate.decision >= 68 ? row.scReaction : false,
         };
       }
       const count = Object.keys(plans).length;
@@ -1714,7 +1725,7 @@ export class F1Controller {
     return JSON.parse(JSON.stringify(view)) as NegotiationSessionView;
   }
 
-  startSpecialNegotiation(request: { kind: unknown; api?: unknown }): NegotiationResult {
+  startSpecialNegotiation(request: { kind: unknown; api?: unknown; preferredChoice?: unknown }): NegotiationResult {
     const definition = negotiationDefinition(request.kind);
     if (!definition) return { ok: false, message: '未知的特殊谈判事件', session: this.getSpecialNegotiation() };
     const selected = request.api === undefined ? this.settings.engineerApi : request.api;
@@ -1728,6 +1739,14 @@ export class F1Controller {
     if (!current) return { ok: false, message: '还没有开局', session: this.getSpecialNegotiation() };
     const unavailable = definition.unavailable(current.state);
     if (unavailable) return { ok: false, message: unavailable, session: this.getSpecialNegotiation() };
+    const forcedChoice = definition.kind === 'fia_roundtable' ? current.state.fiaMeeting?.current?.forcedStance ?? null : null;
+    const requestedChoice = request.preferredChoice === undefined || request.preferredChoice === null ? null : request.preferredChoice;
+    if (requestedChoice !== null && (typeof requestedChoice !== 'string' || !Object.prototype.hasOwnProperty.call(definition.choices, requestedChoice))) {
+      return { ok: false, message: '谈判预设选项无效', session: this.getSpecialNegotiation() };
+    }
+    if (forcedChoice && requestedChoice && forcedChoice !== requestedChoice) {
+      return { ok: false, message: '所选立场与车队强制立场冲突', session: this.getSpecialNegotiation() };
+    }
     const openingSpeaker = definition.participants[0];
     this.specialNegotiation = {
       id: `neg-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
@@ -1739,6 +1758,7 @@ export class F1Controller {
       minRounds: 2,
       maxRounds: 4,
       status: 'active',
+      preferredChoice: forcedChoice ?? requestedChoice,
       messages: [{ role: 'counterparty', speaker: openingSpeaker, text: definition.opening }],
       outcome: null,
       chatId: this.env.chatId(),
@@ -1802,7 +1822,8 @@ export class F1Controller {
       if (new TextEncoder().encode(generated).byteLength > 16 * 1024) return fail('谈判 API 返回超过 16 KiB');
       const reply = parseNegotiationReply(generated, definition, nextRound, session.minRounds, session.maxRounds);
       const forcedStance = session.kind === 'fia_roundtable' ? current.state.fiaMeeting?.current?.forcedStance : null;
-      if (reply.status === 'agreement' && forcedStance && reply.choice !== forcedStance) throw new Error('谈判 API 返回了车队禁止的立场');
+      const requiredChoice = forcedStance ?? session.preferredChoice;
+      if (reply.status === 'agreement' && requiredChoice && reply.choice !== requiredChoice) throw new Error('谈判 API 返回了未选择的结算方案');
       const latest = this.resolveNegotiationContext(session);
       if (this.generationInProgress() || !latest) {
         session.status = 'breakdown';

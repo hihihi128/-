@@ -197,6 +197,45 @@ function hasValidLiveQualifyingPrivateState(state: GameState, live: Record<strin
   return true;
 }
 
+const STRATEGY_RAIN_BALANCE_FLAG = 'strategy-rain-balance-v1';
+const BALANCED_RAIN_CHANCES: Record<string, number> = {
+  melbourne: .14, shanghai: .135, suzuka: .16, bahrain: .005, jeddah: .01, miami: .125,
+  montreal: .155, monaco: .11, barcelona: .06, spielberg: .14, silverstone: .21, spa: .24,
+  hungaroring: .12, zandvoort: .175, monza: .09, madrid: .075, baku: .04, singapore: .19,
+  cota: .1, mexico: .09, interlagos: .22, las_vegas: .02, lusail: .005, yas_marina: .005,
+};
+const BALANCED_STRATEGISTS: Record<string, { name: string; skill: number; strategy: number; weather: number; reaction: number }> = {
+  red_bull: { name: '汉娜·施密茨', skill: 94, strategy: 94, weather: 93, reaction: 93 },
+  mercedes: { name: '罗茜·韦特', skill: 90, strategy: 90, weather: 89, reaction: 89 },
+  williams: { name: '夏尔-安托万·弗洛朗坦', skill: 85, strategy: 85, weather: 84, reaction: 84 },
+  haas: { name: '卡琳·克里德利希', skill: 85, strategy: 85, weather: 84, reaction: 84 },
+  audi: { name: '里特维克·达南贾亚·雷迪', skill: 85, strategy: 85, weather: 84, reaction: 84 },
+  alpine: { name: '奥里奥尔·伊塞恩', skill: 85, strategy: 85, weather: 84, reaction: 84 },
+  cadillac: { name: '亚历克斯·古迪纳夫', skill: 85, strategy: 85, weather: 84, reaction: 84 },
+  racing_bulls: { name: '马蒂厄·迪布瓦-卢卡', skill: 78, strategy: 78, weather: 77, reaction: 77 },
+  mclaren: { name: '兰迪普·辛格', skill: 70, strategy: 70, weather: 69, reaction: 69 },
+  aston_martin: { name: '彼得·霍尔', skill: 62, strategy: 62, weather: 60, reaction: 60 },
+  ferrari: { name: '拉文·贾恩', skill: 54, strategy: 54, weather: 52, reaction: 52 },
+};
+
+function migrateStrategyAndRainBalance(state: GameState): void {
+  state.flags ??= {};
+  if (state.flags[STRATEGY_RAIN_BALANCE_FLAG]) return;
+  for (const [trackId, rainChance] of Object.entries(BALANCED_RAIN_CHANCES)) {
+    if (state.tracks?.[trackId]) state.tracks[trackId].rainChance = rainChance;
+  }
+  for (const [teamId, balance] of Object.entries(BALANCED_STRATEGISTS)) {
+    const strategist = state.teams[teamId]?.staff?.strategist;
+    if (!strategist || strategist.id !== `${teamId}-strategist` || strategist.name !== balance.name) continue;
+    strategist.skill = balance.skill;
+    strategist.abilities ??= {};
+    strategist.abilities.strategy = balance.strategy;
+    strategist.abilities.weather = balance.weather;
+    strategist.abilities.reaction = balance.reaction;
+  }
+  state.flags[STRATEGY_RAIN_BALANCE_FLAG] = true;
+}
+
 /** 把旧版两组动力单元无损拆成六类部件。 */
 function migrateSixPartPowerUnit(state: GameState): void {
   const allocation = state.rules.puAllocation;
@@ -493,6 +532,7 @@ export function migrateState(state: GameState): GameState {
   const hadMarket = !!state.market;
   ensureMarket(state);
   replaceLegacyStaffPlaceholders(state);
+  migrateStrategyAndRainBalance(state);
   if (!hadMarket && state.season?.phase === 'season_end') openMarket(state, state.season.year + 1);
   // Live race is additive and must be initialized before the legacy early return.
   // Never synthesize a session or consume RNG while loading an older save.

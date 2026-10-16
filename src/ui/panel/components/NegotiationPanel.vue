@@ -3,14 +3,15 @@ import { computed, ref } from 'vue';
 import type { NegotiationKind } from '../../../tavern/negotiation';
 import { call, peek, store } from '../bridge';
 
-const props = defineProps<{ kind: NegotiationKind }>();
+const props = defineProps<{ kind: NegotiationKind; preferredChoice?: string | null }>();
 const apiChoice = ref<'main' | 'secondary'>(peek(api => api.getSettings().engineerApi) ?? 'main');
 const text = ref('');
 const mine = computed(() => store.negotiation?.kind === props.kind ? store.negotiation : null);
 const otherActive = computed(() => store.negotiation?.status === 'active' && store.negotiation.kind !== props.kind);
+const choiceRequired = computed(() => props.kind === 'fia_roundtable' && !props.preferredChoice);
 
 async function start() {
-  const result = await call(api => api.startSpecialNegotiation({ kind: props.kind, api: apiChoice.value }));
+  const result = await call(api => api.startSpecialNegotiation({ kind: props.kind, api: apiChoice.value, preferredChoice: props.preferredChoice ?? null }));
   if (result) store.negotiation = result.session;
 }
 
@@ -37,7 +38,9 @@ async function cancel() {
         <option value="secondary">副 API</option>
         <option value="main">主 API</option>
       </select>
-      <button class="primary" :disabled="store.busy || otherActive" @click="start">开始多轮 AI 谈判</button>
+      <button class="primary" :disabled="store.busy || otherActive || choiceRequired" @click="start">开始多轮 AI 谈判</button>
+      <span v-if="props.preferredChoice" class="tiny muted">将按已选立场进行谈判。</span>
+      <span v-else-if="choiceRequired" class="tiny muted">请先选择会议立场。</span>
       <span v-if="otherActive" class="tiny muted">请先完成当前的 {{ store.negotiation?.title }}。</span>
       <button v-if="otherActive" class="small" :disabled="store.busy" @click="cancel">取消当前谈判</button>
     </div>

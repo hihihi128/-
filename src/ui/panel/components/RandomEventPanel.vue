@@ -73,7 +73,15 @@ function effectLabel(effect: NonNullable<typeof event.value>['effects'][number])
 
       <template v-if="event.status === 'awaiting_player'">
         <div v-if="event.completedDialogueTurns === 0 && event.answerOptions.length" class="row wrap">
-          <button v-for="(option, index) in event.answerOptions" :key="`${index}-${option}`" class="small" :disabled="store.busy" @click="answer = option">{{ option }}</button>
+          <button
+            v-for="(option, index) in event.answerOptions"
+            :key="`${index}-${option}`"
+            class="small"
+            :class="{ selected: answer === option }"
+            :aria-pressed="answer === option"
+            :disabled="store.busy"
+            @click="answer = option"
+          >{{ option }}</button>
         </div>
         <div v-if="event.dialogue.length" class="stack-s"><div v-for="(turn, index) in event.dialogue" :key="index" class="dialog-line"><b>第 {{ index + 1 }} 轮</b><div>你：{{ turn.player }}</div><div>剧情：{{ turn.assistant }}</div></div></div>
         <label class="field"><span>{{ event.completedDialogueTurns === 0 ? '你的处理方案' : '你的后续回应' }}</span><textarea v-model="answer" rows="5" maxlength="1000" :placeholder="event.completedDialogueTurns === 0 ? '说明你的决定、执行方式和可接受代价……' : '根据上一轮剧情继续回应……'" :disabled="store.busy" /></label>
@@ -101,6 +109,7 @@ function effectLabel(effect: NonNullable<typeof event.value>['effects'][number])
 .event-modal { width: min(680px, 100%); max-height: min(88vh, 760px); overflow: auto; padding: 20px; border: 1px solid var(--line); border-radius: 14px; background: var(--bg2); box-shadow: 0 24px 70px #000b; }
 .event-modal h2 { margin: 3px 0 0; }
 .event-modal textarea { width: 100%; resize: vertical; }
+.event-modal button.selected { border-color: var(--team); background: color-mix(in srgb, var(--team) 24%, var(--panel)); box-shadow: 0 0 0 1px var(--team); }
 .dialog-line { padding: 12px; border-left: 3px solid var(--orange); background: var(--bg); border-radius: 8px; }
 .dialog-line.player { border-left-color: var(--team); }
 .dialog-line b, .dialog-line div { display: block; }

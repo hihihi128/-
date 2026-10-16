@@ -2,17 +2,43 @@ import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { migrateState } from '../../src/engine/migrate';
+import { normalizeDatabase } from '../../src/engine/data';
+import { createGame } from '../../src/engine/newgame';
 import { recordPuFit } from '../../src/engine/powerunit';
 import type { GameState } from '../../src/engine/types';
 import { buildView } from '../../src/engine/view';
 import { encodeState, decodeState } from '../../src/tavern/store';
-import { act, advanceUntil, newTestGame } from '../helpers';
+import { act, advanceUntil, cardSources, newTestGame } from '../helpers';
 import { legacyWeeklyEventState } from '../fixtures/weekly-random-events';
 
 /** 2025 规则版本（本 PR 之前）生成的真实存档：第 1 站赛后 */
 const legacy = (): GameState => JSON.parse(readFileSync(resolve(__dirname, '../fixtures/legacy-save-2025.json'), 'utf8'));
 
 describe('旧存档升级', () => {
+  it('为原始员工和赛道迁移策略层级与减半后的降雨概率', () => {
+    const loaded = normalizeDatabase(cardSources());
+    if (!loaded.db) throw new Error('card database failed to load');
+    const state = createGame(loaded.db, { playerTeamId: 'ferrari', principalName: '测试领队', seed: 95, gameId: 'balance-migration', now: 1 });
+    delete state.flags['strategy-rain-balance-v1'];
+    state.tracks.spa.rainChance = .48;
+    state.teams.ferrari.staff.strategist.skill = 78;
+    state.teams.ferrari.staff.strategist.abilities = { strategy: 76, weather: 74, reaction: 73, risk: 82 };
+    state.teams.williams.staff.strategist.id = '';
+    state.teams.williams.staff.strategist.name = `${state.teams.williams.name} strategist`;
+    state.teams.williams.staff.strategist.skill = 80;
+    state.teams.mclaren.staff.strategist = { ...state.teams.mclaren.staff.strategist, id: 'hired-strategist', name: '玩家签约策略师', skill: 99 };
+
+    const restored = migrateState(state);
+    expect(restored.tracks.spa.rainChance).toBe(.24);
+    expect(restored.teams.ferrari.staff.strategist).toMatchObject({ skill: 54, abilities: { strategy: 54, weather: 52, reaction: 52, risk: 82 } });
+    expect(restored.teams.williams.staff.strategist).toMatchObject({ id: 'williams-strategist', name: '夏尔-安托万·弗洛朗坦', skill: 85 });
+    expect(restored.teams.mclaren.staff.strategist).toMatchObject({ id: 'hired-strategist', name: '玩家签约策略师', skill: 99 });
+    expect(restored.flags['strategy-rain-balance-v1']).toBe(true);
+
+    restored.tracks.spa.rainChance = .3;
+    expect(migrateState(restored).tracks.spa.rainChance).toBe(.3);
+  });
+
   it('补齐练习赛轮胎与调校选择，但保留旧存档已有选择', () => {
     const state = advanceUntil(newTestGame(93), value => value.season.phase === 'practice');
     const plans = state.weekend!.plans;

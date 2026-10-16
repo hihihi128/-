@@ -36,6 +36,7 @@ import {
   startWeekend,
   startLiveRace,
   advanceLiveRace,
+  pauseLiveRace,
   resolveLiveRaceDecision,
   returnPracticeTyres,
   swapDriver,
@@ -273,6 +274,8 @@ function run(state: GameState, action: Action | InternalReviewedPlanAction, rng:
       return startLiveRace(state, rng, action.kind, action.aiPlans);
     case 'ADVANCE_RACE':
       return advanceLiveRace(state, rng, action.sessionId, action.expectedRevision, action.until);
+    case 'PAUSE_RACE':
+      return pauseLiveRace(state, action.sessionId, action.expectedRevision);
     case 'SET_RACE_TACTICS': {
       const live = state.weekend?.liveRace;
       if (!live || live.id !== action.sessionId || live.revision !== action.expectedRevision || live.pendingDecision) return fail('比赛状态已更新，请刷新后重试');
