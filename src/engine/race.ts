@@ -956,11 +956,11 @@ export function severeWeatherChaosProbability(team: Pick<TeamState, 'id' | 'staf
   const judgment = staffAbility(strategist, 'strategy') * .5
     + staffAbility(strategist, 'weather') * .3
     + staffAbility(strategist, 'reaction') * .2;
-  return clamp((80 - judgment) * .03, 0, .75);
+  return clamp((80 - judgment) * .01, 0, .25);
 }
 
 export function severeDryChaosProbability(team: Pick<TeamState, 'id' | 'staff'>): number {
-  return severeWeatherChaosProbability(team) * (2 / 3);
+  return severeWeatherChaosProbability(team) * .8;
 }
 
 function applyEngineerDryChaos(state: GameState, session: LiveRaceState, car: LiveRaceCar): Compound | null {

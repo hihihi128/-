@@ -244,14 +244,14 @@ describe('engineer strategy execution', () => {
     expect(spells).toEqual(new Set([true, false]));
   });
 
-  it('keeps Ferrari severe-chaos calls near the 75% cap across rain spells', () => {
+  it('keeps Ferrari severe-chaos calls near the 25% cap across rain spells', () => {
     const decisions = Array.from(
       { length: 10_000 },
-      (_, spell) => engineerDecisionRoll({ id: 'ferrari-chaos-rate', weatherRngState: 7194 }, { driverId: 'ferrari' }, `weather-chaos:${spell}`, .75),
+      (_, spell) => engineerDecisionRoll({ id: 'ferrari-chaos-rate', weatherRngState: 7194 }, { driverId: 'ferrari' }, `weather-chaos:${spell}`, .25),
     );
     const rate = decisions.filter(Boolean).length / decisions.length;
-    expect(rate).toBeGreaterThanOrEqual(.72);
-    expect(rate).toBeLessThanOrEqual(.78);
+    expect(rate).toBeGreaterThanOrEqual(.22);
+    expect(rate).toBeLessThanOrEqual(.28);
   });
 
   it('turns every low dry-strategy team into consecutive unnecessary stops', () => {

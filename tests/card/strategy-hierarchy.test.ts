@@ -32,12 +32,12 @@ describe('2026 车队策略组层级', () => {
     for (const id of ['red_bull', 'mercedes', 'williams', 'haas', 'audi', 'alpine', 'cadillac', 'racing_bulls']) {
       expect(severeWeatherChaosProbability(state.teams[id])).toBe(0);
     }
-    expect(severeWeatherChaosProbability(state.teams.mclaren)).toBeCloseTo(.315, 3);
-    expect(severeWeatherChaosProbability(state.teams.aston_martin)).toBeCloseTo(.57, 3);
-    expect(severeWeatherChaosProbability(state.teams.ferrari)).toBe(.75);
-    expect(severeDryChaosProbability(state.teams.mclaren)).toBeCloseTo(.21, 3);
-    expect(severeDryChaosProbability(state.teams.aston_martin)).toBeCloseTo(.38, 3);
-    expect(severeDryChaosProbability(state.teams.ferrari)).toBe(.5);
+    expect(severeWeatherChaosProbability(state.teams.mclaren)).toBeCloseTo(.105, 3);
+    expect(severeWeatherChaosProbability(state.teams.aston_martin)).toBeCloseTo(.19, 3);
+    expect(severeWeatherChaosProbability(state.teams.ferrari)).toBe(.25);
+    expect(severeDryChaosProbability(state.teams.mclaren)).toBeCloseTo(.084, 3);
+    expect(severeDryChaosProbability(state.teams.aston_martin)).toBeCloseTo(.152, 3);
+    expect(severeDryChaosProbability(state.teams.ferrari)).toBe(.2);
   });
 
   it('uses actual strategist abilities for eligible probability boundaries and caps Ferrari', () => {
@@ -54,13 +54,13 @@ describe('2026 车队策略组层级', () => {
 
     setStrategyAbilities('mclaren', 70);
     setStrategyAbilities('aston_martin', 60);
-    expect(severeWeatherChaosProbability(state.teams.mclaren)).toBeCloseTo(.3, 6);
-    expect(severeWeatherChaosProbability(state.teams.aston_martin)).toBeCloseTo(.6, 6);
+    expect(severeWeatherChaosProbability(state.teams.mclaren)).toBeCloseTo(.1, 6);
+    expect(severeWeatherChaosProbability(state.teams.aston_martin)).toBeCloseTo(.2, 6);
 
     setStrategyAbilities('ferrari', 1);
-    expect(severeWeatherChaosProbability(state.teams.ferrari)).toBe(.75);
+    expect(severeWeatherChaosProbability(state.teams.ferrari)).toBe(.25);
     setStrategyAbilities('ferrari', 56);
-    expect(severeWeatherChaosProbability(state.teams.ferrari)).toBeCloseTo(.72, 6);
+    expect(severeWeatherChaosProbability(state.teams.ferrari)).toBeCloseTo(.24, 6);
 
     setStrategyAbilities('mclaren', 100);
     setStrategyAbilities('aston_martin', 100);
