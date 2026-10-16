@@ -178,12 +178,13 @@ describe('special action dialog', () => {
     expect(host.onClose).toHaveBeenCalledOnce();
 
     const overview = readFileSync(resolve(process.cwd(), 'src/ui/panel/views/Overview.vue'), 'utf8');
-    for (const action of ['START_MCLAREN_FIX', 'MERCEDES_POLITICS', 'RED_BULL_RETAIN_GP', 'ASTON_CRISIS', 'RACING_BULLS_SELECT_RESERVE', 'AUDI_ALLIANCE', 'ALPINE_MANAGEMENT', 'HAAS_BALANCE', 'WILLIAMS_BUDGET_FOCUS', 'FIA_DEBATE']) {
+    for (const action of ['START_MCLAREN_FIX', 'MERCEDES_POLITICS', 'RED_BULL_RETAIN_GP', 'ASTON_CRISIS', 'RACING_BULLS_SELECT_RESERVE', 'AUDI_ALLIANCE', 'ALPINE_MANAGEMENT', 'HAAS_BALANCE', 'WILLIAMS_BUDGET_FOCUS']) {
       expect(overview).toContain(`openSpecialAction({ type: '${action}'`);
     }
     expect(overview).toContain('<RandomEventPanel mode="card" />');
-    expect(overview).toContain('<NegotiationPanel kind="fia_roundtable" />');
-    expect(overview).toContain('fiaStanceLabel[fia.current.forcedStance]');
+    expect(overview).toContain('<NegotiationPanel kind="fia_roundtable" :preferred-choice="fiaChoice" />');
+    expect(overview).toContain("@click=\"fiaChoice = 'support'\"");
+    expect(overview).toContain('@click="submitFiaChoice"');
     expect(overview).toContain(':fallback-focus="overviewRoot"');
     expect(overview).not.toMatch(/@click="act\(\{ type: '(?:START_MCLAREN_FIX|MERCEDES_POLITICS|RED_BULL_RETAIN_GP|ASTON_CRISIS|RACING_BULLS_SELECT_RESERVE|AUDI_ALLIANCE|ALPINE_MANAGEMENT|HAAS_BALANCE|WILLIAMS_BUDGET_FOCUS|FIA_DEBATE)/);
   });

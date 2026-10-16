@@ -21,6 +21,7 @@ export interface NegotiationSessionView {
   minRounds: number;
   maxRounds: number;
   status: NegotiationStatus;
+  preferredChoice: string | null;
   messages: NegotiationMessage[];
   outcome: string | null;
 }
@@ -158,7 +159,8 @@ export function negotiationDefinition(kind: unknown): NegotiationDefinition | nu
 export function negotiationPrompt(state: GameState, session: NegotiationSessionView, playerText: string): string {
   const definition = NEGOTIATIONS[session.kind];
   const forcedStance = session.kind === 'fia_roundtable' ? state.fiaMeeting?.current?.forcedStance : null;
-  const availableChoices = forcedStance ? Object.fromEntries(Object.entries(definition.choices).filter(([id]) => id === forcedStance)) : definition.choices;
+  const selectedChoice = forcedStance ?? session.preferredChoice;
+  const availableChoices = selectedChoice ? Object.fromEntries(Object.entries(definition.choices).filter(([id]) => id === selectedChoice)) : definition.choices;
   const choices = Object.entries(availableChoices).map(([id, value]) => `${id}=${value.label}`).join('；');
   const transcript = [...session.messages, { role: 'player' as const, speaker: '玩家领队', text: playerText }]
     .map(message => `${message.speaker}：${message.text}`)

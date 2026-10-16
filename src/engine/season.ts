@@ -14,7 +14,7 @@ import { afterNextTeamRace, maybeTriggerRacingBullsRecall } from './nextTeamSpec
 import { afterManagementRace, completeAlpineDriverExit, completeWilliamsHandover } from './managementSpecials';
 import { closeUnansweredRandomEvent } from './randomEvents';
 import { isPowerUnitPart, PU_PART_TYPES, resetPuUsage, recordPuFit } from './powerunit';
-import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, wetCompoundFor, type RaceExtras } from './race';
+import { advanceRaceSession, applyRaceDecision, createRaceSession, finishRaceSession, pauseRaceSession, wetCompoundFor, type RaceExtras } from './race';
 import { activeEntries, bestSpec, carRatings, disclosedPerf, driverOverall, findSpec, raceSkill, trackScore } from './ratings';
 import { Rng } from './rng';
 import type { Action, CarState, DriverPlan, DriverState, GameState, PartSpec, PracticeReturnRequest, RaceResult, TeamState } from './types';
@@ -279,6 +279,15 @@ export function advanceLiveRace(state: GameState, rng: Rng, sessionId: string, r
   advanceRaceSession(state, live, until);
   live.revision++;
   return live.stage === 'finished' ? finalizeLiveRace(state, rng) : ok(live.pendingDecision ? '比赛暂停，等待策略决策' : `已完成第 ${live.completedLaps} 圈`);
+}
+
+export function pauseLiveRace(state: GameState, sessionId: string, revision: number): Outcome {
+  const live = state.weekend?.liveRace;
+  if (!live || live.id !== sessionId || live.revision !== revision) return fail('比赛状态已更新，请刷新后重试');
+  if (live.pendingDecision) return fail('比赛已经暂停');
+  if (!pauseRaceSession(live)) return fail('当前没有可指挥的赛车');
+  live.revision++;
+  return ok(`比赛已在第 ${live.completedLaps} 圈后暂停`);
 }
 
 export function resolveLiveRaceDecision(state: GameState, rng: Rng, sessionId: string, revision: number, windowId: string, drivers: Parameters<typeof applyRaceDecision>[3], orders?: Parameters<typeof applyRaceDecision>[4]): Outcome {

@@ -172,6 +172,36 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(specialEnv.created.at(-1)).toContain('待叙述事件');
   });
 
+  it('FIA 多轮谈判拒绝无效、冲突或未选择的最终立场', async () => {
+    const specialEnv = new FakeTavern(cardWorldbook());
+    const specialCtrl = new F1Controller(specialEnv);
+    specialCtrl.init();
+    await specialCtrl.loadData();
+    expect((await specialCtrl.newGame({ playerTeamId: 'audi', seed: 881 })).ok).toBe(true);
+
+    const forced = JSON.parse(specialCtrl.exportSave()!);
+    forced.state.fiaMeeting.current = { index: 1, issue: 'cost_cap', opponents: ['ferrari'], supporters: [], forcedStance: 'support' };
+    expect((await specialCtrl.importSave(JSON.stringify(forced))).ok).toBe(true);
+    expect(specialCtrl.startSpecialNegotiation({ kind: 'fia_roundtable', preferredChoice: 'invalid' })).toMatchObject({ ok: false, message: '谈判预设选项无效' });
+    expect(specialCtrl.startSpecialNegotiation({ kind: 'fia_roundtable', preferredChoice: 'oppose' })).toMatchObject({ ok: false, message: '所选立场与车队强制立场冲突' });
+    expect(specialCtrl.startSpecialNegotiation({ kind: 'fia_roundtable' })).toMatchObject({ ok: true, session: { preferredChoice: 'support' } });
+    specialCtrl.cancelSpecialNegotiation();
+
+    const open = JSON.parse(specialCtrl.exportSave()!);
+    open.state.fiaMeeting.current.forcedStance = null;
+    expect((await specialCtrl.importSave(JSON.stringify(open))).ok).toBe(true);
+    let replies = 0;
+    specialEnv.generateText = async () => ++replies === 1
+      ? '{"speaker":"FIA 主持人","reply":"请继续说明反对理由。","status":"continue","choice":null}'
+      : '{"speaker":"FIA 主持人","reply":"多数车队决定支持议题。","status":"agreement","choice":"support"}';
+    const started = specialCtrl.startSpecialNegotiation({ kind: 'fia_roundtable', preferredChoice: 'oppose' });
+    expect(started).toMatchObject({ ok: true, session: { preferredChoice: 'oppose' } });
+    await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '我方反对该议题。' });
+    const rejected = await specialCtrl.sendSpecialNegotiationTurn({ sessionId: started.session!.id, text: '我方维持反对。' });
+    expect(rejected).toMatchObject({ ok: false, message: '谈判 API 返回了未选择的结算方案', session: { status: 'active', preferredChoice: 'oppose' } });
+    expect(specialCtrl.stateAt()!.fiaMeeting!.current).not.toBeNull();
+  });
+
   it('谈判破裂、取消或等待期间换档都不会修改事件状态', async () => {
     const specialEnv = new FakeTavern(cardWorldbook());
     const specialCtrl = new F1Controller(specialEnv);
@@ -494,6 +524,11 @@ describe('后端控制器（模拟酒馆环境）', () => {
     expect(Object.values(state.teams)).toHaveLength(11);
     expect(aiIds).toHaveLength(20);
     expect(playerIds).toHaveLength(2);
+    const ferrari = Object.values(state.teams).find(team => team.id === 'ferrari')!;
+    ferrari.staff.strategist = { ...ferrari.staff.strategist, skill: 54, abilities: { strategy: 54, weather: 52, reaction: 52, risk: 82 } };
+    ferrari.staff.raceEngineer = { ...ferrari.staff.raceEngineer, skill: 79, abilities: { ...ferrari.staff.raceEngineer.abilities, reaction: 78, communication: 82 } };
+    ferrari.staff.raceEngineer2 = { ...(ferrari.staff.raceEngineer2 ?? ferrari.staff.raceEngineer), skill: 82, abilities: { ...(ferrari.staff.raceEngineer2 ?? ferrari.staff.raceEngineer).abilities, reaction: 81, communication: 84 } };
+    expect((await ctrl.importSave(JSON.stringify(state))).ok).toBe(true);
     expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[0], plan: { tyrePlan: ['soft', 'medium'], paceMode: 'push', pitTiming: 'early', scReaction: false } })).ok).toBe(true);
     expect((await ctrl.dispatch({ type: 'SET_PLAN', driverId: playerIds[1], plan: { tyrePlan: ['hard', 'medium'], paceMode: 'conserve', pitTiming: 'late', scReaction: true } })).ok).toBe(true);
     let calls = 0;
@@ -518,6 +553,10 @@ describe('后端控制器（模拟酒馆环境）', () => {
     const live = ctrl.stateAt()!.weekend!.liveRace!;
     expect(aiIds.every(id => live.cars[id].plan.strategySource === 'engineer' && live.cars[id].plan.tyrePlan !== 'auto')).toBe(true);
     expect(new Set(aiIds.map(id => `${live.cars[id].plan.paceMode}:${live.cars[id].plan.pitTiming}:${live.cars[id].plan.scReaction}`)).size).toBeGreaterThan(1);
+    const teamById = (teamId: string) => Object.values(state.teams).find(team => team.id === teamId)!;
+    const ferrariIds = teamById('ferrari').cars.map(car => car.driverId).filter((id): id is string => !!id);
+    expect(ferrariIds.every(id => live.cars[id].plan.paceMode === 'push' && live.cars[id].plan.pitTiming === 'late' && !live.cars[id].plan.scReaction)).toBe(true);
+    expect(ferrariIds.every(id => Array.isArray(live.cars[id].plan.tyrePlan) && live.cars[id].plan.tyrePlan.join('-') !== 'soft-medium')).toBe(true);
     expect(live.cars[playerIds[0]].plan).toMatchObject({ tyrePlan: ['soft', 'medium'], paceMode: 'push', pitTiming: 'early', scReaction: false });
     expect(live.cars[playerIds[1]].plan).toMatchObject({ tyrePlan: ['hard', 'medium'], paceMode: 'conserve', pitTiming: 'late', scReaction: true });
     expect(capturedPrompt).not.toContain(`driverId=${playerIds[0]}；`);
