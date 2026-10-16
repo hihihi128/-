@@ -60,8 +60,10 @@ export function createForecast(
   completedLaps: number,
   strategistSkill: number,
   rng: Rng,
+  sourceIndex = completedLaps,
 ): RaceForecast {
-  const sample = trajectory.slice(completedLaps, completedLaps + 5);
+  const fallback = trajectory.at(-1) ?? 0;
+  const sample = Array.from({ length: 5 }, (_, offset) => trajectory[sourceIndex + offset] ?? fallback);
   const actualProbability = sample.length ? sample.filter(v => v > 0.16).length / sample.length : 0;
   const uncertainty = Math.max(0.09, 0.32 - strategistSkill / 500);
   const probability = clamp(actualProbability + rng.normal(0, uncertainty), 0, 1);

@@ -7,7 +7,7 @@ import type { LiveRaceState } from '../../src/engine/types';
 import { createForecast, createWeatherTrajectory } from '../../src/engine/raceWeather';
 import { migrateState } from '../../src/engine/migrate';
 import { teammateRelationship, willDisobeyStrategy } from '../../src/engine/driverBehavior';
-import { advanceRaceSession, aiWeatherReactionDelay, applyRaceDecision, engineerDecisionRoll, finishRaceSession, redFlagProbability, requiresWetGridTyreChoice } from '../../src/engine/race';
+import { advanceRaceSession, aiWeatherReactionDelay, applyRaceDecision, engineerDecisionRoll, finishRaceSession, redFlagProbability, requiresWetGridTyreChoice, simulateRedFlagWeather } from '../../src/engine/race';
 
 describe('resumable live race', () => {
   function raceReady(seed = 702): ReturnType<typeof newTestGame> {
@@ -409,6 +409,103 @@ describe('resumable live race', () => {
     expect(resumed.events.some(event => event.text.includes('免费更换前翼'))).toBe(true);
   });
 
+  it('advances rain, wetness, forecast, and restart type during a red-flag suspension', () => {
+    const state = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    live.completedLaps = 8;
+    live.lap = 8;
+    live.weatherCursor = 8;
+    live.weatherTrajectory.fill(1, 8);
+    live.rain = 0;
+    live.wetness = .1;
+    live.surface = 'dry';
+    live.redFlag = { active: true, triggerLap: 8, restart: 'standing', restartPending: false, suspensionTicks: 4, suspensionMinutes: 20 };
+
+    simulateRedFlagWeather(live, new Rng(55));
+
+    expect(live.completedLaps).toBe(8);
+    expect(live.weatherCursor).toBe(12);
+    expect(live.wetness).toBeGreaterThan(.45);
+    expect(live.redFlag).toMatchObject({ restart: 'rolling', suspensionMinutes: 20, weatherBefore: .1, weatherAfter: live.wetness });
+    expect(live.forecast.issuedLap).toBe(8);
+    expect(buildView(state).weekend?.liveRace?.weather).toMatchObject({ rain: 1, wetness: live.wetness, surface: live.surface });
+    expect(live.events.at(-1)?.text).toContain('滚动重启');
+
+    const restored = JSON.parse(JSON.stringify(state));
+    expect(restored.weekend.liveRace.weatherCursor).toBe(12);
+    expect(restored.weekend.liveRace.redFlag.weatherAfter).toBe(live.wetness);
+  });
+
+  it('can dry during a red flag and gives AI cars restart-time tyres', () => {
+    const state = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const live = state.weekend!.liveRace!;
+    live.completedLaps = 8;
+    live.lap = 8;
+    live.stage = 'before_pit';
+    live.weatherCursor = 8;
+    live.weatherTrajectory.fill(0);
+    live.rain = .8;
+    live.wetness = .55;
+    live.surface = 'wet';
+    live.redFlag = { active: true, triggerLap: 8, restart: 'rolling', restartPending: false, suspensionTicks: 6, suspensionMinutes: 30 };
+    live.pendingDecision = {
+      id: `${live.id}:w-red-weather`, lap: 8, stage: 'before_pit', reasons: ['red_flag'],
+      affectedDriverIds: Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => car.driverId),
+      eligibleDriverIds: Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => car.driverId), observedEventIds: [],
+    };
+
+    simulateRedFlagWeather(live, new Rng(77));
+    expect(live.wetness).toBeLessThan(.45);
+    expect(live.redFlag.restart).toBe('standing');
+
+    const aiCarsBeforeRestart = Object.values(live.cars).filter(car => !car.player && car.status === 'running');
+    for (const car of aiCarsBeforeRestart) car.tyre = state.rules.wetCompound;
+    const window = live.pendingDecision;
+    const applied = applyRaceDecision(state, live, window.id, window.eligibleDriverIds.map(driverId => ({ driverId, pit: 'auto' })));
+    expect(applied).toBe(true);
+    const aiCars = Object.values(live.cars).filter(car => !car.player && car.status === 'running');
+    expect(aiCars.every(car => !state.rules.tyres[car.tyre]?.wet)).toBe(true);
+    expect(live.redFlag).toMatchObject({ active: false, restartPending: true, restart: 'standing' });
+  });
+
+  it('runs red-flag weather once through the race loop and resumes from the advanced cursor', () => {
+    const launched = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    let state = act(launched, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: launched.weekend!.liveRace!.id,
+      expectedRevision: launched.weekend!.liveRace!.revision, windowId: launched.weekend!.liveRace!.pendingDecision!.id,
+      drivers: automaticChoices(launched, launched.weekend!.liveRace!),
+    });
+    let live = state.weekend!.liveRace!;
+    live.weatherTrajectory.fill(1);
+    live.weatherCursor = 0;
+    live.redFlag = { active: true, triggerLap: 1, restart: 'standing', restartPending: false, suspensionTicks: 2, suspensionMinutes: 10 };
+
+    advanceRaceSession(state, live, 'next_decision');
+    expect(live.completedLaps).toBe(1);
+    expect(live.weatherCursor).toBe(3);
+    expect(live.pendingDecision?.reasons).toContain('red_flag');
+    expect(live.redFlag?.weatherAfter).toBeDefined();
+    const forecastStateAfterPause = live.forecastRngState;
+
+    state = JSON.parse(JSON.stringify(state));
+    migrateState(state);
+    live = state.weekend!.liveRace!;
+    expect(live.weatherCursor).toBe(3);
+    expect(live.forecastRngState).toBe(forecastStateAfterPause);
+    simulateRedFlagWeather(live, Rng.restore(live.forecastRngState));
+    expect(live.weatherCursor).toBe(3);
+
+    state = act(state, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: live.revision, windowId: live.pendingDecision!.id,
+      drivers: automaticChoices(state, live),
+    });
+    live = state.weekend!.liveRace!;
+    live.weatherTrajectory[3] = .37;
+    advanceRaceSession(state, live, 'next_lap');
+    expect(live.rain).toBe(.37);
+    expect(live.weatherCursor).toBe(4);
+  });
+
   it('compresses the field only after every car completes the red-flag trigger lap', () => {
     let stopped: ReturnType<typeof newTestGame> | null = null;
     for (let seed = 1; seed <= 30 && !stopped; seed++) {
@@ -740,6 +837,34 @@ describe('resumable live race', () => {
     const forecasts = Array.from({ length: 16 }, (_, i) => createForecast(dry, 0, 0, new Rng(i + 1)));
     expect(forecasts.some(f => f.arrivalLaps !== null)).toBe(true);
     expect(forecasts.some(f => f.rainProbability > 0)).toBe(true);
+  });
+
+  it('aligns forecast samples with their displayed lap and pads elapsed red-flag time', () => {
+    const trajectory = [1, 0, 0, 0, 0];
+    const currentLap = createForecast(trajectory, 0, 100, new Rng(91), 0);
+    const nextLap = createForecast(trajectory, 0, 100, new Rng(91), 1);
+    expect(currentLap.rainProbability).toBeGreaterThan(nextLap.rainProbability);
+
+    const beyondTrajectory = createForecast([0, 0, .8], 5, 100, new Rng(92), 8);
+    expect(beyondTrajectory.rainProbability).toBeGreaterThan(.5);
+    expect(beyondTrajectory.intensityRange[0]).toBeGreaterThan(.5);
+  });
+
+  it('uses the current weather sample for the race-loop forecast window', () => {
+    const launched = act(raceReady(), { type: 'START_RACE', kind: 'race' });
+    const state = act(launched, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: launched.weekend!.liveRace!.id,
+      expectedRevision: launched.weekend!.liveRace!.revision, windowId: launched.weekend!.liveRace!.pendingDecision!.id,
+      drivers: automaticChoices(launched, launched.weekend!.liveRace!),
+    });
+    const live = state.weekend!.liveRace!;
+    live.weatherTrajectory = [0, 1, 1, 1, 1, ...live.weatherTrajectory.slice(5)];
+    live.weatherCursor = 0;
+    const expected = createForecast(live.weatherTrajectory, 0, live.strategistSkill, Rng.restore(live.forecastRngState), 0);
+
+    advanceRaceSession(state, live, 'next_lap');
+
+    expect(live.forecast).toEqual(expected);
   });
 
   it('restores an exact zero RNG state', () => {

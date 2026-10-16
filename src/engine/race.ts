@@ -609,9 +609,39 @@ function deployRedFlag(session: LiveRaceState, lap: number, rng: Rng, probabilit
   session.vscLeft = 0;
   session.redFlags += 1;
   const restart = session.surface === 'wet' || session.wetness >= 0.45 ? 'rolling' : 'standing';
-  session.redFlag = { active: true, triggerLap: lap, restart, restartPending: false };
-  liveEvent(session, lap, 'red_flag', `赛会出示红旗，比赛暂停；稍后将以${restart === 'standing' ? '静态' : '滚动'}方式重启`, [], true);
+  const suspensionMinutes = rng.pick([10, 20, 30]);
+  const suspensionTicks = suspensionMinutes / 5;
+  session.redFlag = { active: true, triggerLap: lap, restart, restartPending: false, suspensionTicks, suspensionMinutes, weatherBefore: session.wetness };
+  liveEvent(session, lap, 'red_flag', '赛会出示红旗，比赛暂停；重启方式将在暂停期间根据赛道状况决定', [], true);
   return true;
+}
+
+/** Advances elapsed weather time during a red flag without consuming race laps. */
+export function simulateRedFlagWeather(session: LiveRaceState, forecastRng: Rng): void {
+  const flag = session.redFlag;
+  if (!flag?.active || flag.weatherAfter !== undefined) return;
+  const beforeWetness = session.wetness;
+  const beforeSurface = session.surface;
+  const ticks = flag.suspensionTicks ?? 2;
+  let cursor = session.weatherCursor ?? session.completedLaps;
+  const fallback = session.weatherTrajectory.at(-1) ?? 0;
+  for (let tick = 0; tick < ticks; tick++) {
+    session.rain = session.weatherTrajectory[cursor] ?? fallback;
+    session.wetness = nextWetness(session.wetness, session.rain);
+    session.surface = surfaceFor(session.wetness, session.surface);
+    cursor++;
+  }
+  session.weatherCursor = cursor;
+  flag.weatherBefore = beforeWetness;
+  flag.weatherAfter = session.wetness;
+  flag.suspensionMinutes = ticks * 5;
+  flag.restart = session.surface === 'wet' || session.wetness >= .45 ? 'rolling' : 'standing';
+  session.forecast = createForecast(session.weatherTrajectory, flag.triggerLap, session.strategistSkill, forecastRng, cursor);
+  const changed = Math.abs(session.wetness - beforeWetness) >= .08 || session.surface !== beforeSurface;
+  const weatherText = changed
+    ? `赛道由${beforeSurface === 'wet' ? '湿地' : beforeSurface === 'damp' ? '潮湿' : '干地'}变为${session.surface === 'wet' ? '湿地' : session.surface === 'damp' ? '潮湿' : '干地'}`
+    : '赛道状况基本稳定';
+  liveEvent(session, session.lap, 'info', `红旗暂停 ${flag.suspensionMinutes} 分钟后，${weatherText}；赛会决定${flag.restart === 'standing' ? '静态' : '滚动'}重启`, [], true);
 }
 
 function compressRedFlagField(session: LiveRaceState): void {
@@ -798,7 +828,7 @@ export function createRaceSession(
   const session: LiveRaceState = {
     version: 1, physicsVersion: 2, id: sessionId, kind, roundIndex: state.season.roundIndex,
     totalLaps, completedLaps: 0, lap: 1, stage: 'grid', revision: 1, rngState: execution.state, weatherRngState: weatherRng.state,
-    forecastRngState: forecastRng.state, strategistSkill: staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), expectedPositions, cars, order: grid, weatherTrajectory: trajectory, weatherHistory: [],
+    forecastRngState: forecastRng.state, strategistSkill: staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), expectedPositions, cars, order: grid, weatherTrajectory: trajectory, weatherCursor: 0, weatherHistory: [],
     rain: trajectory[0] ?? 0, wetness: initialWetness, surface: startsWet ? 'wet' : 'dry',
     forecast: createForecast(trajectory, 0, staffAbility(state.teams[state.meta.playerTeamId].staff.strategist, 'weather'), forecastRng),
     scLeft: 0, vscLeft: 0, safetyCars: 0, redFlags: 0, redFlag: null, fastestLap: null, events: [], lapChart, orderOutcomes: [], orderCooldown: {},
@@ -1197,11 +1227,13 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     session.lap = lap;
     const previousWetness = session.wetness;
     const previousSurface = session.surface;
-    session.rain = session.weatherTrajectory[lap - 1] ?? 0;
+    const weatherIndex = session.weatherCursor ?? session.completedLaps;
+    session.rain = session.weatherTrajectory[weatherIndex] ?? session.weatherTrajectory.at(-1) ?? 0;
     session.wetness = nextWetness(session.wetness, session.rain);
     session.surface = surfaceFor(session.wetness, previousSurface);
+    session.weatherCursor = weatherIndex + 1;
     session.weatherHistory.push(session.rain);
-    session.forecast = createForecast(session.weatherTrajectory, session.completedLaps, session.strategistSkill, forecastRng);
+    session.forecast = createForecast(session.weatherTrajectory, session.completedLaps, session.strategistSkill, forecastRng, weatherIndex);
     const scActive = session.scLeft > 0, vscActive = session.vscLeft > 0;
     const restartType = session.redFlag?.restartPending ? session.redFlag.restart : null;
     // Consume the pending restart once at lap entry. A decision later in this
@@ -1405,6 +1437,7 @@ export function advanceRaceSession(state: GameState, session: LiveRaceState, unt
     for (const car of Object.values(session.cars)) { const pos = session.order.indexOf(car.driverId); session.lapChart[car.driverId]?.push(pos < 0 ? 0 : pos + 1); }
     const fastestCar = liveCars(session).filter(c => c.bestLap !== null).sort((a, b) => (a.bestLap ?? Infinity) - (b.bestLap ?? Infinity))[0];
     if (fastestCar && fastestCar.bestLap !== null) session.fastestLap = { driverId: fastestCar.driverId, time: round3(fastestCar.bestLap), lap };
+    if (session.redFlag?.active && session.redFlag.triggerLap === lap) simulateRedFlagWeather(session, forecastRng);
     const plannedPlayer = playerControlledCars(session).filter(c => {
       const target = replacementCompound(state, session, c);
       const weatherChange = weatherTyreChangeWorthwhile(rules, c.tyre, target, session.wetness);
