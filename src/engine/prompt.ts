@@ -27,7 +27,7 @@ export interface PromptOptions {
 }
 
 const RACE_REASON_LABELS: Record<string, string> = {
-  grid: '发车', pit_opportunity: '进站机会', weather_change: '天气变化', sc: '安全车', vsc: '虚拟安全车', red_flag: '红旗暂停', incident: '事故与损伤',
+  grid: '发车', manual_pause: '领队暂停', pit_opportunity: '进站机会', weather_change: '天气变化', sc: '安全车', vsc: '虚拟安全车', red_flag: '红旗暂停', incident: '事故与损伤',
 };
 
 function pct(v: number): string {

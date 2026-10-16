@@ -71,6 +71,65 @@ describe('resumable live race', () => {
     expect(car.tyreSetId).toBeTruthy();
   });
 
+  it('opens the existing decision window when the player pauses between laps', () => {
+    const launched = act(raceReady(704), { type: 'START_RACE', kind: 'race' });
+    const grid = launched.weekend!.liveRace!;
+    const started = act(launched, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id,
+      drivers: automaticChoices(launched, grid),
+    });
+    const live = started.weekend!.liveRace!;
+    const pits = Object.fromEntries(Object.values(live.cars).map(car => [car.driverId, car.pits]));
+    const paused = act(started, { type: 'PAUSE_RACE', sessionId: live.id, expectedRevision: live.revision });
+    expect(paused.weekend!.liveRace!.pendingDecision).toMatchObject({
+      lap: live.completedLaps,
+      reasons: ['manual_pause'],
+      eligibleDriverIds: expect.arrayContaining(Object.values(live.cars).filter(car => car.player && car.status === 'running').map(car => car.driverId)),
+    });
+    const window = paused.weekend!.liveRace!.pendingDecision!;
+    const resumed = act(paused, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: live.id, expectedRevision: paused.weekend!.liveRace!.revision, windowId: window.id,
+      drivers: automaticChoices(paused, paused.weekend!.liveRace!),
+    });
+    expect(resumed.weekend!.liveRace!.pendingDecision).toBeNull();
+    expect(Object.fromEntries(Object.values(resumed.weekend!.liveRace!.cars).map(car => [car.driverId, car.pits]))).toEqual(pits);
+  });
+
+  it('rejects a manual pause atomically when both player cars delegate strategy', () => {
+    const launched = act(raceReady(705), { type: 'START_RACE', kind: 'race' });
+    const grid = launched.weekend!.liveRace!;
+    for (const car of Object.values(grid.cars).filter(car => car.player)) car.plan.strategySource = 'engineer';
+    grid.pendingDecision = null;
+    grid.stage = 'ready';
+    const before = JSON.stringify(grid);
+    const result = tryAct(launched, { type: 'PAUSE_RACE', sessionId: grid.id, expectedRevision: grid.revision });
+    expect(result).toMatchObject({ ok: false, message: '当前没有可指挥的赛车' });
+    expect(JSON.stringify(launched.weekend!.liveRace)).toBe(before);
+  });
+
+  it('keeps a queued manual box order when another window accepts automatic choices', () => {
+    const launched = act(raceReady(706), { type: 'START_RACE', kind: 'race' });
+    const grid = launched.weekend!.liveRace!;
+    const started = act(launched, {
+      type: 'RESOLVE_RACE_DECISION', sessionId: grid.id, expectedRevision: grid.revision, windowId: grid.pendingDecision!.id,
+      drivers: automaticChoices(launched, grid),
+    });
+    const live = started.weekend!.liveRace!;
+    const player = Object.values(live.cars).find(car => car.player && car.status === 'running')!;
+    const compound = started.rules.dryCompounds.find(value => value !== player.tyre)!;
+    player.pendingPit = 'box';
+    player.pendingCompound = compound;
+    const pits = player.pits;
+    live.pendingDecision = {
+      id: `${live.id}:incident-test`, lap: live.completedLaps + 1, stage: 'before_pit', reasons: ['incident'],
+      affectedDriverIds: [player.driverId], eligibleDriverIds: [player.driverId], observedEventIds: [],
+    };
+    live.stage = 'before_pit';
+    expect(applyRaceDecision(started, live, live.pendingDecision.id, [{ driverId: player.driverId, pit: 'auto', repairWing: false }])).toBe(true);
+    expect(player.pits).toBe(pits + 1);
+    expect(player.tyre).toBe(compound);
+  });
+
   it('uses the AI safety-car reaction for an opportunistic live-race stop', () => {
     const ready = raceReady();
     const aiIds = Object.values(ready.teams).filter(team => !team.isPlayer).flatMap(team => team.cars.map(car => car.driverId).filter((id): id is string => !!id));

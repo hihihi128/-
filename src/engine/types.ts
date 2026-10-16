@@ -935,7 +935,7 @@ export interface RaceResult {
 }
 
 export type LiveRaceStage = 'grid' | 'ready' | 'before_pit' | 'finished';
-export type RaceWindowReason = 'grid' | 'pit_opportunity' | 'weather_change' | 'sc' | 'vsc' | 'red_flag' | 'incident';
+export type RaceWindowReason = 'grid' | 'manual_pause' | 'pit_opportunity' | 'weather_change' | 'sc' | 'vsc' | 'red_flag' | 'incident';
 
 export interface RaceForecast {
   issuedLap: number;
@@ -1029,6 +1029,9 @@ export interface LiveRaceCar {
   engineerDryChaosAssessed?: boolean;
   engineerDryChaosStage?: 1 | 2;
   engineerDryChaosNextLap?: number;
+  /** One race-level strategy-error roll selects one outcome without stacking probabilities. */
+  engineerStrategyMistake?: 'early_stop' | 'double_stop' | 'late_stop';
+  engineerStrategyDelayUntilLap?: number;
   /** Stable public-weather target and the first lap when this AI will act on it. */
   engineerWeatherTarget?: Compound | null;
   engineerWeatherEligibleLap?: number;
@@ -1571,6 +1574,7 @@ export type Action =
   | { type: 'RUN_RACE'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'START_RACE'; kind: 'race' | 'sprint'; aiPlans?: Record<string, Partial<DriverPlan>> }
   | { type: 'ADVANCE_RACE'; sessionId: string; expectedRevision: number; until: 'next_lap' | 'next_decision' }
+  | { type: 'PAUSE_RACE'; sessionId: string; expectedRevision: number }
   | { type: 'SET_RACE_TACTICS'; sessionId: string; expectedRevision: number; drivers: Array<{ driverId: string; paceMode?: PaceMode; energyMode?: EnergyMode; pitTiming?: PitTiming }>; orders?: TeamOrders }
   | { type: 'RESOLVE_RACE_DECISION'; sessionId: string; expectedRevision: number; windowId: string; drivers: RaceDriverDecision[]; orders?: TeamOrders }
   | { type: 'FINISH_ROUND' }
